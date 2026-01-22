@@ -1,0 +1,44 @@
+"""User model for authentication and profile."""
+
+import uuid
+from datetime import datetime
+from enum import Enum
+from typing import TYPE_CHECKING, Optional
+
+from sqlmodel import Field, Relationship, SQLModel
+
+if TYPE_CHECKING:
+    from app.models.competition import Competition
+    from app.models.prediction import MatchPrediction, TeamPrediction
+
+
+class AuthProvider(str, Enum):
+    """Authentication provider options."""
+
+    EMAIL = "email"
+    GOOGLE = "google"
+
+
+class User(SQLModel, table=True):
+    """User account for predictions."""
+
+    __tablename__ = "users"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    email: str = Field(index=True, unique=True)
+    name: str
+    password_hash: str | None = None
+    google_id: str | None = Field(default=None, index=True, unique=True)
+    auth_provider: AuthProvider = Field(default=AuthProvider.EMAIL)
+    is_admin: bool = Field(default=False)
+    is_active: bool = Field(default=True)
+
+    competition_id: uuid.UUID | None = Field(default=None, foreign_key="competitions.id")
+
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    # Relationships
+    competition: Optional["Competition"] = Relationship(back_populates="users")
+    match_predictions: list["MatchPrediction"] = Relationship(back_populates="user")
+    team_predictions: list["TeamPrediction"] = Relationship(back_populates="user")

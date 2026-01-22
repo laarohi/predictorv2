@@ -1,0 +1,89 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: predictor-db
+    environment:
+      POSTGRES_USER: predictor
+      POSTGRES_PASSWORD: predictor
+      POSTGRES_DB: predictor
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U predictor"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: predictor-backend
+    environment:
+      - DATABASE_URL=postgresql://predictor:predictor@db:5432/predictor
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-dev-key-change-in-prod}
+      - DEBUG=true
+      - CORS_ORIGINS_STR=${CORS_ORIGINS_STR:-http://localhost:5173,http://localhost:3000}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - API_FOOTBALL_KEY=${API_FOOTBALL_KEY:-}
+      - TOURNAMENT_CONFIG_PATH=/app/config/worldcup2026.yml
+    volumes:
+      - ./backend/app:/app/app
+      - ./config:/app/config
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: predictor-frontend
+    environment:
+      - NODE_ENV=production
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  # Development-only frontend with hot reload
+  frontend-dev:
+    image: node:20-alpine
+    container_name: predictor-frontend-dev
+    working_dir: /app
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "5173:5173"
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    profiles:
+      - dev
+
+  # Nginx reverse proxy (production)
+  nginx:
+    image: nginx:alpine
+    container_name: predictor-nginx
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - backend
+      - frontend
+    profiles:
+      - prod
+
+volumes:
+  postgres_data:

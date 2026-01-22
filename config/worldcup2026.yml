@@ -1,0 +1,224 @@
+# World Cup 2026 Tournament Configuration
+# 48 teams, 12 groups of 4, expanded knockout stage
+
+tournament:
+  name: "FIFA World Cup 2026"
+  code: "WC2026"
+  hosts:
+    - United States
+    - Canada
+    - Mexico
+  start_date: "2026-06-11"
+  end_date: "2026-07-19"
+
+format:
+  total_teams: 48
+  groups: 12
+  teams_per_group: 4
+
+  # Qualification from groups
+  # Top 2 from each group (24) + best 8 third-place teams (32 total)
+  group_qualifiers:
+    automatic: 2  # Top 2 always qualify
+    third_place: 8  # Best 8 third-place teams
+
+  knockout_stages:
+    - name: "Round of 32"
+      code: "round_of_32"
+      teams: 32
+      matches: 16
+    - name: "Round of 16"
+      code: "round_of_16"
+      teams: 16
+      matches: 8
+    - name: "Quarter-Finals"
+      code: "quarter_final"
+      teams: 8
+      matches: 4
+    - name: "Semi-Finals"
+      code: "semi_final"
+      teams: 4
+      matches: 2
+    - name: "Third Place Play-off"
+      code: "third_place"
+      teams: 2
+      matches: 1
+    - name: "Final"
+      code: "final"
+      teams: 2
+      matches: 1
+
+groups:
+  A:
+    - team: "TBD"
+      seed: 1
+    - team: "TBD"
+      seed: 2
+    - team: "TBD"
+      seed: 3
+    - team: "TBD"
+      seed: 4
+  B:
+    - team: "TBD"
+      seed: 1
+    - team: "TBD"
+      seed: 2
+    - team: "TBD"
+      seed: 3
+    - team: "TBD"
+      seed: 4
+  C:
+    - team: "TBD"
+      seed: 1
+    - team: "TBD"
+      seed: 2
+    - team: "TBD"
+      seed: 3
+    - team: "TBD"
+      seed: 4
+  D:
+    - team: "TBD"
+      seed: 1
+    - team: "TBD"
+      seed: 2
+    - team: "TBD"
+      seed: 3
+    - team: "TBD"
+      seed: 4
+  E:
+    - team: "TBD"
+      seed: 1
+    - team: "TBD"
+      seed: 2
+    - team: "TBD"
+      seed: 3
+    - team: "TBD"
+      seed: 4
+  F:
+    - team: "TBD"
+      seed: 1
+    - team: "TBD"
+      seed: 2
+    - team: "TBD"
+      seed: 3
+    - team: "TBD"
+      seed: 4
+  G:
+    - team: "TBD"
+      seed: 1
+    - team: "TBD"
+      seed: 2
+    - team: "TBD"
+      seed: 3
+    - team: "TBD"
+      seed: 4
+  H:
+    - team: "TBD"
+      seed: 1
+    - team: "TBD"
+      seed: 2
+    - team: "TBD"
+      seed: 3
+    - team: "TBD"
+      seed: 4
+  I:
+    - team: "TBD"
+      seed: 1
+    - team: "TBD"
+      seed: 2
+    - team: "TBD"
+      seed: 3
+    - team: "TBD"
+      seed: 4
+  J:
+    - team: "TBD"
+      seed: 1
+    - team: "TBD"
+      seed: 2
+    - team: "TBD"
+      seed: 3
+    - team: "TBD"
+      seed: 4
+  K:
+    - team: "TBD"
+      seed: 1
+    - team: "TBD"
+      seed: 2
+    - team: "TBD"
+      seed: 3
+    - team: "TBD"
+      seed: 4
+  L:
+    - team: "TBD"
+      seed: 1
+    - team: "TBD"
+      seed: 2
+    - team: "TBD"
+      seed: 3
+    - team: "TBD"
+      seed: 4
+
+scoring:
+  # Match prediction scoring
+  match:
+    correct_outcome: 5  # Points for predicting 1, X, or 2
+    exact_score: 10     # Bonus points for exact score
+    cap: 10             # Max hybrid bonus points
+
+  # Team advancement scoring
+  advancement:
+    # Phase 1 (pre-tournament) points
+    phase_1:
+      group_advance: 10      # Team advances from group
+      group_position: 5      # Correct group position (1st, 2nd, 3rd)
+      round_of_32: 10
+      round_of_16: 15
+      quarter_final: 20
+      semi_final: 40
+      final: 60
+      winner: 100
+
+    # Phase 2 (after group stage) points - reduced
+    phase_2:
+      round_of_16: 10
+      quarter_final: 15
+      semi_final: 25
+      final: 40
+      winner: 70
+
+  # Phase multipliers for calculating final scores
+  phase_multipliers:
+    phase_1: 1.0
+    phase_2: 0.7
+
+rules:
+  # Prediction locking
+  lock_minutes_before_kickoff: 5
+
+  # Blind pool - users can't see others' predictions
+  blind_pool: true
+  reveal_after_lock: true
+
+  # Deadlines
+  phase_1_deadline_before_tournament_start: 24  # hours
+  phase_2_deadline_after_group_stage: 24        # hours
+
+  # Tiebreakers for leaderboard
+  tiebreakers:
+    - exact_scores
+    - correct_outcomes
+    - earliest_registration
+
+display:
+  date_format: "DD MMM YYYY"
+  time_format: "HH:mm"
+  timezone: "UTC"
+
+  # Team display
+  show_flags: true
+  flag_size: 24
+
+  # Colors
+  theme: "dark"
+  primary_color: "#3b82f6"
+  accent_color: "#22c55e"

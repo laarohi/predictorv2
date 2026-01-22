@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles */
+@layer components {
+	/* Score input styling */
+	.score-input {
+		@apply w-12 h-10 text-center text-xl font-bold bg-base-200 border border-base-300 rounded;
+		@apply focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary;
+	}
+
+	.score-input:disabled {
+		@apply opacity-50 cursor-not-allowed;
+	}
+
+	/* Match card */
+	.match-card {
+		@apply bg-base-200 rounded-lg p-4 transition-all;
+		@apply hover:bg-base-300;
+	}
+
+	.match-card.locked {
+		@apply opacity-75;
+	}
+
+	/* Team name styling */
+	.team-name {
+		@apply font-semibold truncate;
+	}
+
+	/* Leaderboard row */
+	.leaderboard-row {
+		@apply flex items-center gap-4 p-3 rounded-lg transition-colors;
+		@apply hover:bg-base-200;
+	}
+
+	.leaderboard-row.current-user {
+		@apply bg-primary/10 border border-primary/30;
+	}
+
+	/* Position badge */
+	.position-badge {
+		@apply w-8 h-8 flex items-center justify-center rounded-full font-bold text-sm;
+	}
+
+	.position-badge.gold {
+		@apply bg-yellow-500 text-yellow-900;
+	}
+
+	.position-badge.silver {
+		@apply bg-gray-300 text-gray-800;
+	}
+
+	.position-badge.bronze {
+		@apply bg-amber-600 text-amber-100;
+	}
+
+	/* Countdown timer */
+	.countdown-timer {
+		@apply text-xs font-mono px-2 py-1 rounded bg-warning/20 text-warning;
+	}
+
+	.countdown-timer.urgent {
+		@apply bg-error/20 text-error animate-pulse;
+	}
+
+	/* Save button states */
+	.save-button {
+		@apply btn btn-primary;
+	}
+
+	.save-button.saving {
+		@apply loading loading-spinner;
+	}
+
+	.save-button.saved {
+		@apply btn-success;
+	}
+}
+
+/* Mobile-first responsive adjustments */
+@layer utilities {
+	.mobile-padding {
+		@apply px-4 sm:px-6 lg:px-8;
+	}
+
+	.mobile-stack {
+		@apply flex flex-col sm:flex-row;
+	}
+}
+
+/* Animation keyframes */
+@keyframes slide-up {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+
+.animate-slide-up {
+	animation: slide-up 0.3s ease-out;
+}

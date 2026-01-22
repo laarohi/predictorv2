@@ -1,0 +1,79 @@
+"""Prediction schemas."""
+
+import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, Field
+
+from app.models.prediction import PredictionPhase
+
+
+class MatchPredictionCreate(BaseModel):
+    """Schema for creating a match prediction."""
+
+    fixture_id: uuid.UUID
+    home_score: int = Field(ge=0, le=20)
+    away_score: int = Field(ge=0, le=20)
+
+
+class MatchPredictionUpdate(BaseModel):
+    """Schema for updating a match prediction."""
+
+    home_score: int = Field(ge=0, le=20)
+    away_score: int = Field(ge=0, le=20)
+
+
+class MatchPredictionRead(BaseModel):
+    """Schema for reading a match prediction."""
+
+    id: uuid.UUID
+    fixture_id: uuid.UUID
+    home_score: int
+    away_score: int
+    phase: PredictionPhase
+    locked_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+    # Include fixture info for display
+    home_team: str | None = None
+    away_team: str | None = None
+    kickoff: datetime | None = None
+    is_locked: bool = False
+
+    class Config:
+        """Pydantic config."""
+
+        from_attributes = True
+
+
+class MatchPredictionBatch(BaseModel):
+    """Schema for batch updating match predictions."""
+
+    predictions: list[MatchPredictionCreate]
+
+
+class TeamAdvancementPrediction(BaseModel):
+    """Single team advancement prediction."""
+
+    team: str
+    stage: str  # "round_of_32", "round_of_16", etc.
+    group_position: int | None = Field(default=None, ge=1, le=4)
+
+
+class BracketPrediction(BaseModel):
+    """User's full bracket prediction."""
+
+    group_winners: dict[str, list[str]]  # group -> [1st, 2nd, 3rd (if advances)]
+    round_of_32: list[str]
+    round_of_16: list[str]
+    quarter_finals: list[str]
+    semi_finals: list[str]
+    final: list[str]
+    winner: str
+
+
+class BracketPredictionUpdate(BaseModel):
+    """Schema for updating bracket predictions."""
+
+    predictions: list[TeamAdvancementPrediction]

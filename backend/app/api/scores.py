@@ -1,0 +1,112 @@
+"""Scores API routes."""
+
+import uuid
+from datetime import datetime
+
+from fastapi import APIRouter, HTTPException, status
+from sqlmodel import select
+
+from app.dependencies import AdminUser, DbSession, OptionalUser
+from app.models.fixture import Fixture, MatchStatus
+from app.models.score import Score, ScoreSource
+from app.schemas.score import LiveMatchScore, LiveScoreResponse, ScoreRead, ScoreUpdate
+
+router = APIRouter()
+
+
+@router.get("/live", response_model=LiveScoreResponse)
+async def get_live_scores(session: DbSession, _user: OptionalUser) -> LiveScoreResponse:
+    """Get live and recent scores for polling."""
+    # Get fixtures that are live or finished recently
+    result = await session.execute(
+        select(Fixture, Score)
+        .outerjoin(Score, Fixture.id == Score.fixture_id)
+        .where(Fixture.status.in_([MatchStatus.LIVE, MatchStatus.HALFTIME, MatchStatus.FINISHED]))
+        .order_by(Fixture.kickoff.desc())
+        .limit(50)
+    )
+    rows = result.all()
+
+    matches = []
+    for fixture, score in rows:
+        matches.append(
+            LiveMatchScore(
+                fixture_id=fixture.id,
+                home_team=fixture.home_team,
+                away_team=fixture.away_team,
+                home_score=score.home_score if score else 0,
+                away_score=score.away_score if score else 0,
+                status=fixture.status.value,
+                minute=fixture.minute,
+                kickoff=fixture.kickoff,
+            )
+        )
+
+    return LiveScoreResponse(matches=matches, last_updated=datetime.utcnow())
+
+
+@router.get("/{fixture_id}", response_model=ScoreRead | None)
+async def get_score(
+    fixture_id: uuid.UUID, session: DbSession, _user: OptionalUser
+) -> ScoreRead | None:
+    """Get score for a specific fixture."""
+    result = await session.execute(select(Score).where(Score.fixture_id == fixture_id))
+    score = result.scalar_one_or_none()
+
+    if not score:
+        return None
+
+    return ScoreRead.model_validate(score)
+
+
+@router.put("/{fixture_id}", response_model=ScoreRead)
+async def update_score(
+    fixture_id: uuid.UUID,
+    score_data: ScoreUpdate,
+    session: DbSession,
+    _admin: AdminUser,
+) -> ScoreRead:
+    """Update or create score for a fixture (admin only)."""
+    # Verify fixture exists
+    result = await session.execute(select(Fixture).where(Fixture.id == fixture_id))
+    fixture = result.scalar_one_or_none()
+
+    if not fixture:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fixture not found")
+
+    # Get existing score or create new
+    result = await session.execute(select(Score).where(Score.fixture_id == fixture_id))
+    score = result.scalar_one_or_none()
+
+    if score:
+        score.home_score = score_data.home_score
+        score.away_score = score_data.away_score
+        score.home_score_et = score_data.home_score_et
+        score.away_score_et = score_data.away_score_et
+        score.home_penalties = score_data.home_penalties
+        score.away_penalties = score_data.away_penalties
+        score.verified = score_data.verified
+        score.source = ScoreSource.MANUAL
+        score.updated_at = datetime.utcnow()
+    else:
+        score = Score(
+            fixture_id=fixture_id,
+            home_score=score_data.home_score,
+            away_score=score_data.away_score,
+            home_score_et=score_data.home_score_et,
+            away_score_et=score_data.away_score_et,
+            home_penalties=score_data.home_penalties,
+            away_penalties=score_data.away_penalties,
+            verified=score_data.verified,
+            source=ScoreSource.MANUAL,
+        )
+        session.add(score)
+
+    # Update fixture status
+    fixture.status = MatchStatus.FINISHED
+    fixture.updated_at = datetime.utcnow()
+
+    await session.commit()
+    await session.refresh(score)
+
+    return ScoreRead.model_validate(score)
