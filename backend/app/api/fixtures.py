@@ -1,14 +1,21 @@
 """Fixtures API routes."""
 
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, status
 from sqlmodel import select
 
-from app.dependencies import DbSession, OptionalUser
-from app.models.fixture import Fixture
-from app.schemas.fixture import FixtureRead, FixturesByGroup, LockStatus
+from app.dependencies import AdminUser, DbSession, OptionalUser
+from app.models.fixture import Fixture, MatchStatus
+from app.schemas.fixture import (
+    FixtureCreate,
+    FixtureRead,
+    FixturesByGroup,
+    FixtureStatusUpdate,
+    FixtureUpdate,
+    LockStatus,
+)
 
 router = APIRouter()
 
@@ -105,3 +112,93 @@ async def get_lock_status(
         locks_at=locks_at,
         time_remaining=fixture.time_until_lock(LOCK_MINUTES),
     )
+
+
+# Admin endpoints
+@router.post("/", response_model=FixtureRead, status_code=status.HTTP_201_CREATED)
+async def create_fixture(
+    fixture_data: FixtureCreate,
+    session: DbSession,
+    _admin: AdminUser,
+) -> FixtureRead:
+    """Create a new fixture (admin only)."""
+    fixture = Fixture(
+        competition_id=fixture_data.competition_id,
+        home_team=fixture_data.home_team,
+        away_team=fixture_data.away_team,
+        kickoff=fixture_data.kickoff,
+        stage=fixture_data.stage,
+        group=fixture_data.group,
+        match_number=fixture_data.match_number,
+        external_id=fixture_data.external_id,
+        status=MatchStatus.SCHEDULED,
+    )
+    session.add(fixture)
+    await session.commit()
+    await session.refresh(fixture)
+    return fixture_to_read(fixture)
+
+
+@router.put("/{fixture_id}", response_model=FixtureRead)
+async def update_fixture(
+    fixture_id: uuid.UUID,
+    fixture_data: FixtureUpdate,
+    session: DbSession,
+    _admin: AdminUser,
+) -> FixtureRead:
+    """Update a fixture (admin only)."""
+    result = await session.execute(select(Fixture).where(Fixture.id == fixture_id))
+    fixture = result.scalar_one_or_none()
+
+    if not fixture:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fixture not found")
+
+    update_data = fixture_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(fixture, field, value)
+
+    fixture.updated_at = datetime.utcnow()
+    await session.commit()
+    await session.refresh(fixture)
+    return fixture_to_read(fixture)
+
+
+@router.patch("/{fixture_id}/status", response_model=FixtureRead)
+async def update_fixture_status(
+    fixture_id: uuid.UUID,
+    status_data: FixtureStatusUpdate,
+    session: DbSession,
+    _admin: AdminUser,
+) -> FixtureRead:
+    """Update fixture status and minute (admin only)."""
+    result = await session.execute(select(Fixture).where(Fixture.id == fixture_id))
+    fixture = result.scalar_one_or_none()
+
+    if not fixture:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fixture not found")
+
+    fixture.status = status_data.status
+    if status_data.minute is not None:
+        fixture.minute = status_data.minute
+    fixture.updated_at = datetime.utcnow()
+
+    await session.commit()
+    await session.refresh(fixture)
+    return fixture_to_read(fixture)
+
+
+@router.delete("/{fixture_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_fixture(
+    fixture_id: uuid.UUID,
+    session: DbSession,
+    _admin: AdminUser,
+) -> None:
+    """Delete a fixture (admin only)."""
+    result = await session.execute(select(Fixture).where(Fixture.id == fixture_id))
+    fixture = result.scalar_one_or_none()
+
+    if not fixture:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fixture not found")
+
+    await session.delete(fixture)
+    await session.commit()

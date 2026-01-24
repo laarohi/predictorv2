@@ -99,22 +99,24 @@ predictorv2/
 
 **Deliverable:** Working authentication flow
 
-### Phase 2: Group Stage (IN PROGRESS)
-- [ ] Run database migrations
-- [ ] Seed data for testing (competition, fixtures)
-- [ ] GroupTable component with live standings
-- [ ] Mobile-responsive group view
-- [ ] End-to-end testing of prediction flow
-- [ ] Admin endpoints for fixtures/scores
+### Phase 2: Group Stage ✅ COMPLETED
+- [x] Run database migrations
+- [x] Seed data for testing (competition, fixtures)
+- [x] GroupTable component with live standings
+- [x] Mobile-responsive group view
+- [x] End-to-end testing of prediction flow
+- [x] Admin endpoints for fixtures/scores
 
 **Deliverable:** Users can enter all group stage predictions
 
-### Phase 3: Knockout Bracket
-- [ ] Bracket validation (teams must advance)
-- [ ] KnockoutBracket visualization
-- [ ] SVG connectors with animations
-- [ ] Mobile accordion view
-- [ ] Phase 1 vs Phase 2 handling
+### Phase 3: Knockout Bracket ✅ COMPLETED
+- [x] Bracket validation (teams must advance through rounds)
+- [x] KnockoutBracket visualization (horizontal desktop layout)
+- [x] BracketMatch component with team selection
+- [x] Mobile accordion view with progress tracking
+- [x] Automatic initialization from group stage predictions
+- [x] Winner propagation and downstream pick clearing
+- [x] Save functionality with backend API integration
 
 **Deliverable:** Visual bracket with team selection
 

@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timedelta
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.fixture import MatchStatus
 
@@ -43,3 +43,36 @@ class LockStatus(BaseModel):
     is_locked: bool
     locks_at: datetime
     time_remaining: timedelta | None
+
+
+# Admin schemas
+class FixtureCreate(BaseModel):
+    """Schema for creating a fixture (admin only)."""
+
+    competition_id: uuid.UUID
+    home_team: str = Field(..., min_length=1, max_length=100)
+    away_team: str = Field(..., min_length=1, max_length=100)
+    kickoff: datetime
+    stage: str = Field(..., min_length=1, max_length=50)
+    group: str | None = Field(None, max_length=10)
+    match_number: int | None = None
+    external_id: str | None = None
+
+
+class FixtureUpdate(BaseModel):
+    """Schema for updating a fixture (admin only)."""
+
+    home_team: str | None = Field(None, min_length=1, max_length=100)
+    away_team: str | None = Field(None, min_length=1, max_length=100)
+    kickoff: datetime | None = None
+    stage: str | None = Field(None, min_length=1, max_length=50)
+    group: str | None = Field(None, max_length=10)
+    match_number: int | None = None
+    external_id: str | None = None
+
+
+class FixtureStatusUpdate(BaseModel):
+    """Schema for updating fixture status (admin only)."""
+
+    status: MatchStatus
+    minute: int | None = Field(None, ge=0, le=150)

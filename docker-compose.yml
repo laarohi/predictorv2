@@ -34,6 +34,7 @@ services:
       - TOURNAMENT_CONFIG_PATH=/app/config/worldcup2026.yml
     volumes:
       - ./backend/app:/app/app
+      - ./backend/scripts:/app/scripts
       - ./config:/app/config
     ports:
       - "8000:8000"

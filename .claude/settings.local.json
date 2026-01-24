@@ -3,7 +3,15 @@
     "allow": [
       "Bash(wc:*)",
       "Bash(xargs:*)",
-      "Bash(git init:*)"
+      "Bash(git init:*)",
+      "Bash(None\" to Optional[\"Type\"]\n- passlib/bcrypt incompatibility: Switched to bcrypt directly\n- pydantic-settings CORS parsing: Used computed_field pattern\n- Svelte class directive with /: Used ternary in class string\n\nReady for Phase 2:\n------------------\n- Database migrations need to be run\n- Seed data needed for testing\n- GroupTable component for standings\n- End-to-end auth flow testing\nEOF\n\\)\")",
+      "Bash(git notes:*)",
+      "Skill(frontend-design)",
+      "Bash(npm run check:*)",
+      "Bash(npx svelte-check:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker logs:*)",
+      "WebFetch(domain:en.wikipedia.org)"
     ]
   }
 }
