@@ -22,9 +22,11 @@
 	import MatchCard from '$components/MatchCard.svelte';
 	import SaveButton from '$components/SaveButton.svelte';
 	import GroupTable from '$components/GroupTable.svelte';
+	import ThirdPlaceTable from '$components/ThirdPlaceTable.svelte';
 	import { KnockoutBracket } from '$components/bracket';
 	import type { MatchPrediction, BracketPrediction, TeamAdvancementPrediction } from '$types';
-	import { updateBracketWithNewQualifiers, initializeBracketFromGroups, getAllTeamsFromGroups, computeGroupStandingsMap } from '$lib/utils/standings';
+	import { getAllTeamsFromGroups, computeGroupStandingsMap } from '$lib/utils/standings';
+	import { getQualifyingThirdPlaceTeams } from '$lib/utils/bracketResolver';
 
 	$: if (!$isAuthenticated) {
 		goto('/login');
@@ -64,7 +66,8 @@
 	}
 
 	async function handleSaveBracket() {
-		if (!unsavedBracket) return;
+		const bracket = $unsavedBracketPrediction;
+		if (!bracket) return;
 
 		bracketSaveStatus = 'saving';
 
@@ -72,50 +75,50 @@
 		const predictions: TeamAdvancementPrediction[] = [];
 
 		// Add round of 32 teams
-		unsavedBracket.round_of_32.forEach((team, i) => {
+		bracket.round_of_32.forEach((team, i) => {
 			if (team) {
 				predictions.push({ team, stage: 'round_of_32', group_position: null });
 			}
 		});
 
 		// Add round of 16 teams
-		unsavedBracket.round_of_16.forEach((team) => {
+		bracket.round_of_16.forEach((team) => {
 			if (team) {
 				predictions.push({ team, stage: 'round_of_16', group_position: null });
 			}
 		});
 
 		// Add quarter-finals teams
-		unsavedBracket.quarter_finals.forEach((team) => {
+		bracket.quarter_finals.forEach((team) => {
 			if (team) {
 				predictions.push({ team, stage: 'quarter_finals', group_position: null });
 			}
 		});
 
 		// Add semi-finals teams
-		unsavedBracket.semi_finals.forEach((team) => {
+		bracket.semi_finals.forEach((team) => {
 			if (team) {
 				predictions.push({ team, stage: 'semi_finals', group_position: null });
 			}
 		});
 
 		// Add final teams
-		unsavedBracket.final.forEach((team) => {
+		bracket.final.forEach((team) => {
 			if (team) {
 				predictions.push({ team, stage: 'final', group_position: null });
 			}
 		});
 
 		// Add winner
-		if (unsavedBracket.winner) {
-			predictions.push({ team: unsavedBracket.winner, stage: 'winner', group_position: null });
+		if (bracket.winner) {
+			predictions.push({ team: bracket.winner, stage: 'winner', group_position: null });
 		}
 
 		const success = await saveBracketPredictions(predictions);
 		bracketSaveStatus = success ? 'saved' : 'error';
 
 		if (success) {
-			unsavedBracket = null;
+			unsavedBracketPrediction.set(null);
 			setTimeout(() => {
 				bracketSaveStatus = 'idle';
 			}, 2000);
@@ -161,9 +164,25 @@
 	// Compute group standings map for the knockout bracket
 	$: groupStandingsMap = computeGroupStandingsMap($groupFixtures, livePredictionMap);
 
+	// Compute sorted third-place standings
+	$: thirdPlaceStandings = (() => {
+		const thirdPlace = [];
+		for (const [group, standings] of Object.entries(groupStandingsMap)) {
+			if (standings[2]) {
+				thirdPlace.push(standings[2]);
+			}
+		}
+		// Sort by points, GD, GF
+		return thirdPlace.sort((a, b) => {
+			if (b.points !== a.points) return b.points - a.points;
+			if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+			return b.goalsFor - a.goalsFor;
+		});
+	})();
+
 	// Get the current bracket prediction to display
 	// Use unsavedBracket if we have local changes, otherwise use the backend data
-	$: displayBracket = unsavedBracket || $bracketPrediction;
+	$: displayBracket = $unsavedBracketPrediction || $bracketPrediction;
 
 	// Calculate prediction progress
 	$: totalMatches = $groupFixtures.reduce((sum, g) => sum + g.fixtures.length, 0);
@@ -312,6 +331,20 @@
 							</div>
 						</div>
 					{/each}
+
+					<!-- Third Place Table -->
+					<div class="stadium-card no-glow p-4 sm:p-6 animate-slide-up" style="animation-delay: 600ms; animation-fill-mode: both;">
+						<div class="flex items-center gap-3 mb-5">
+							<div class="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center">
+								<span class="text-lg font-display text-warning">3rd</span>
+							</div>
+							<div>
+								<h2 class="text-lg font-display tracking-wide">Ranking of 3rd Place Teams</h2>
+								<p class="text-xs text-base-content/50">Top 8 advance to Round of 32</p>
+							</div>
+						</div>
+						<ThirdPlaceTable standings={thirdPlaceStandings} />
+					</div>
 				</div>
 			{/if}
 		{/if}

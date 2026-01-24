@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
-from sqlmodel import select
+from sqlmodel import select, delete
 
 from app.dependencies import CurrentUser, DbSession
 from app.models.fixture import Fixture
@@ -209,8 +209,8 @@ async def get_bracket_predictions(
     stages: dict[str, list[str]] = {
         "round_of_32": [],
         "round_of_16": [],
-        "quarter_final": [],
-        "semi_final": [],
+        "quarter_finals": [],
+        "semi_finals": [],
         "final": [],
     }
     winner = ""
@@ -228,8 +228,8 @@ async def get_bracket_predictions(
         group_winners=group_winners,
         round_of_32=stages["round_of_32"],
         round_of_16=stages["round_of_16"],
-        quarter_finals=stages["quarter_final"],
-        semi_finals=stages["semi_final"],
+        quarter_finals=stages["quarter_finals"],
+        semi_finals=stages["semi_finals"],
         final=stages["final"],
         winner=winner,
     )
@@ -244,29 +244,20 @@ async def update_bracket_predictions(
     """Update bracket predictions."""
     current_phase = get_current_phase()
 
-    for pred_data in bracket_data.predictions:
-        # Check if prediction already exists
-        result = await session.execute(
-            select(TeamPrediction).where(
-                TeamPrediction.user_id == current_user.id,
-                TeamPrediction.team == pred_data.team,
-                TeamPrediction.stage == pred_data.stage,
-            )
-        )
-        existing = result.scalar_one_or_none()
+    # Clear existing bracket predictions for this user to ensure we sync with frontend
+    # This handles deselections correctly
+    statement = delete(TeamPrediction).where(TeamPrediction.user_id == current_user.id)
+    await session.execute(statement)
 
-        if existing:
-            existing.group_position = pred_data.group_position
-            existing.updated_at = datetime.utcnow()
-        else:
-            prediction = TeamPrediction(
-                user_id=current_user.id,
-                team=pred_data.team,
-                stage=pred_data.stage,
-                group_position=pred_data.group_position,
-                phase=current_phase,
-            )
-            session.add(prediction)
+    for pred_data in bracket_data.predictions:
+        prediction = TeamPrediction(
+            user_id=current_user.id,
+            team=pred_data.team,
+            stage=pred_data.stage,
+            group_position=pred_data.group_position,
+            phase=current_phase,
+        )
+        session.add(prediction)
 
     await session.commit()
     return {"status": "ok"}
