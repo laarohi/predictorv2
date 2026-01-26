@@ -20,7 +20,7 @@
 <div class="min-h-screen bg-base-100 flex flex-col noise">
 	<!-- Navigation -->
 	{#if $isAuthenticated}
-		<nav class="navbar bg-base-200/80 backdrop-blur-md border-b border-base-300/50 sticky top-0 z-50">
+		<nav class="navbar bg-base-200 border-b border-base-300/50 sticky top-0 z-50">
 			<div class="navbar-start">
 				<a href="/" class="nav-brand px-4 hover:opacity-80 transition-opacity">
 					PREDICTOR

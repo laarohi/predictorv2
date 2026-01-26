@@ -35,6 +35,7 @@
 	let activeTab: 'groups' | 'bracket' = 'groups';
 	let saveStatus: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
 	let bracketSaveStatus: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
+	let bracketComponent: KnockoutBracket;
 
 	onMount(async () => {
 		if ($isAuthenticated) {
@@ -48,6 +49,21 @@
 
 	// Check if bracket has unsaved changes (from store)
 	$: hasBracketChanges = $hasUnsavedBracketChanges;
+
+	// Check if bracket has any selections (to show clear button)
+	$: hasBracketSelections = displayBracket && (
+		displayBracket.round_of_16?.some(t => t) ||
+		displayBracket.quarter_finals?.some(t => t) ||
+		displayBracket.semi_finals?.some(t => t) ||
+		displayBracket.final?.some(t => t) ||
+		displayBracket.winner
+	);
+
+	function handleClearBracket() {
+		if (confirm('Are you sure you want to clear all knockout selections?')) {
+			bracketComponent?.clearAllSelections();
+		}
+	}
 
 	async function handleSaveAll() {
 		saveStatus = 'saving';
@@ -184,10 +200,34 @@
 	// Use unsavedBracket if we have local changes, otherwise use the backend data
 	$: displayBracket = $unsavedBracketPrediction || $bracketPrediction;
 
-	// Calculate prediction progress
-	$: totalMatches = $groupFixtures.reduce((sum, g) => sum + g.fixtures.length, 0);
-	$: predictedMatches = $matchPredictions.length;
-	$: progressPercent = totalMatches > 0 ? Math.round((predictedMatches / totalMatches) * 100) : 0;
+	// Calculate prediction progress (combined group stage + knockout bracket)
+	// Group stage: count matches predicted
+	$: totalGroupMatches = $groupFixtures.reduce((sum, g) => sum + g.fixtures.length, 0);
+	$: predictedGroupMatches = $matchPredictions.length;
+
+	// Knockout bracket: count picks required
+	// R32: 16 winners, R16: 8 winners, QF: 4 winners, SF: 2 winners, Final: 1 winner = 31 total
+	$: totalKnockoutPicks = 31;
+	$: predictedKnockoutPicks = (() => {
+		const bracket = $bracketPrediction;
+		if (!bracket) return 0;
+		let count = 0;
+		count += bracket.round_of_16?.filter(t => t).length ?? 0;
+		count += bracket.quarter_finals?.filter(t => t).length ?? 0;
+		count += bracket.semi_finals?.filter(t => t).length ?? 0;
+		count += bracket.final?.filter(t => t).length ?? 0;
+		count += bracket.winner ? 1 : 0;
+		return count;
+	})();
+
+	// Combined progress
+	$: totalPredictions = totalGroupMatches + totalKnockoutPicks;
+	$: completedPredictions = predictedGroupMatches + predictedKnockoutPicks;
+	$: progressPercent = totalPredictions > 0 ? Math.round((completedPredictions / totalPredictions) * 100) : 0;
+
+	// Individual progress for display
+	$: groupProgressPercent = totalGroupMatches > 0 ? Math.round((predictedGroupMatches / totalGroupMatches) * 100) : 0;
+	$: bracketProgressPercent = Math.round((predictedKnockoutPicks / totalKnockoutPicks) * 100);
 </script>
 
 <svelte:head>
@@ -202,7 +242,7 @@
 				<div>
 					<h1 class="text-3xl sm:text-4xl font-display tracking-wide">Predictions</h1>
 					<p class="text-sm text-base-content/50 mt-1">
-						{predictedMatches} of {totalMatches} matches predicted
+						{completedPredictions} of {totalPredictions} predictions complete
 					</p>
 				</div>
 
@@ -233,28 +273,33 @@
 							<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
 							</svg>
-							Bracket
+							Knockout
 						</span>
 					</button>
 				</div>
 			</div>
 
-			<!-- Progress bar -->
-			{#if totalMatches > 0 && activeTab === 'groups'}
-				<div class="w-full">
-					<div class="flex items-center justify-between text-xs text-base-content/50 mb-2">
-						<span>Progress</span>
-						<span>{progressPercent}%</span>
-					</div>
-					<div class="w-full h-2 bg-base-300 rounded-full overflow-hidden">
+		</div>
+
+		<!-- Sticky Progress bar -->
+		{#if totalPredictions > 0}
+			<div class="sticky top-16 z-30 -mx-4 sm:-mx-0 px-4 sm:px-0 py-2 sm:py-3 bg-base-100/95 backdrop-blur-sm border-b border-base-300/30 -mt-2 mb-4">
+				<div class="flex items-center gap-3">
+					<div class="flex-1 h-1.5 sm:h-2 bg-base-300 rounded-full overflow-hidden">
 						<div
 							class="h-full bg-gradient-to-r from-primary to-accent transition-all duration-500 ease-out rounded-full"
 							style="width: {progressPercent}%"
 						></div>
 					</div>
+					<span class="text-xs font-medium text-base-content/70 tabular-nums w-10 text-right">{progressPercent}%</span>
+					<!-- Breakdown on larger screens -->
+					<div class="hidden sm:flex items-center gap-2 text-xs text-base-content/40 border-l border-base-300/50 pl-3">
+						<span>G: {groupProgressPercent}%</span>
+						<span>K: {bracketProgressPercent}%</span>
+					</div>
 				</div>
-			{/if}
-		</div>
+			</div>
+		{/if}
 
 		<!-- Floating save button for groups -->
 		{#if activeTab === 'groups' && $hasUnsavedChanges}
@@ -376,15 +421,34 @@
 								Select winners to advance through each round
 							</p>
 						</div>
-						{#if hasBracketChanges}
-							<span class="flex items-center gap-2 text-xs text-accent">
-								<span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
-								Unsaved changes
-							</span>
-						{/if}
+						<div class="flex items-center gap-4">
+							{#if hasBracketChanges}
+								<span class="flex items-center gap-2 text-xs text-accent">
+									<span class="w-2 h-2 rounded-full bg-accent animate-pulse"></span>
+									Unsaved changes
+								</span>
+							{/if}
+							{#if hasBracketSelections}
+								<button
+									class="text-xs font-medium text-base-content/40 hover:text-error transition-all duration-200 flex items-center gap-1.5 px-3 py-1.5 rounded-lg hover:bg-error/10 border border-transparent hover:border-error/20"
+									on:click={handleClearBracket}
+								>
+									<svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+										/>
+									</svg>
+									Clear All
+								</button>
+							{/if}
+						</div>
 					</div>
 
 					<KnockoutBracket
+						bind:this={bracketComponent}
 						prediction={displayBracket}
 						groupStandings={groupStandingsMap}
 						locked={false}
