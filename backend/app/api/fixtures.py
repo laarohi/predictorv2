@@ -4,9 +4,10 @@ import uuid
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
 from sqlmodel import select
 
-from app.dependencies import AdminUser, DbSession, OptionalUser
+from app.dependencies import AdminUser, CurrentUser, DbSession, OptionalUser
 from app.models.fixture import Fixture, MatchStatus
 from app.schemas.fixture import (
     FixtureCreate,
@@ -15,6 +16,12 @@ from app.schemas.fixture import (
     FixtureStatusUpdate,
     FixtureUpdate,
     LockStatus,
+)
+from app.services.locking import get_active_competition
+from app.services.standings import (
+    get_actual_group_standings,
+    get_group_positions,
+    get_qualifying_third_place_teams,
 )
 
 router = APIRouter()
@@ -79,6 +86,87 @@ async def get_knockout_fixtures(session: DbSession, _user: OptionalUser) -> list
     )
     fixtures = result.scalars().all()
     return [fixture_to_read(f) for f in fixtures]
+
+
+class TeamStandingResponse(BaseModel):
+    """Team standing in a group."""
+
+    team: str
+    group: str
+    played: int
+    won: int
+    drawn: int
+    lost: int
+    goals_for: int
+    goals_against: int
+    goal_difference: int
+    points: int
+
+
+class ActualStandingsResponse(BaseModel):
+    """Actual group standings computed from finished matches."""
+
+    standings: dict[str, list[TeamStandingResponse]]
+    qualifying_third_place: list[TeamStandingResponse]
+
+
+@router.get("/knockout/actual", response_model=list[FixtureRead])
+async def get_actual_knockout_fixtures(
+    session: DbSession,
+    current_user: CurrentUser,
+) -> list[FixtureRead]:
+    """Get knockout fixtures with actual teams (requires Phase 2 active).
+
+    This endpoint returns knockout fixtures where team names have been
+    populated based on actual group stage results.
+    """
+    # Check if Phase 2 is active
+    competition = await get_active_competition(session)
+    if not competition or not competition.is_phase2_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Phase 2 is not active",
+        )
+
+    # Get knockout fixtures
+    result = await session.execute(
+        select(Fixture)
+        .where(Fixture.stage != "group")
+        .order_by(Fixture.kickoff, Fixture.match_number)
+    )
+    fixtures = result.scalars().all()
+
+    return [fixture_to_read(f) for f in fixtures]
+
+
+@router.get("/standings/actual", response_model=ActualStandingsResponse)
+async def get_actual_standings(
+    session: DbSession,
+    current_user: CurrentUser,
+) -> ActualStandingsResponse:
+    """Get actual group standings computed from finished matches.
+
+    This endpoint requires Phase 2 to be active and returns group standings
+    based on completed group stage fixtures.
+    """
+    # Check if Phase 2 is active
+    competition = await get_active_competition(session)
+    if not competition or not competition.is_phase2_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Phase 2 is not active",
+        )
+
+    standings = await get_actual_group_standings(session)
+    qualifying_third = await get_qualifying_third_place_teams(session)
+
+    return ActualStandingsResponse(
+        standings={
+            group: [TeamStandingResponse(**t) for t in teams]
+            for group, teams in standings.items()
+        },
+        qualifying_third_place=[TeamStandingResponse(**t) for t in qualifying_third],
+    )
 
 
 @router.get("/{fixture_id}", response_model=FixtureRead)

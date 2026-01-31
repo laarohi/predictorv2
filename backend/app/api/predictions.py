@@ -87,7 +87,7 @@ async def update_match_prediction(
     )
     prediction = result.scalar_one_or_none()
 
-    current_phase = get_current_phase()
+    current_phase = await get_current_phase(session)
 
     if prediction:
         prediction.home_score = prediction_data.home_score
@@ -130,7 +130,7 @@ async def batch_update_predictions(
 ) -> list[MatchPredictionRead]:
     """Batch update multiple match predictions."""
     results = []
-    current_phase = get_current_phase()
+    current_phase = await get_current_phase(session)
 
     for pred_data in predictions_data:
         # Get fixture
@@ -193,11 +193,27 @@ async def batch_update_predictions(
 
 @router.get("/bracket", response_model=BracketPrediction | None)
 async def get_bracket_predictions(
-    session: DbSession, current_user: CurrentUser
+    session: DbSession,
+    current_user: CurrentUser,
+    phase: str | None = None,
 ) -> BracketPrediction | None:
-    """Get bracket predictions for the current user."""
+    """Get bracket predictions for the current user.
+
+    Args:
+        phase: Optional phase filter ('phase_1' or 'phase_2').
+               If not provided, uses current phase.
+    """
+    # Determine which phase to fetch
+    if phase:
+        target_phase = PredictionPhase(phase)
+    else:
+        target_phase = await get_current_phase(session)
+
     result = await session.execute(
-        select(TeamPrediction).where(TeamPrediction.user_id == current_user.id)
+        select(TeamPrediction).where(
+            TeamPrediction.user_id == current_user.id,
+            TeamPrediction.phase == target_phase,
+        )
     )
     predictions = result.scalars().all()
 
@@ -241,12 +257,15 @@ async def update_bracket_predictions(
     session: DbSession,
     current_user: CurrentUser,
 ) -> dict[str, str]:
-    """Update bracket predictions."""
-    current_phase = get_current_phase()
+    """Update bracket predictions for the current phase."""
+    current_phase = await get_current_phase(session)
 
-    # Clear existing bracket predictions for this user to ensure we sync with frontend
-    # This handles deselections correctly
-    statement = delete(TeamPrediction).where(TeamPrediction.user_id == current_user.id)
+    # Clear existing bracket predictions for this user AND phase only
+    # This ensures Phase 1 and Phase 2 predictions are kept separate
+    statement = delete(TeamPrediction).where(
+        TeamPrediction.user_id == current_user.id,
+        TeamPrediction.phase == current_phase,
+    )
     await session.execute(statement)
 
     for pred_data in bracket_data.predictions:

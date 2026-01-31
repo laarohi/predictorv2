@@ -149,6 +149,87 @@ def calculate_advancement_points(
     return 0
 
 
+async def get_actual_advancement(session: AsyncSession) -> dict[str, str]:
+    """Determine which teams advanced to each stage based on completed fixtures.
+
+    Queries finished knockout fixtures and determines the highest stage
+    reached by each team.
+
+    Args:
+        session: Database session
+
+    Returns:
+        Dict mapping team name -> highest stage reached
+        e.g., {"France": "winner", "Germany": "semi_final", ...}
+    """
+    # Define stage progression for determining highest stage
+    # Higher index = further in tournament
+    stage_ranking = {
+        "round_of_32": 1,
+        "round_of_16": 2,
+        "quarter_final": 3,
+        "semi_final": 4,
+        "final": 5,
+    }
+
+    # Track highest stage reached by each team
+    team_advancement: dict[str, str] = {}
+
+    # Get all finished knockout fixtures with scores
+    result = await session.execute(
+        select(Fixture, Score)
+        .outerjoin(Score, Fixture.id == Score.fixture_id)
+        .where(
+            Fixture.stage != "group",
+            Fixture.status == MatchStatus.FINISHED,
+        )
+    )
+    rows = result.all()
+
+    for fixture, score in rows:
+        if not score:
+            continue
+
+        stage = fixture.stage
+        home_team = fixture.home_team
+        away_team = fixture.away_team
+
+        # Both teams at least reached this stage
+        for team in [home_team, away_team]:
+            if team:
+                current_stage = team_advancement.get(team)
+                if not current_stage or stage_ranking.get(stage, 0) > stage_ranking.get(
+                    current_stage, 0
+                ):
+                    team_advancement[team] = stage
+
+        # Determine winner and advance them to next stage
+        winner = None
+        if score.outcome == "1":
+            winner = home_team
+        elif score.outcome == "2":
+            winner = away_team
+
+        if winner:
+            # Map current stage to advancement stage
+            advancement_map = {
+                "round_of_32": "round_of_16",
+                "round_of_16": "quarter_final",
+                "quarter_final": "semi_final",
+                "semi_final": "final",
+                "final": "winner",
+            }
+            next_stage = advancement_map.get(stage)
+            if next_stage:
+                current_stage = team_advancement.get(winner)
+                if not current_stage or stage_ranking.get(
+                    next_stage, 6
+                ) > stage_ranking.get(current_stage, 0):
+                    team_advancement[winner] = next_stage
+
+    return team_advancement
+
+
 async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> PointBreakdown:
     """Calculate total points for a user.
 
@@ -193,15 +274,14 @@ async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> Po
     )
     team_predictions = result.scalars().all()
 
-    # TODO: Implement actual advancement tracking
-    # For now, return breakdown without advancement points
-    # actual_advancement = await get_actual_advancement(session)
-    # for pred in team_predictions:
-    #     points = calculate_advancement_points(pred, actual_advancement, pred.phase)
-    #     if pred.stage == "group":
-    #         breakdown.group_advancement_points += points
-    #     else:
-    #         breakdown.knockout_advancement_points += points
+    # Calculate advancement points
+    actual_advancement = await get_actual_advancement(session)
+    for pred in team_predictions:
+        points = calculate_advancement_points(pred, actual_advancement, pred.phase)
+        if pred.stage == "group":
+            breakdown.group_advancement_points += points
+        else:
+            breakdown.knockout_advancement_points += points
 
     return breakdown
 

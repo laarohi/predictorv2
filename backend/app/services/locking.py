@@ -5,11 +5,24 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from app.models.competition import Competition
 from app.models.fixture import Fixture
 from app.models.prediction import MatchPrediction, PredictionPhase
 
 # Lock predictions 5 minutes before kickoff
 LOCK_MINUTES = 5
+
+
+async def get_active_competition(session: AsyncSession) -> Competition | None:
+    """Get the currently active competition.
+
+    Returns:
+        The active competition, or None if no active competition exists.
+    """
+    result = await session.execute(
+        select(Competition).where(Competition.is_active == True)
+    )
+    return result.scalar_one_or_none()
 
 
 def check_fixture_locked(fixture: Fixture, lock_minutes: int = LOCK_MINUTES) -> bool:
@@ -41,18 +54,44 @@ def get_time_until_lock(fixture: Fixture, lock_minutes: int = LOCK_MINUTES) -> t
     return remaining if remaining.total_seconds() > 0 else None
 
 
-def get_current_phase() -> PredictionPhase:
-    """Determine the current prediction phase based on tournament state.
+async def get_current_phase(session: AsyncSession) -> PredictionPhase:
+    """Determine the current prediction phase based on competition state.
 
-    In a real implementation, this would check:
-    - If group stage has started
-    - If group stage has finished
-    - Competition deadlines
+    Phase 2 is active when an admin has explicitly activated it via
+    the is_phase2_active flag on the competition.
 
-    For now, returns PHASE_1 as default.
+    Args:
+        session: Database session
+
+    Returns:
+        PHASE_2 if Phase 2 is active, otherwise PHASE_1
     """
-    # TODO: Implement proper phase detection based on competition config
+    competition = await get_active_competition(session)
+    if competition and competition.is_phase2_active:
+        return PredictionPhase.PHASE_2
     return PredictionPhase.PHASE_1
+
+
+async def is_phase2_bracket_locked(session: AsyncSession) -> bool:
+    """Check if the Phase 2 bracket prediction deadline has passed.
+
+    The Phase 2 bracket locks at the phase2_bracket_deadline, which is
+    set by the admin when activating Phase 2.
+
+    Args:
+        session: Database session
+
+    Returns:
+        True if Phase 2 bracket is locked, False otherwise
+    """
+    competition = await get_active_competition(session)
+    if not competition:
+        return False
+    if not competition.is_phase2_active:
+        return False
+    if not competition.phase2_bracket_deadline:
+        return False
+    return datetime.utcnow() >= competition.phase2_bracket_deadline
 
 
 async def lock_predictions(session: AsyncSession, fixture_id: str) -> int:
