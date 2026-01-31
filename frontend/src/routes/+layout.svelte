@@ -3,10 +3,19 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { isAuthenticated, user, logout, initAuth } from '$stores/auth';
+	import { fetchPhaseStatus } from '$stores/phase';
+
+	let hasLoadedPhase = false;
 
 	onMount(() => {
 		initAuth();
 	});
+
+	// Fetch phase status when user becomes authenticated
+	$: if ($isAuthenticated && !hasLoadedPhase) {
+		hasLoadedPhase = true;
+		fetchPhaseStatus();
+	}
 
 	const navItems = [
 		{ href: '/', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -27,14 +36,14 @@
 				</a>
 			</div>
 
-			<div class="navbar-center hidden sm:flex">
+			<div class="navbar-center hidden min-[700px]:flex">
 				<ul class="flex items-center gap-1">
 					{#each navItems as item}
 						{@const isActive = currentPath === item.href || (item.href !== '/' && currentPath.startsWith(item.href))}
 						<li>
 							<a
 								href={item.href}
-								class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
+								class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200
 									{isActive
 										? 'bg-primary/10 text-primary'
 										: 'text-base-content/70 hover:text-base-content hover:bg-base-300/50'}"
@@ -50,7 +59,7 @@
 						<li>
 							<a
 								href="/admin"
-								class="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200
+								class="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200
 									{currentPath.startsWith('/admin')
 										? 'bg-primary/10 text-primary'
 										: 'text-base-content/70 hover:text-base-content hover:bg-base-300/50'}"
@@ -102,25 +111,38 @@
 		</nav>
 
 		<!-- Mobile bottom navigation -->
-		<nav class="btm-nav sm:hidden bg-base-200/95 backdrop-blur-md border-t border-base-300/50 h-16">
+		<nav class="fixed bottom-0 left-0 right-0 z-50 min-[700px]:hidden bg-base-200/95 backdrop-blur-md border-t border-base-300/50 h-14 flex items-center justify-around">
 			{#each navItems as item}
 				{@const isActive = currentPath === item.href || (item.href !== '/' && currentPath.startsWith(item.href))}
 				<a
 					href={item.href}
-					class="flex flex-col items-center justify-center gap-1 transition-colors duration-200
-						{isActive ? 'text-primary active' : 'text-base-content/50'}"
+					class="flex flex-col items-center justify-center gap-0.5 px-2 py-1 transition-colors duration-200
+						{isActive ? 'text-primary' : 'text-base-content/50'}"
 				>
 					<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d={item.icon} />
 					</svg>
-					<span class="text-[10px] font-medium">{item.label}</span>
+					<span class="text-[9px] font-medium">{item.label}</span>
 				</a>
 			{/each}
+			{#if $user?.is_admin}
+				<a
+					href="/admin"
+					class="flex flex-col items-center justify-center gap-0.5 px-2 py-1 transition-colors duration-200
+						{currentPath.startsWith('/admin') ? 'text-primary' : 'text-base-content/50'}"
+				>
+					<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+						<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+					</svg>
+					<span class="text-[9px] font-medium">Admin</span>
+				</a>
+			{/if}
 		</nav>
 	{/if}
 
 	<!-- Main content -->
-	<main class="flex-1 pb-20 sm:pb-0">
+	<main class="flex-1 pb-16 min-[700px]:pb-0">
 		<slot />
 	</main>
 </div>

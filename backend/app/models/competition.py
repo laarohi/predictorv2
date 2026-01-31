@@ -22,9 +22,14 @@ class Competition(SQLModel, table=True):
     description: str | None = None
     entry_fee: Decimal = Field(default=Decimal("0.00"), max_digits=10, decimal_places=2)
 
-    # Deadlines
-    phase1_deadline: datetime | None = None  # Deadline for group predictions
-    phase2_deadline: datetime | None = None  # Deadline for knockout predictions
+    # Phase 1 Deadlines (Group Stage)
+    phase1_deadline: datetime | None = None  # Deadline for group stage predictions
+
+    # Phase 2 Control
+    is_phase2_active: bool = Field(default=False)  # Admin-triggered Phase 2 activation
+    phase2_activated_at: datetime | None = None  # When Phase 2 was activated
+    phase2_bracket_deadline: datetime | None = None  # Deadline for Phase 2 bracket predictions
+    phase2_deadline: datetime | None = None  # Legacy field for knockout score predictions
 
     # Configuration reference
     config_file: str | None = None  # Path to YAML config

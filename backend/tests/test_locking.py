@@ -104,10 +104,38 @@ class TestGetTimeUntilLock:
 class TestGetCurrentPhase:
     """Tests for prediction phase determination."""
 
-    def test_returns_phase_1_by_default(self):
-        """Should return PHASE_1 as default."""
+    @pytest.mark.asyncio
+    async def test_returns_phase_1_when_no_competition(self):
+        """Should return PHASE_1 when no active competition exists."""
         from app.models.prediction import PredictionPhase
+        from unittest.mock import AsyncMock
 
-        result = get_current_phase()
+        # Mock session that returns no competition
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = None
+        mock_session.execute.return_value = mock_result
+
+        result = await get_current_phase(mock_session)
 
         assert result == PredictionPhase.PHASE_1
+
+    @pytest.mark.asyncio
+    async def test_returns_phase_2_when_active(self):
+        """Should return PHASE_2 when competition has is_phase2_active=True."""
+        from app.models.prediction import PredictionPhase
+        from app.models.competition import Competition
+        from unittest.mock import AsyncMock
+
+        # Mock competition with Phase 2 active
+        mock_competition = MagicMock(spec=Competition)
+        mock_competition.is_phase2_active = True
+
+        mock_session = AsyncMock()
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_competition
+        mock_session.execute.return_value = mock_result
+
+        result = await get_current_phase(mock_session)
+
+        assert result == PredictionPhase.PHASE_2
