@@ -2,16 +2,49 @@
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter
+from pydantic import BaseModel
 from sqlmodel import select
 
 from app.dependencies import DbSession, OptionalUser
 from app.models.user import User
 from app.schemas.leaderboard import LeaderboardEntry, LeaderboardResponse, PointBreakdown
-from app.services.scoring import calculate_user_points
+from app.services.scoring import calculate_user_points, get_scoring_config, SCORING_STRATEGIES
 
 router = APIRouter()
+
+
+class ScoringConfigResponse(BaseModel):
+    """Response model for scoring configuration."""
+
+    mode: str
+    available_modes: list[str]
+    match: dict[str, Any]
+    advancement: dict[str, Any]
+    phase_multipliers: dict[str, float]
+
+
+@router.get("/scoring-rules", response_model=ScoringConfigResponse)
+async def get_scoring_rules() -> ScoringConfigResponse:
+    """Get the current scoring configuration.
+
+    Returns the scoring rules in effect, including:
+    - Current scoring mode (fixed/hybrid)
+    - Available scoring modes
+    - Match prediction point values
+    - Advancement prediction point values
+    - Phase multipliers
+    """
+    config = get_scoring_config()
+    return ScoringConfigResponse(
+        mode=config.get("mode", "hybrid"),
+        available_modes=list(SCORING_STRATEGIES.keys()),
+        match=config.get("match", {}),
+        advancement=config.get("advancement", {}),
+        phase_multipliers=config.get("phase_multipliers", {}),
+    )
 
 
 @router.get("/", response_model=LeaderboardResponse)

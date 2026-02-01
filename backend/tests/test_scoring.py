@@ -12,6 +12,10 @@ from app.services.scoring import (
     calculate_match_points,
     calculate_advancement_points,
     get_scoring_config,
+    get_scoring_strategy,
+    FixedScoring,
+    HybridScoring,
+    SCORING_STRATEGIES,
 )
 
 
@@ -27,6 +31,53 @@ class TestGetScoringConfig:
             assert config["match"]["correct_outcome"] == 5
             assert config["match"]["exact_score"] == 10
             assert config["advancement"]["winner"] == 100
+            assert config["mode"] == "hybrid"
+
+    def test_config_merges_with_defaults(self):
+        """Should merge YAML config with defaults for missing keys."""
+        with patch("app.services.scoring.get_tournament_config") as mock_config:
+            # Partial config - only override some values
+            mock_config.return_value = {
+                "scoring": {
+                    "mode": "fixed",
+                    "match": {
+                        "correct_outcome": 10,
+                    },
+                }
+            }
+            config = get_scoring_config()
+
+            # Overridden values
+            assert config["mode"] == "fixed"
+            assert config["match"]["correct_outcome"] == 10
+            # Default values preserved
+            assert config["match"]["exact_score"] == 10
+            assert config["advancement"]["winner"] == 100
+
+
+class TestScoringStrategies:
+    """Tests for scoring strategy selection."""
+
+    def test_get_fixed_strategy(self):
+        """Should return FixedScoring when mode is 'fixed'."""
+        strategy = get_scoring_strategy("fixed")
+        assert isinstance(strategy, FixedScoring)
+
+    def test_get_hybrid_strategy(self):
+        """Should return HybridScoring when mode is 'hybrid'."""
+        strategy = get_scoring_strategy("hybrid")
+        assert isinstance(strategy, HybridScoring)
+
+    def test_unknown_strategy_raises_error(self):
+        """Should raise ValueError for unknown scoring mode."""
+        with pytest.raises(ValueError) as exc_info:
+            get_scoring_strategy("unknown_mode")
+        assert "Unknown scoring mode" in str(exc_info.value)
+
+    def test_strategies_are_registered(self):
+        """Both fixed and hybrid strategies should be registered."""
+        assert "fixed" in SCORING_STRATEGIES
+        assert "hybrid" in SCORING_STRATEGIES
 
 
 class TestCalculateMatchPoints:
@@ -155,6 +206,117 @@ class TestCalculateMatchPoints:
 
         # Points should be: 5 (outcome) + 10 (capped hybrid) + 10 (exact) = 25 max
         assert points <= 25
+
+
+class TestFixedVsHybridScoring:
+    """Tests comparing fixed and hybrid scoring modes."""
+
+    @pytest.fixture
+    def home_win_prediction(self) -> MatchPrediction:
+        """Create a prediction for home team win."""
+        pred = MagicMock(spec=MatchPrediction)
+        pred.home_score = 2
+        pred.away_score = 1
+        pred.predicted_outcome = "1"
+        return pred
+
+    @pytest.fixture
+    def home_win_score(self) -> Score:
+        """Create a score for home team win."""
+        score = MagicMock(spec=Score)
+        score.home_score = 2
+        score.away_score = 1
+        score.final_home_score = 2
+        score.final_away_score = 1
+        score.outcome = "1"
+        return score
+
+    def test_fixed_scoring_ignores_player_counts(self, home_win_prediction, home_win_score):
+        """Fixed scoring should give same points regardless of how many got it right."""
+        # Few correct
+        points_few, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_players=30, correct_players=3,
+            mode="fixed"
+        )
+
+        # Many correct
+        points_many, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_players=30, correct_players=25,
+            mode="fixed"
+        )
+
+        # Fixed scoring gives same points
+        assert points_few == points_many
+
+    def test_hybrid_scoring_varies_by_player_counts(self, home_win_prediction, home_win_score):
+        """Hybrid scoring should give more points when fewer players are correct."""
+        # Few correct (rare outcome)
+        points_few, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_players=30, correct_players=3,
+            mode="hybrid"
+        )
+
+        # Many correct (common outcome)
+        points_many, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_players=30, correct_players=25,
+            mode="hybrid"
+        )
+
+        # Hybrid gives more points for rare correct predictions
+        assert points_few > points_many
+
+    def test_fixed_vs_hybrid_base_outcome(self, home_win_prediction, home_win_score):
+        """Both modes should award base outcome points when correct."""
+        # Wrong score but correct outcome
+        home_win_prediction.home_score = 3
+        home_win_prediction.away_score = 0
+
+        fixed_points, fixed_correct, fixed_exact = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_players=30, correct_players=15,
+            mode="fixed"
+        )
+
+        hybrid_points, hybrid_correct, hybrid_exact = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_players=30, correct_players=15,
+            mode="hybrid"
+        )
+
+        # Both should register correct outcome, not exact
+        assert fixed_correct is True
+        assert hybrid_correct is True
+        assert fixed_exact is False
+        assert hybrid_exact is False
+
+        # Fixed should give only base points (5)
+        assert fixed_points == 5
+
+        # Hybrid should give base + bonus (5 + 2 = 7 for 30/15)
+        assert hybrid_points == 7
+
+    def test_mode_override_works(self, home_win_prediction, home_win_score):
+        """Mode override should work regardless of config default."""
+        # Explicitly use fixed mode
+        fixed_points, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_players=30, correct_players=3,
+            mode="fixed"
+        )
+
+        # Explicitly use hybrid mode
+        hybrid_points, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_players=30, correct_players=3,
+            mode="hybrid"
+        )
+
+        # Should get different results due to hybrid bonus
+        assert hybrid_points > fixed_points
 
 
 class TestCalculateAdvancementPoints:

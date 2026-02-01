@@ -2,10 +2,16 @@
 
 Point calculation for match predictions and advancement predictions.
 All scoring rules are configurable via YAML.
+
+Supports multiple scoring modes:
+- "fixed": Flat points for correct outcome
+- "hybrid": Base points + bonus based on how rare the correct answer is
+
+Scoring modes are extensible via the SCORING_STRATEGIES dict.
 """
 
 import uuid
-from typing import Any
+from typing import Any, Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
@@ -17,29 +23,191 @@ from app.models.score import Score
 from app.schemas.leaderboard import PointBreakdown
 
 
+# Default scoring configuration (used when YAML config is unavailable)
+DEFAULT_SCORING_CONFIG: dict[str, Any] = {
+    "mode": "hybrid",
+    "match": {
+        "correct_outcome": 5,
+        "exact_score": 10,
+        "hybrid_cap": 10,
+    },
+    "advancement": {
+        "group_advance": 10,
+        "group_position": 5,
+        "round_of_32": 10,
+        "round_of_16": 15,
+        "quarter_final": 20,
+        "semi_final": 40,
+        "final": 60,
+        "winner": 100,
+    },
+    "phase_multipliers": {
+        "phase_1": 1.0,
+        "phase_2": 0.7,
+    },
+}
+
+
 def get_scoring_config() -> dict[str, Any]:
-    """Get scoring configuration from tournament config."""
+    """Get scoring configuration from tournament config.
+
+    Returns merged config with defaults for any missing values.
+    """
     try:
         config = get_tournament_config()
-        return config.get("scoring", {})
+        scoring = config.get("scoring", {})
+        # Merge with defaults to ensure all required keys exist
+        return _merge_config(DEFAULT_SCORING_CONFIG, scoring)
     except FileNotFoundError:
-        # Return default scoring if config not found
-        return {
-            "match": {
-                "correct_outcome": 5,
-                "exact_score": 10,
-            },
-            "advancement": {
-                "group_advance": 10,
-                "group_position": 5,
-                "round_of_32": 10,
-                "round_of_16": 15,
-                "quarter_final": 20,
-                "semi_final": 40,
-                "final": 60,
-                "winner": 100,
-            },
-        }
+        return DEFAULT_SCORING_CONFIG
+
+
+def _merge_config(default: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    """Deep merge override config into default config."""
+    result = default.copy()
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _merge_config(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+# =============================================================================
+# Scoring Strategy Pattern
+# =============================================================================
+
+
+class MatchScoringStrategy(Protocol):
+    """Protocol for match scoring strategies."""
+
+    def calculate(
+        self,
+        prediction: MatchPrediction,
+        score: Score,
+        config: dict[str, Any],
+        total_players: int,
+        correct_players: int,
+    ) -> tuple[int, bool, bool]:
+        """Calculate match points.
+
+        Args:
+            prediction: User's prediction
+            score: Actual match result
+            config: Match scoring config
+            total_players: Total players in competition
+            correct_players: Players who got correct outcome
+
+        Returns:
+            Tuple of (points, correct_outcome, exact_score)
+        """
+        ...
+
+
+class FixedScoring:
+    """Fixed scoring: flat points for correct predictions."""
+
+    def calculate(
+        self,
+        prediction: MatchPrediction,
+        score: Score,
+        config: dict[str, Any],
+        total_players: int,
+        correct_players: int,
+    ) -> tuple[int, bool, bool]:
+        outcome_points = config.get("correct_outcome", 5)
+        exact_points = config.get("exact_score", 10)
+
+        pred_outcome = prediction.predicted_outcome
+        actual_outcome = score.outcome
+
+        correct_outcome = pred_outcome == actual_outcome
+        exact_score = (
+            prediction.home_score == score.final_home_score
+            and prediction.away_score == score.final_away_score
+        )
+
+        points = 0
+        if correct_outcome:
+            points += outcome_points
+        if exact_score:
+            points += exact_points
+
+        return points, correct_outcome, exact_score
+
+
+class HybridScoring:
+    """Hybrid scoring: base points + rarity bonus.
+
+    Formula: outcome_points + min(cap, total_players / correct_players)
+    The fewer players who got it right, the higher the bonus.
+    """
+
+    def calculate(
+        self,
+        prediction: MatchPrediction,
+        score: Score,
+        config: dict[str, Any],
+        total_players: int,
+        correct_players: int,
+    ) -> tuple[int, bool, bool]:
+        outcome_points = config.get("correct_outcome", 5)
+        exact_points = config.get("exact_score", 10)
+        cap = config.get("hybrid_cap", 10)
+
+        pred_outcome = prediction.predicted_outcome
+        actual_outcome = score.outcome
+
+        correct_outcome = pred_outcome == actual_outcome
+        exact_score = (
+            prediction.home_score == score.final_home_score
+            and prediction.away_score == score.final_away_score
+        )
+
+        points = 0
+        if correct_outcome:
+            points += outcome_points
+            # Hybrid bonus (capped)
+            if correct_players > 0:
+                bonus = min(cap, total_players // correct_players)
+                points += bonus
+
+        if exact_score:
+            points += exact_points
+
+        return points, correct_outcome, exact_score
+
+
+# Registry of available scoring strategies
+# Add new strategies here to make them available via config
+SCORING_STRATEGIES: dict[str, MatchScoringStrategy] = {
+    "fixed": FixedScoring(),
+    "hybrid": HybridScoring(),
+}
+
+
+def get_scoring_strategy(mode: str | None = None) -> MatchScoringStrategy:
+    """Get the scoring strategy based on config mode.
+
+    Args:
+        mode: Optional override for scoring mode. If None, uses config.
+
+    Returns:
+        The scoring strategy implementation.
+
+    Raises:
+        ValueError: If the configured mode is not registered.
+    """
+    if mode is None:
+        config = get_scoring_config()
+        mode = config.get("mode", "hybrid")
+
+    strategy = SCORING_STRATEGIES.get(mode)
+    if strategy is None:
+        available = ", ".join(SCORING_STRATEGIES.keys())
+        raise ValueError(f"Unknown scoring mode '{mode}'. Available: {available}")
+
+    return strategy
 
 
 def calculate_match_points(
@@ -47,55 +215,29 @@ def calculate_match_points(
     score: Score,
     total_players: int = 30,
     correct_players: int = 1,
+    mode: str | None = None,
 ) -> tuple[int, bool, bool]:
     """Calculate points for a single match prediction.
 
-    Uses hybrid scoring:
-    - Base points for correct outcome (1-X-2)
-    - Bonus points for exact score
+    Uses the configured scoring mode (fixed or hybrid).
 
     Args:
         prediction: User's prediction
         score: Actual match result
         total_players: Total number of players (for hybrid calculation)
         correct_players: Number of players with correct outcome (for hybrid)
+        mode: Optional override for scoring mode. If None, uses config.
 
     Returns:
         Tuple of (points, correct_outcome, exact_score)
     """
     config = get_scoring_config()
     match_config = config.get("match", {})
+    strategy = get_scoring_strategy(mode)
 
-    outcome_points = match_config.get("correct_outcome", 5)
-    exact_points = match_config.get("exact_score", 10)
-    cap = match_config.get("cap", 10)
-
-    # Determine outcomes
-    pred_outcome = prediction.predicted_outcome
-    actual_outcome = score.outcome
-
-    correct_outcome = pred_outcome == actual_outcome
-    exact_score = (
-        prediction.home_score == score.final_home_score
-        and prediction.away_score == score.final_away_score
+    return strategy.calculate(
+        prediction, score, match_config, total_players, correct_players
     )
-
-    points = 0
-
-    if correct_outcome:
-        # Base points for correct outcome
-        points += outcome_points
-
-        # Hybrid bonus (capped at cap)
-        if correct_players > 0:
-            bonus = min(cap, total_players // correct_players)
-            points += bonus
-
-    if exact_score:
-        # Flat bonus for exact score
-        points += exact_points
-
-    return points, correct_outcome, exact_score
 
 
 def calculate_advancement_points(
