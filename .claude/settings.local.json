@@ -11,7 +11,30 @@
       "Bash(npx svelte-check:*)",
       "Bash(docker exec:*)",
       "Bash(docker logs:*)",
-      "WebFetch(domain:en.wikipedia.org)"
+      "WebFetch(domain:en.wikipedia.org)",
+      "Bash(python:*)",
+      "Bash(docker compose:*)",
+      "Bash(curl:*)",
+      "Bash(python3:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmYzgwM2RkOC0yOTQyLTRiOWUtOTdlMi04NjQ5ZmQ5ZWY0NmEiLCJleHAiOjE3Njk5MzIyOTJ9.jNL0c98gm2UPmGBiCokuRJLUTVpvuDeUZ5p2fGbGVY4\")",
+      "Bash(__NEW_LINE_cdebb268da6f388c__ echo \"=== 1. Testing GET /api/competition/phase-status ===\")",
+      "Bash(__NEW_LINE_5a69d671ae85c499__ echo \"\")",
+      "Bash(__NEW_LINE_76a41856eab78b34__ echo \"=== 1. Testing GET /api/competition/phase-status ===\")",
+      "Bash(__NEW_LINE_437de496056d0af4__ echo \"=== 2. Testing POST /api/admin/competition/phase2/activate ===\")",
+      "Bash(__NEW_LINE_1dc812aef1e04ed5__ echo \"=== 1. Phase Status \\(before activation\\) ===\")",
+      "Bash(__NEW_LINE_1dc812aef1e04ed5__ echo \"=== 2. Activate Phase 2 ===\")",
+      "Bash(__NEW_LINE_1dc812aef1e04ed5__ echo \"=== 3. Phase Status \\(after activation\\) ===\")",
+      "Bash(__NEW_LINE_c698fb3e35b0a4f4__ echo \"=== 4. Deactivate Phase 2 ===\")",
+      "Bash(__NEW_LINE_c698fb3e35b0a4f4__ echo \"=== 5. Phase Status \\(after deactivation\\) ===\")",
+      "Bash(__NEW_LINE_c698fb3e35b0a4f4__ echo \"=== 6. Try to deactivate again \\(should fail\\) ===\")",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Bash(docker-compose ps:*)",
+      "Bash(docker-compose exec:*)",
+      "Bash(docker-compose restart:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git add:*)"
     ]
-  }
+  },
+  "outputStyle": "Explanatory"
 }
