@@ -12,8 +12,10 @@ from app.dependencies import AdminUser, DbSession
 from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction
-from app.models.score import Score
+from app.models.score import Score, ScoreSource
 from app.models.user import User
+from app.services.external_scores import get_score_provider, ExternalScore
+from app.services.leaderboard import invalidate_cache
 
 
 router = APIRouter()
@@ -379,3 +381,117 @@ async def set_phase1_deadline(
         "status": "Phase 1 deadline set",
         "deadline": request.deadline.isoformat(),
     }
+
+
+class SyncScoresResponse(BaseModel):
+    """Response from score sync operation."""
+
+    synced: int
+    updated: int
+    errors: list[str]
+
+
+@router.post("/scores/sync", response_model=SyncScoresResponse)
+async def sync_scores_from_api(
+    session: DbSession,
+    _admin: AdminUser,
+) -> SyncScoresResponse:
+    """Sync live scores from external API (admin only).
+
+    Fetches current scores from the configured external API (API-Football or Football-Data)
+    and updates the database. Only updates fixtures that are currently live or recently finished.
+    """
+    provider = get_score_provider()
+    errors: list[str] = []
+    synced = 0
+    updated = 0
+
+    try:
+        # Get active competition
+        result = await session.execute(
+            select(Competition).where(Competition.is_active == True)
+        )
+        competition = result.scalar_one_or_none()
+
+        if not competition or not competition.external_id:
+            return SyncScoresResponse(
+                synced=0,
+                updated=0,
+                errors=["No active competition with external ID configured"],
+            )
+
+        # Fetch live scores from external API
+        external_scores = await provider.fetch_live_scores(competition.external_id)
+
+        for ext_score in external_scores:
+            try:
+                # Find matching fixture by external_id
+                fixture_result = await session.execute(
+                    select(Fixture).where(Fixture.external_id == ext_score.external_id)
+                )
+                fixture = fixture_result.scalar_one_or_none()
+
+                if not fixture:
+                    # Try matching by team names (fallback)
+                    fixture_result = await session.execute(
+                        select(Fixture).where(
+                            Fixture.home_team == ext_score.home_team,
+                            Fixture.away_team == ext_score.away_team,
+                            Fixture.competition_id == competition.id,
+                        )
+                    )
+                    fixture = fixture_result.scalar_one_or_none()
+
+                if not fixture:
+                    continue
+
+                # Update fixture status
+                fixture.status = ext_score.status
+                fixture.minute = ext_score.minute
+                fixture.updated_at = datetime.utcnow()
+
+                # Update or create score
+                score_result = await session.execute(
+                    select(Score).where(Score.fixture_id == fixture.id)
+                )
+                score = score_result.scalar_one_or_none()
+
+                if score:
+                    # Update existing score
+                    score.home_score = ext_score.home_score
+                    score.away_score = ext_score.away_score
+                    score.home_score_et = ext_score.home_score_et
+                    score.away_score_et = ext_score.away_score_et
+                    score.home_penalties = ext_score.home_penalties
+                    score.away_penalties = ext_score.away_penalties
+                    score.source = ScoreSource.API
+                    score.updated_at = datetime.utcnow()
+                    updated += 1
+                else:
+                    # Create new score
+                    score = Score(
+                        fixture_id=fixture.id,
+                        home_score=ext_score.home_score,
+                        away_score=ext_score.away_score,
+                        home_score_et=ext_score.home_score_et,
+                        away_score_et=ext_score.away_score_et,
+                        home_penalties=ext_score.home_penalties,
+                        away_penalties=ext_score.away_penalties,
+                        source=ScoreSource.API,
+                    )
+                    session.add(score)
+                    synced += 1
+
+            except Exception as e:
+                errors.append(f"Error syncing {ext_score.home_team} vs {ext_score.away_team}: {str(e)}")
+
+        await session.commit()
+
+        # Invalidate leaderboard cache if any scores were updated
+        if synced > 0 or updated > 0:
+            invalidate_cache()
+
+    except Exception as e:
+        errors.append(f"API error: {str(e)}")
+
+    return SyncScoresResponse(synced=synced, updated=updated, errors=errors)

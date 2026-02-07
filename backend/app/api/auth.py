@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from fastapi_sso.sso.google import GoogleSSO
 from sqlmodel import select
@@ -110,7 +110,7 @@ async def google_login():
 
 
 @router.get("/google/callback")
-async def google_callback(code: str, session: DbSession):
+async def google_callback(request: Request, session: DbSession):
     """Handle Google OAuth callback."""
     settings = get_settings()
     if not settings.google_client_id or not settings.google_client_secret:
@@ -122,7 +122,7 @@ async def google_callback(code: str, session: DbSession):
     google_sso = get_google_sso()
 
     try:
-        google_user = await google_sso.verify_and_process(code)
+        google_user = await google_sso.verify_and_process(request)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
