@@ -162,22 +162,6 @@
 		@apply animate-pulse-soft;
 	}
 
-	/* Save button - Floating action */
-	.save-button {
-		@apply btn btn-primary btn-lg shadow-glow-green;
-		@apply hover:shadow-lg hover:scale-105;
-		@apply active:scale-95;
-		@apply transition-all duration-200;
-	}
-
-	.save-button.saving {
-		@apply loading loading-spinner;
-	}
-
-	.save-button.saved {
-		@apply btn-success shadow-none;
-	}
-
 	/* Card with stadium atmosphere */
 	.stadium-card {
 		@apply bg-base-200 rounded-2xl border border-base-300/50;
@@ -216,32 +200,81 @@
 		@apply text-2xl tracking-wide text-primary;
 	}
 
-	/* Table enhancements */
+	/* Standings table - shared between GroupTable and ThirdPlaceTable */
+	.group-standings {
+		@apply rounded-xl bg-base-200/50 border border-base-300/30 overflow-hidden;
+	}
+
 	.standings-table {
-		@apply w-full;
+		@apply w-full min-w-[320px];
+	}
+
+	.standings-table thead tr {
+		@apply bg-base-300/30;
 	}
 
 	.standings-table th {
-		@apply text-xs uppercase tracking-wider text-base-content/50 font-normal;
-		@apply border-b border-base-300/50;
+		@apply py-3 px-2 text-[10px] uppercase tracking-wider text-base-content/40 font-medium;
 	}
 
 	.standings-table td {
-		@apply border-b border-base-300/30;
+		@apply py-2.5 px-2 text-sm;
 	}
 
-	.standings-table tr.qualifies {
-		@apply bg-success/10;
+	.standing-row {
+		@apply border-b border-base-300/20 transition-colors duration-200;
 	}
 
-	.standings-table tr.third-place {
-		@apply bg-warning/5;
+	.standing-row:hover {
+		@apply bg-base-300/20;
+	}
+
+	.position-indicator {
+		@apply inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold;
+		@apply bg-base-300 text-base-content/60;
+	}
+
+	.team-cell {
+		@apply min-w-0;
+	}
+
+	.team-name-table {
+		@apply font-semibold;
+		white-space: nowrap;
+	}
+
+	.gd-cell {
+		@apply font-medium;
+	}
+
+	.gd-cell.positive {
+		@apply text-success;
+	}
+
+	.gd-cell.negative {
+		@apply text-error/70;
+	}
+
+	.points-badge {
+		@apply inline-flex items-center justify-center min-w-[28px] h-7 px-2;
+		@apply bg-base-300 rounded-md font-bold text-base-content;
+		font-family: 'Bebas Neue', sans-serif;
+		@apply text-lg tracking-wide;
 	}
 
 	/* Navigation */
 	.nav-brand {
 		font-family: 'Bebas Neue', sans-serif;
 		@apply text-2xl tracking-wider text-primary;
+	}
+
+	/* Auth form inputs - extends DaisyUI input with custom focus styling */
+	.auth-input {
+		@apply input input-bordered w-full bg-base-300 border-base-100;
+		@apply placeholder:text-base-content/30;
+		@apply focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all;
+		padding-top: 0.75rem;
+		padding-bottom: 0.75rem;
 	}
 
 	/* Auth pages background */
@@ -276,10 +309,6 @@
 		@apply px-4 sm:px-6 lg:px-8;
 	}
 
-	.mobile-stack {
-		@apply flex flex-col sm:flex-row;
-	}
-
 	/* Text gradient */
 	.text-gradient {
 		@apply bg-clip-text text-transparent;
@@ -302,11 +331,6 @@
 		);
 		background-size: 200% 100%;
 		@apply animate-shimmer;
-	}
-
-	/* Glass effect */
-	.glass {
-		@apply backdrop-blur-md bg-base-200/80;
 	}
 
 	/* Noise texture overlay */

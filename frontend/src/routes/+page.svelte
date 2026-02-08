@@ -70,7 +70,7 @@
 		<div class="grid lg:grid-cols-2 gap-6">
 			<!-- Live Matches -->
 			<div class="stadium-card animate-slide-up stagger-5" style="animation-fill-mode: both;">
-				<div class="p-5 sm:p-6">
+				<div class="p-4 sm:p-6">
 					<div class="flex items-center gap-2 mb-5">
 						<span class="relative flex h-3 w-3">
 							<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-error opacity-75"></span>
@@ -111,7 +111,7 @@
 
 			<!-- Top Leaderboard -->
 			<div class="stadium-card animate-slide-up stagger-6" style="animation-fill-mode: both;">
-				<div class="p-5 sm:p-6">
+				<div class="p-4 sm:p-6">
 					<div class="flex items-center justify-between mb-5">
 						<h2 class="text-lg font-display tracking-wide">Leaderboard</h2>
 						<a href="/leaderboard" class="text-xs text-primary hover:text-primary/80 transition-colors font-medium">
@@ -156,7 +156,7 @@
 
 		<!-- Upcoming Matches -->
 		<div class="stadium-card animate-slide-up stagger-7" style="animation-fill-mode: both;">
-			<div class="p-5 sm:p-6">
+			<div class="p-4 sm:p-6">
 				<div class="flex items-center justify-between mb-5">
 					<h2 class="text-lg font-display tracking-wide">Upcoming Matches</h2>
 					<a href="/predictions" class="text-xs text-primary hover:text-primary/80 transition-colors font-medium">

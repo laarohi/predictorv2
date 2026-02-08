@@ -184,7 +184,7 @@
 				{/if}
 
 				<!-- Phase 1 Deadline Control -->
-				<div class="stadium-card no-glow p-6">
+				<div class="stadium-card no-glow p-4 sm:p-6">
 					<div class="flex items-center gap-3 mb-6">
 						<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
 							<svg class="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -266,7 +266,7 @@
 				</div>
 
 				<!-- Phase 2 Control -->
-				<div class="stadium-card no-glow p-6">
+				<div class="stadium-card no-glow p-4 sm:p-6">
 					<div class="flex items-center gap-3 mb-6">
 						<div class="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
 							<svg class="w-5 h-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -370,7 +370,7 @@
 
 				<!-- Active Competition -->
 				{#if activeCompetition}
-					<div class="stadium-card no-glow p-6">
+					<div class="stadium-card no-glow p-4 sm:p-6">
 						<div class="flex items-center gap-3 mb-4">
 							<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
 								<svg class="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">

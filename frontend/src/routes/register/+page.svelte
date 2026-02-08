@@ -66,7 +66,7 @@
 						id="name"
 						type="text"
 						placeholder="Your name"
-						class="w-full px-4 py-3 bg-base-300 border border-base-100 rounded-lg text-base-content placeholder:text-base-content/30 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all"
+						class="auth-input"
 						bind:value={name}
 						disabled={$loading}
 					/>
@@ -80,7 +80,7 @@
 						id="email"
 						type="email"
 						placeholder="your@email.com"
-						class="w-full px-4 py-3 bg-base-300 border border-base-100 rounded-lg text-base-content placeholder:text-base-content/30 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all"
+						class="auth-input"
 						bind:value={email}
 						disabled={$loading}
 					/>
@@ -94,7 +94,7 @@
 						id="password"
 						type="password"
 						placeholder="••••••••"
-						class="w-full px-4 py-3 bg-base-300 border border-base-100 rounded-lg text-base-content placeholder:text-base-content/30 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all"
+						class="auth-input"
 						bind:value={password}
 						disabled={$loading}
 					/>
@@ -109,7 +109,7 @@
 						id="confirmPassword"
 						type="password"
 						placeholder="••••••••"
-						class="w-full px-4 py-3 bg-base-300 border border-base-100 rounded-lg text-base-content placeholder:text-base-content/30 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all"
+						class="auth-input"
 						bind:value={confirmPassword}
 						disabled={$loading}
 					/>

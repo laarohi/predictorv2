@@ -28,15 +28,13 @@
 	<title>Authenticating... - Predictor v2</title>
 </svelte:head>
 
-<div class="min-h-screen flex items-center justify-center bg-base-100">
+<div class="auth-bg flex items-center justify-center px-4 py-12">
 	{#if error}
-		<div class="card bg-base-200 shadow-xl">
-			<div class="card-body text-center">
-				<h2 class="text-xl font-bold text-error">Authentication Failed</h2>
-				<p class="text-base-content/70">{error}</p>
-				<div class="mt-4">
-					<a href="/login" class="btn btn-primary">Back to Login</a>
-				</div>
+		<div class="stadium-card p-6 sm:p-8 text-center max-w-md w-full">
+			<h2 class="text-xl font-display tracking-wide text-error mb-2">Authentication Failed</h2>
+			<p class="text-base-content/70 text-sm">{error}</p>
+			<div class="mt-6">
+				<a href="/login" class="btn btn-primary">Back to Login</a>
 			</div>
 		</div>
 	{:else}

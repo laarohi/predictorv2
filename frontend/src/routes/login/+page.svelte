@@ -45,7 +45,7 @@
 
 			<ErrorAlert message={localError || $authError} />
 
-			<form on:submit|preventDefault={handleSubmit} class="space-y-5">
+			<form on:submit|preventDefault={handleSubmit} class="space-y-4">
 				<div>
 					<label class="block text-sm font-medium text-base-content/70 mb-2" for="email">
 						Email
@@ -54,7 +54,7 @@
 						id="email"
 						type="email"
 						placeholder="your@email.com"
-						class="w-full px-4 py-3 bg-base-300 border border-base-100 rounded-lg text-base-content placeholder:text-base-content/30 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all"
+						class="auth-input"
 						bind:value={email}
 						disabled={$loading}
 					/>
@@ -68,7 +68,7 @@
 						id="password"
 						type="password"
 						placeholder="••••••••"
-						class="w-full px-4 py-3 bg-base-300 border border-base-100 rounded-lg text-base-content placeholder:text-base-content/30 focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 transition-all"
+						class="auth-input"
 						bind:value={password}
 						disabled={$loading}
 					/>

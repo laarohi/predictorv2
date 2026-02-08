@@ -105,75 +105,14 @@
 </div>
 
 <style>
-	.group-standings {
-		@apply rounded-xl bg-base-200/50 border border-base-300/30 overflow-hidden;
-	}
-
-	.standings-table {
-		@apply w-full min-w-[320px];
-	}
-
-	.standings-table thead tr {
-		@apply bg-base-300/30;
-	}
-
-	.standings-table th {
-		@apply py-3 px-2 text-[10px] uppercase tracking-wider text-base-content/40 font-medium;
-	}
-
-	.standings-table td {
-		@apply py-2.5 px-2 text-sm;
-	}
-
-	.standing-row {
-		@apply border-b border-base-300/20 transition-colors duration-200;
-	}
-
-	.standing-row:hover {
-		@apply bg-base-300/20;
-	}
-
-	/* Qualification indicators */
+	/* Qualification indicators - qualifying 3rd place teams use green (shared base styles in app.css) */
 	.standing-row.qualifies {
-		@apply border-l-2 border-l-warning;
-		@apply bg-warning/5;
-	}
-
-	.position-indicator {
-		@apply inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold;
-		@apply bg-base-300 text-base-content/60;
+		@apply border-l-2 border-l-success;
+		@apply bg-success/5;
 	}
 
 	.position-indicator.qualifies {
-		@apply bg-warning/20 text-warning;
-	}
-
-	.team-cell {
-		@apply min-w-0;
-	}
-
-	.team-name-table {
-		@apply font-semibold;
-		white-space: nowrap;
-	}
-
-	.gd-cell {
-		@apply font-medium;
-	}
-
-	.gd-cell.positive {
-		@apply text-success;
-	}
-
-	.gd-cell.negative {
-		@apply text-error/70;
-	}
-
-	.points-badge {
-		@apply inline-flex items-center justify-center min-w-[28px] h-7 px-2;
-		@apply bg-base-300 rounded-md font-bold text-base-content;
-		font-family: 'Bebas Neue', sans-serif;
-		@apply text-lg tracking-wide;
+		@apply bg-success/20 text-success;
 	}
 
 	.empty-state {
