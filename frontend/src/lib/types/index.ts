@@ -311,6 +311,25 @@ export interface ActualStandingsResponse {
 	qualifying_third_place: TeamStanding[];
 }
 
+// Profile types
+export interface PasswordChange {
+	current_password: string;
+	new_password: string;
+}
+
+export interface UserStats {
+	total_match_predictions: number;
+	total_team_predictions: number;
+	total_predictions: number;
+	correct_outcomes: number;
+	exact_scores: number;
+	accuracy_pct: number;
+	total_points: number;
+	leaderboard_position: number | null;
+	total_participants: number;
+	breakdown: PointBreakdown;
+}
+
 // API Response types
 export interface ApiError {
 	detail: string;

@@ -5,6 +5,7 @@ from datetime import timedelta
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from fastapi_sso.sso.google import GoogleSSO
+from sqlalchemy import func
 from sqlmodel import select
 
 from app.config import get_settings
@@ -15,8 +16,11 @@ from app.dependencies import (
     get_password_hash,
     verify_password,
 )
+from app.models.prediction import MatchPrediction, TeamPrediction
 from app.models.user import AuthProvider, User
-from app.schemas.auth import Token, UserCreate, UserLogin, UserRead
+from app.schemas.auth import PasswordChange, Token, UserCreate, UserLogin, UserRead, UserStats
+from app.services.leaderboard import calculate_leaderboard
+from app.services.scoring import calculate_user_points
 
 router = APIRouter()
 
@@ -182,3 +186,81 @@ async def google_callback(request: Request, session: DbSession):
 async def get_current_user_info(current_user: CurrentUser) -> UserRead:
     """Get current user information."""
     return UserRead.model_validate(current_user)
+
+
+@router.post("/me/password")
+async def change_password(
+    data: PasswordChange, current_user: CurrentUser, session: DbSession
+) -> dict[str, str]:
+    """Change password for email-authenticated users."""
+    if current_user.auth_provider != AuthProvider.EMAIL:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password change is only available for email accounts",
+        )
+
+    if not current_user.password_hash or not verify_password(
+        data.current_password, current_user.password_hash
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    current_user.password_hash = get_password_hash(data.new_password)
+    session.add(current_user)
+    await session.commit()
+
+    return {"message": "Password updated successfully"}
+
+
+@router.get("/me/stats", response_model=UserStats)
+async def get_user_stats(current_user: CurrentUser, session: DbSession) -> UserStats:
+    """Get profile statistics for the current user."""
+    # Calculate points breakdown
+    breakdown = await calculate_user_points(session, current_user.id)
+
+    # Get leaderboard position
+    leaderboard = await calculate_leaderboard(session)
+    position = None
+    for entry in leaderboard.entries:
+        if entry.user_id == current_user.id:
+            position = entry.position
+            break
+
+    # Count raw predictions
+    match_count_result = await session.execute(
+        select(func.count(MatchPrediction.id)).where(
+            MatchPrediction.user_id == current_user.id
+        )
+    )
+    total_match_predictions = match_count_result.scalar_one()
+
+    team_count_result = await session.execute(
+        select(func.count(TeamPrediction.id)).where(
+            TeamPrediction.user_id == current_user.id
+        )
+    )
+    total_team_predictions = team_count_result.scalar_one()
+
+    total_predictions = total_match_predictions + total_team_predictions
+
+    # Accuracy: correct outcomes / scored match predictions
+    accuracy_pct = 0.0
+    if breakdown.total_predictions > 0:
+        accuracy_pct = round(
+            (breakdown.correct_outcomes / breakdown.total_predictions) * 100, 1
+        )
+
+    return UserStats(
+        total_match_predictions=total_match_predictions,
+        total_team_predictions=total_team_predictions,
+        total_predictions=total_predictions,
+        correct_outcomes=breakdown.correct_outcomes,
+        exact_scores=breakdown.exact_scores,
+        accuracy_pct=accuracy_pct,
+        total_points=breakdown.total,
+        leaderboard_position=position,
+        total_participants=leaderboard.total_participants,
+        breakdown=breakdown,
+    )

@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, EmailStr, Field
 
 from app.models.user import AuthProvider
+from app.schemas.leaderboard import PointBreakdown
 
 
 class UserCreate(BaseModel):
@@ -46,6 +47,28 @@ class UserUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=100)
     email: EmailStr | None = None
+
+
+class PasswordChange(BaseModel):
+    """Schema for changing password."""
+
+    current_password: str
+    new_password: str = Field(min_length=8, max_length=100)
+
+
+class UserStats(BaseModel):
+    """Aggregated profile statistics."""
+
+    total_match_predictions: int
+    total_team_predictions: int
+    total_predictions: int
+    correct_outcomes: int
+    exact_scores: int
+    accuracy_pct: float
+    total_points: int
+    leaderboard_position: int | None
+    total_participants: int
+    breakdown: PointBreakdown
 
 
 class Token(BaseModel):
