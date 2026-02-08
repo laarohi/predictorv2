@@ -3,7 +3,7 @@
  */
 
 import { api } from './client';
-import type { Token, User, UserCreate, UserLogin } from '$types';
+import type { Token, User, UserCreate, UserLogin, PasswordChange, UserStats } from '$types';
 
 export async function register(data: UserCreate): Promise<Token> {
 	return api.post<Token>('/auth/register', data);
@@ -19,4 +19,12 @@ export async function getCurrentUser(): Promise<User> {
 
 export function getGoogleAuthUrl(): string {
 	return '/api/auth/google';
+}
+
+export async function changePassword(data: PasswordChange): Promise<{ message: string }> {
+	return api.post<{ message: string }>('/auth/me/password', data);
+}
+
+export async function getUserStats(): Promise<UserStats> {
+	return api.get<UserStats>('/auth/me/stats');
 }

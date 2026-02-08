@@ -1,16 +1,14 @@
 """Leaderboard API routes."""
 
 import uuid
-from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
-from sqlmodel import select
 
 from app.dependencies import DbSession, OptionalUser
-from app.models.user import User
-from app.schemas.leaderboard import LeaderboardEntry, LeaderboardResponse, PointBreakdown
+from app.schemas.leaderboard import LeaderboardResponse, PointBreakdown
+from app.services.leaderboard import calculate_leaderboard, invalidate_cache
 from app.services.scoring import calculate_user_points, get_scoring_config, SCORING_STRATEGIES
 
 router = APIRouter()
@@ -48,44 +46,39 @@ async def get_scoring_rules() -> ScoringConfigResponse:
 
 
 @router.get("/", response_model=LeaderboardResponse)
-async def get_leaderboard(session: DbSession, _user: OptionalUser) -> LeaderboardResponse:
-    """Get full leaderboard with standings."""
-    # Get all active users
-    result = await session.execute(select(User).where(User.is_active == True))
-    users = result.scalars().all()
+async def get_leaderboard(
+    session: DbSession,
+    _user: OptionalUser,
+    refresh: bool = Query(False, description="Force cache refresh"),
+    phase: str | None = Query(None, description="Filter by phase: 'phase_1', 'phase_2', or null for overall"),
+) -> LeaderboardResponse:
+    """Get full leaderboard with standings.
 
-    entries: list[LeaderboardEntry] = []
+    Uses 30-second caching for performance. Pass refresh=true to force recalculation.
+    Includes correct outcomes, exact scores, and position movement tracking.
 
-    for user in users:
-        points = await calculate_user_points(session, user.id)
-        entries.append(
-            LeaderboardEntry(
-                user_id=user.id,
-                user_name=user.name,
-                position=0,  # Will be set after sorting
-                total_points=points.total,
-                breakdown=points,
-                correct_outcomes=0,  # Would need additional calculation
-                exact_scores=0,
-                movement=0,
-            )
-        )
+    The `phase` parameter allows filtering:
+    - `null` or omitted: Overall leaderboard (sum of all phases)
+    - `phase_1`: Phase 1 points only
+    - `phase_2`: Phase 2 points only
 
-    # Sort by total points (descending)
-    entries.sort(key=lambda e: e.total_points, reverse=True)
+    Position rankings are recalculated based on the selected phase's points.
+    """
+    # Validate phase parameter
+    if phase is not None and phase not in ("phase_1", "phase_2"):
+        phase = None  # Default to overall for invalid values
 
-    # Assign positions (handle ties)
-    current_position = 1
-    for i, entry in enumerate(entries):
-        if i > 0 and entry.total_points < entries[i - 1].total_points:
-            current_position = i + 1
-        entry.position = current_position
+    return await calculate_leaderboard(session, force_refresh=refresh, phase=phase)
 
-    return LeaderboardResponse(
-        entries=entries,
-        last_calculated=datetime.utcnow(),
-        total_participants=len(users),
-    )
+
+@router.post("/invalidate")
+async def invalidate_leaderboard_cache() -> dict[str, str]:
+    """Invalidate the leaderboard cache.
+
+    Call this after scores are updated to force recalculation on next request.
+    """
+    invalidate_cache()
+    return {"status": "cache invalidated"}
 
 
 @router.get("/breakdown/{user_id}")

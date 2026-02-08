@@ -138,12 +138,121 @@ export interface LiveScoreResponse {
 	last_updated: string;
 }
 
+export interface LivePollingResponse {
+	matches: LiveMatchScore[];
+	leaderboard: LeaderboardEntry[];
+	last_updated: string;
+}
+
 // Leaderboard types
-export interface PointBreakdown {
+
+/** Points breakdown for a single phase */
+export interface PhaseBreakdown {
+	// Match predictions
 	match_outcome_points: number;
 	exact_score_points: number;
-	group_advancement_points: number;
-	knockout_advancement_points: number;
+	hybrid_bonus_points: number;
+
+	// Bracket predictions - by stage
+	group_advance_points: number;
+	group_position_points: number;
+	round_of_32_points: number;
+	round_of_16_points: number;
+	quarter_final_points: number;
+	semi_final_points: number;
+	final_points: number;
+	winner_points: number;
+
+	// Computed totals (from backend)
+	match_total: number;
+	bracket_total: number;
+	total: number;
+}
+
+/** Full breakdown with phase separation */
+export interface PointBreakdown {
+	phase1: PhaseBreakdown;
+	phase2: PhaseBreakdown;
+
+	// Aggregate statistics
+	correct_outcomes: number;
+	exact_scores: number;
+	total_predictions: number;
+
+	// Computed totals (from backend) - combined across phases
+	match_total: number;
+	bracket_total: number;
+	total: number;
+
+	// Legacy fields (combined across phases, from backend computed fields)
+	match_outcome_points: number;
+	exact_score_points: number;
+	hybrid_bonus_points: number;
+	group_advance_points: number;
+	group_position_points: number;
+	round_of_32_points: number;
+	round_of_16_points: number;
+	quarter_final_points: number;
+	semi_final_points: number;
+	final_points: number;
+	winner_points: number;
+}
+
+// Helper functions for phase breakdowns
+export function getPhaseMatchTotal(p: PhaseBreakdown): number {
+	return p.match_outcome_points + p.exact_score_points + p.hybrid_bonus_points;
+}
+
+export function getPhaseBracketTotal(p: PhaseBreakdown): number {
+	return (
+		p.group_advance_points +
+		p.group_position_points +
+		p.round_of_32_points +
+		p.round_of_16_points +
+		p.quarter_final_points +
+		p.semi_final_points +
+		p.final_points +
+		p.winner_points
+	);
+}
+
+export function getPhaseTotal(p: PhaseBreakdown): number {
+	return getPhaseMatchTotal(p) + getPhaseBracketTotal(p);
+}
+
+// Helper to calculate totals from full breakdown (legacy support)
+export function getMatchTotal(b: PointBreakdown): number {
+	return b.match_outcome_points + b.exact_score_points + b.hybrid_bonus_points;
+}
+
+export function getBracketTotal(b: PointBreakdown): number {
+	return (
+		b.group_advance_points +
+		b.group_position_points +
+		b.round_of_32_points +
+		b.round_of_16_points +
+		b.quarter_final_points +
+		b.semi_final_points +
+		b.final_points +
+		b.winner_points
+	);
+}
+
+// Helper to get knockout total (excluding groups) for a phase
+export function getKnockoutTotal(p: PhaseBreakdown): number {
+	return (
+		p.round_of_32_points +
+		p.round_of_16_points +
+		p.quarter_final_points +
+		p.semi_final_points +
+		p.final_points +
+		p.winner_points
+	);
+}
+
+// Helper to get group total for a phase
+export function getGroupTotal(p: PhaseBreakdown): number {
+	return p.group_advance_points + p.group_position_points;
 }
 
 export interface LeaderboardEntry {
@@ -161,6 +270,7 @@ export interface LeaderboardResponse {
 	entries: LeaderboardEntry[];
 	last_calculated: string;
 	total_participants: number;
+	phase: string | null;
 }
 
 // Competition/Phase types
@@ -199,6 +309,25 @@ export interface TeamStanding {
 export interface ActualStandingsResponse {
 	standings: Record<string, TeamStanding[]>;
 	qualifying_third_place: TeamStanding[];
+}
+
+// Profile types
+export interface PasswordChange {
+	current_password: string;
+	new_password: string;
+}
+
+export interface UserStats {
+	total_match_predictions: number;
+	total_team_predictions: number;
+	total_predictions: number;
+	correct_outcomes: number;
+	exact_scores: number;
+	accuracy_pct: number;
+	total_points: number;
+	leaderboard_position: number | null;
+	total_participants: number;
+	breakdown: PointBreakdown;
 }
 
 // API Response types

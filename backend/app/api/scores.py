@@ -4,20 +4,54 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel
 from sqlmodel import select
 
 from app.dependencies import AdminUser, DbSession, OptionalUser
 from app.models.fixture import Fixture, MatchStatus
 from app.models.score import Score, ScoreSource
+from app.schemas.leaderboard import LeaderboardEntry
 from app.schemas.score import LiveMatchScore, LiveScoreResponse, ScoreRead, ScoreUpdate
+from app.services.leaderboard import calculate_leaderboard, invalidate_cache
 
 router = APIRouter()
+
+
+class LivePollingResponse(BaseModel):
+    """Combined response for live polling (scores + leaderboard)."""
+
+    matches: list[LiveMatchScore]
+    leaderboard: list[LeaderboardEntry]
+    last_updated: datetime
 
 
 @router.get("/live", response_model=LiveScoreResponse)
 async def get_live_scores(session: DbSession, _user: OptionalUser) -> LiveScoreResponse:
     """Get live and recent scores for polling."""
-    # Get fixtures that are live or finished recently
+    matches = await _get_live_matches(session)
+    return LiveScoreResponse(matches=matches, last_updated=datetime.utcnow())
+
+
+@router.get("/poll", response_model=LivePollingResponse)
+async def poll_live_data(session: DbSession, _user: OptionalUser) -> LivePollingResponse:
+    """Combined polling endpoint for live scores and leaderboard.
+
+    Use this endpoint for efficient polling during live matches.
+    Returns both current match scores and updated leaderboard in a single request.
+    Recommended polling interval: 60 seconds.
+    """
+    matches = await _get_live_matches(session)
+    leaderboard = await calculate_leaderboard(session)
+
+    return LivePollingResponse(
+        matches=matches,
+        leaderboard=leaderboard.entries,
+        last_updated=datetime.utcnow(),
+    )
+
+
+async def _get_live_matches(session: DbSession) -> list[LiveMatchScore]:
+    """Get live and recent match scores."""
     result = await session.execute(
         select(Fixture, Score)
         .outerjoin(Score, Fixture.id == Score.fixture_id)
@@ -42,7 +76,7 @@ async def get_live_scores(session: DbSession, _user: OptionalUser) -> LiveScoreR
             )
         )
 
-    return LiveScoreResponse(matches=matches, last_updated=datetime.utcnow())
+    return matches
 
 
 @router.get("/{fixture_id}", response_model=ScoreRead | None)
@@ -108,5 +142,8 @@ async def update_score(
 
     await session.commit()
     await session.refresh(score)
+
+    # Invalidate leaderboard cache since scores changed
+    invalidate_cache()
 
     return ScoreRead.model_validate(score)

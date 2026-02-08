@@ -77,9 +77,9 @@
 
 			<div class="navbar-end">
 				<div class="dropdown dropdown-end">
-					<div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar">
-						<div class="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center ring-2 ring-primary/20">
-							<span class="text-lg font-bold text-white">{$user?.name?.charAt(0).toUpperCase() || '?'}</span>
+					<div tabindex="0" role="button" class="btn btn-ghost btn-circle">
+						<div class="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-accent grid place-items-center ring-2 ring-primary/20">
+							<span class="text-lg font-bold text-white leading-none translate-y-0.5">{$user?.name?.charAt(0).toUpperCase() || '?'}</span>
 						</div>
 					</div>
 					<ul

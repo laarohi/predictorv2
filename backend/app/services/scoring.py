@@ -20,7 +20,8 @@ from app.config import get_tournament_config
 from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.score import Score
-from app.schemas.leaderboard import PointBreakdown
+from app.models.user import User
+from app.schemas.leaderboard import PhaseBreakdown, PointBreakdown
 
 
 # Default scoring configuration (used when YAML config is unavailable)
@@ -372,6 +373,52 @@ async def get_actual_advancement(session: AsyncSession) -> dict[str, str]:
     return team_advancement
 
 
+def _add_match_points_to_phase(
+    phase_breakdown: PhaseBreakdown,
+    base_outcome_points: int,
+    exact_score_points: int,
+    points: int,
+    correct_outcome: bool,
+    exact_score: bool,
+) -> None:
+    """Add match prediction points to a phase breakdown."""
+    if correct_outcome:
+        phase_breakdown.match_outcome_points += base_outcome_points
+        # Hybrid bonus is the difference between total points and base + exact
+        hybrid_bonus = points - base_outcome_points - (exact_score_points if exact_score else 0)
+        if hybrid_bonus > 0:
+            phase_breakdown.hybrid_bonus_points += hybrid_bonus
+
+    if exact_score:
+        phase_breakdown.exact_score_points += exact_score_points
+
+
+def _add_advancement_points_to_phase(
+    phase_breakdown: PhaseBreakdown,
+    stage: str,
+    group_position: int | None,
+    points: int,
+) -> None:
+    """Add advancement prediction points to a phase breakdown."""
+    if stage == "group":
+        if group_position is not None:
+            phase_breakdown.group_position_points += points
+        else:
+            phase_breakdown.group_advance_points += points
+    elif stage == "round_of_32":
+        phase_breakdown.round_of_32_points += points
+    elif stage == "round_of_16":
+        phase_breakdown.round_of_16_points += points
+    elif stage == "quarter_final":
+        phase_breakdown.quarter_final_points += points
+    elif stage == "semi_final":
+        phase_breakdown.semi_final_points += points
+    elif stage == "final":
+        phase_breakdown.final_points += points
+    elif stage == "winner":
+        phase_breakdown.winner_points += points
+
+
 async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> PointBreakdown:
     """Calculate total points for a user.
 
@@ -380,9 +427,27 @@ async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> Po
         user_id: User to calculate points for
 
     Returns:
-        PointBreakdown with detailed point categories
+        PointBreakdown with detailed point categories by phase
     """
-    breakdown = PointBreakdown()
+    config = get_scoring_config()
+    match_config = config.get("match", {})
+    base_outcome_points = match_config.get("correct_outcome", 5)
+    exact_score_points = match_config.get("exact_score", 10)
+
+    # Create phase breakdowns
+    phase1 = PhaseBreakdown()
+    phase2 = PhaseBreakdown()
+
+    # Aggregate stats
+    total_predictions = 0
+    correct_outcomes = 0
+    exact_scores = 0
+
+    # Get total player count for hybrid scoring
+    user_count_result = await session.execute(
+        select(User).where(User.is_active == True)
+    )
+    total_players = len(user_count_result.scalars().all())
 
     # Get all match predictions with scores
     result = await session.execute(
@@ -400,15 +465,32 @@ async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> Po
         if not score:
             continue
 
-        # TODO: Calculate actual correct_players count for hybrid scoring
-        points, correct_outcome, exact_score = calculate_match_points(
-            prediction, score, total_players=30, correct_players=10
+        total_predictions += 1
+
+        # Get correct player count for this fixture's outcome (for hybrid scoring)
+        outcome_counts = await get_outcome_counts(session, fixture.id)
+        correct_players = outcome_counts.get(score.outcome, 1) or 1
+
+        # Calculate points using configured strategy
+        points, is_correct_outcome, is_exact_score = calculate_match_points(
+            prediction, score, total_players=total_players, correct_players=correct_players
         )
 
-        if correct_outcome:
-            breakdown.match_outcome_points += 5  # Base points only
-        if exact_score:
-            breakdown.exact_score_points += points - 5 if correct_outcome else points
+        if is_correct_outcome:
+            correct_outcomes += 1
+        if is_exact_score:
+            exact_scores += 1
+
+        # Add to appropriate phase breakdown
+        phase_breakdown = phase1 if prediction.phase == PredictionPhase.PHASE_1 else phase2
+        _add_match_points_to_phase(
+            phase_breakdown,
+            base_outcome_points,
+            exact_score_points,
+            points,
+            is_correct_outcome,
+            is_exact_score,
+        )
 
     # Get team advancement predictions
     result = await session.execute(
@@ -416,16 +498,29 @@ async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> Po
     )
     team_predictions = result.scalars().all()
 
-    # Calculate advancement points
+    # Calculate advancement points by stage
     actual_advancement = await get_actual_advancement(session)
     for pred in team_predictions:
         points = calculate_advancement_points(pred, actual_advancement, pred.phase)
-        if pred.stage == "group":
-            breakdown.group_advancement_points += points
-        else:
-            breakdown.knockout_advancement_points += points
+        if points == 0:
+            continue
 
-    return breakdown
+        # Add to appropriate phase breakdown
+        phase_breakdown = phase1 if pred.phase == PredictionPhase.PHASE_1 else phase2
+        _add_advancement_points_to_phase(
+            phase_breakdown,
+            pred.stage,
+            pred.group_position,
+            points,
+        )
+
+    return PointBreakdown(
+        phase1=phase1,
+        phase2=phase2,
+        correct_outcomes=correct_outcomes,
+        exact_scores=exact_scores,
+        total_predictions=total_predictions,
+    )
 
 
 async def get_outcome_counts(session: AsyncSession, fixture_id: uuid.UUID) -> dict[str, int]:
