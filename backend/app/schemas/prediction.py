@@ -6,6 +6,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field
 
 from app.models.prediction import PredictionPhase
+from app.schemas.fixture import FixtureScore
 
 
 class MatchPredictionCreate(BaseModel):
@@ -77,3 +78,24 @@ class BracketPredictionUpdate(BaseModel):
     """Schema for updating bracket predictions."""
 
     predictions: list[TeamAdvancementPrediction]
+
+
+# Community predictions schemas (for the results page scatter plot)
+
+
+class CommunityPrediction(BaseModel):
+    """A single user's prediction for a match (anonymized to name only)."""
+
+    user_name: str
+    home_score: int
+    away_score: int
+
+
+class CommunityPredictionsResponse(BaseModel):
+    """All predictions for a single fixture, for community viewing."""
+
+    fixture_id: uuid.UUID
+    home_team: str
+    away_team: str
+    predictions: list[CommunityPrediction]
+    actual: FixtureScore | None = None

@@ -8,7 +8,8 @@ import type {
 	MatchPredictionCreate,
 	MatchPredictionUpdate,
 	BracketPrediction,
-	TeamAdvancementPrediction
+	TeamAdvancementPrediction,
+	CommunityPredictionsResponse
 } from '$types';
 
 export async function getMatchPredictions(): Promise<MatchPrediction[]> {
@@ -37,4 +38,10 @@ export async function updateBracketPredictions(
 	predictions: TeamAdvancementPrediction[]
 ): Promise<{ status: string }> {
 	return api.put<{ status: string }>('/predictions/bracket', { predictions });
+}
+
+export async function getCommunityPredictions(
+	fixtureId: string
+): Promise<CommunityPredictionsResponse> {
+	return api.get<CommunityPredictionsResponse>(`/predictions/matches/${fixtureId}/community`);
 }

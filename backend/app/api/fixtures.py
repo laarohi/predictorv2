@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from app.dependencies import AdminUser, CurrentUser, DbSession, OptionalUser
@@ -12,6 +13,7 @@ from app.models.fixture import Fixture, MatchStatus
 from app.schemas.fixture import (
     FixtureCreate,
     FixtureRead,
+    FixtureScore,
     FixturesByGroup,
     FixtureStatusUpdate,
     FixtureUpdate,
@@ -32,6 +34,20 @@ LOCK_MINUTES = 5
 def fixture_to_read(fixture: Fixture) -> FixtureRead:
     """Convert Fixture model to FixtureRead schema."""
     time_until = fixture.time_until_lock(LOCK_MINUTES)
+
+    # Populate score if fixture is finished and has a score
+    score_data = None
+    if fixture.status == MatchStatus.FINISHED and fixture.score:
+        score_data = FixtureScore(
+            home_score=fixture.score.home_score,
+            away_score=fixture.score.away_score,
+            home_score_et=fixture.score.home_score_et,
+            away_score_et=fixture.score.away_score_et,
+            home_penalties=fixture.score.home_penalties,
+            away_penalties=fixture.score.away_penalties,
+            outcome=fixture.score.outcome,
+        )
+
     return FixtureRead(
         id=fixture.id,
         home_team=fixture.home_team,
@@ -44,13 +60,14 @@ def fixture_to_read(fixture: Fixture) -> FixtureRead:
         minute=fixture.minute,
         is_locked=fixture.is_locked(LOCK_MINUTES),
         time_until_lock=int(time_until.total_seconds()) if time_until else None,
+        score=score_data,
     )
 
 
 @router.get("/", response_model=list[FixtureRead])
 async def get_all_fixtures(session: DbSession, _user: OptionalUser) -> list[FixtureRead]:
     """Get all fixtures ordered by kickoff time."""
-    result = await session.execute(select(Fixture).order_by(Fixture.kickoff, Fixture.match_number))
+    result = await session.execute(select(Fixture).options(selectinload(Fixture.score)).order_by(Fixture.kickoff, Fixture.match_number))
     fixtures = result.scalars().all()
     return [fixture_to_read(f) for f in fixtures]
 
@@ -60,6 +77,7 @@ async def get_group_fixtures(session: DbSession, _user: OptionalUser) -> list[Fi
     """Get group stage fixtures organized by group."""
     result = await session.execute(
         select(Fixture)
+        .options(selectinload(Fixture.score))
         .where(Fixture.stage == "group")
         .order_by(Fixture.group, Fixture.kickoff, Fixture.match_number)
     )
@@ -81,6 +99,7 @@ async def get_knockout_fixtures(session: DbSession, _user: OptionalUser) -> list
     """Get knockout stage fixtures."""
     result = await session.execute(
         select(Fixture)
+        .options(selectinload(Fixture.score))
         .where(Fixture.stage != "group")
         .order_by(Fixture.kickoff, Fixture.match_number)
     )
@@ -131,6 +150,7 @@ async def get_actual_knockout_fixtures(
     # Get knockout fixtures
     result = await session.execute(
         select(Fixture)
+        .options(selectinload(Fixture.score))
         .where(Fixture.stage != "group")
         .order_by(Fixture.kickoff, Fixture.match_number)
     )
@@ -172,7 +192,7 @@ async def get_actual_standings(
 @router.get("/{fixture_id}", response_model=FixtureRead)
 async def get_fixture(fixture_id: uuid.UUID, session: DbSession, _user: OptionalUser) -> FixtureRead:
     """Get a single fixture by ID."""
-    result = await session.execute(select(Fixture).where(Fixture.id == fixture_id))
+    result = await session.execute(select(Fixture).options(selectinload(Fixture.score)).where(Fixture.id == fixture_id))
     fixture = result.scalar_one_or_none()
 
     if not fixture:

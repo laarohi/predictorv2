@@ -143,7 +143,7 @@
 										{entry.position}
 									</div>
 									<div class="flex-1 min-w-0">
-										<div class="font-semibold truncate">{entry.user_name}</div>
+										<a href="/profile/{entry.user_id}" class="font-semibold truncate block hover:text-primary transition-colors">{entry.user_name}</a>
 									</div>
 									<div class="text-xl font-display tracking-wide">{entry.total_points}</div>
 								</div>

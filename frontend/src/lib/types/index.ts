@@ -34,6 +34,16 @@ export interface UserLogin {
 // Fixture types
 export type MatchStatus = 'scheduled' | 'live' | 'halftime' | 'finished' | 'postponed' | 'cancelled';
 
+export interface FixtureScore {
+	home_score: number;
+	away_score: number;
+	home_score_et: number | null;
+	away_score_et: number | null;
+	home_penalties: number | null;
+	away_penalties: number | null;
+	outcome: string; // '1', 'X', '2'
+}
+
 export interface Fixture {
 	id: string;
 	home_team: string;
@@ -46,6 +56,7 @@ export interface Fixture {
 	minute: number | null;
 	is_locked: boolean;
 	time_until_lock: number | null;
+	score: FixtureScore | null;
 }
 
 export interface FixturesByGroup {
@@ -328,6 +339,57 @@ export interface UserStats {
 	leaderboard_position: number | null;
 	total_participants: number;
 	breakdown: PointBreakdown;
+}
+
+// Community predictions (for scatter plot on results page)
+export interface CommunityPrediction {
+	user_name: string;
+	home_score: number;
+	away_score: number;
+}
+
+export interface CommunityPredictionsResponse {
+	fixture_id: string;
+	home_team: string;
+	away_team: string;
+	predictions: CommunityPrediction[];
+	actual: FixtureScore | null;
+}
+
+// Public user profile types
+export interface PublicProfile {
+	id: string;
+	name: string;
+	created_at: string;
+	stats: UserStats;
+}
+
+export interface UserMatchPredictionView {
+	fixture_id: string;
+	home_team: string;
+	away_team: string;
+	kickoff: string;
+	stage: string;
+	group: string | null;
+	status: MatchStatus;
+	predicted_home: number;
+	predicted_away: number;
+	actual_home: number | null;
+	actual_away: number | null;
+	actual_outcome: string | null;
+	is_exact: boolean;
+	is_correct_outcome: boolean;
+}
+
+export interface BracketSummary {
+	stages: Record<string, string[]>;
+}
+
+export interface UserPredictionsResponse {
+	user_id: string;
+	user_name: string;
+	match_predictions: UserMatchPredictionView[];
+	bracket_summary: BracketSummary;
 }
 
 // API Response types

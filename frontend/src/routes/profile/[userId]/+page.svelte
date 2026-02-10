@@ -1,0 +1,184 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { isAuthenticated, user } from '$stores/auth';
+	import { getUserProfile, getUserPredictions } from '$api/users';
+	import PredictionTable from '$lib/components/PredictionTable.svelte';
+	import type { PublicProfile, UserPredictionsResponse } from '$types';
+
+	$: if (!$isAuthenticated) {
+		goto('/login');
+	}
+
+	$: userId = $page.params.userId;
+	$: isOwnProfile = userId === $user?.id;
+
+	let profile: PublicProfile | null = null;
+	let predictions: UserPredictionsResponse | null = null;
+	let loading = true;
+	let error: string | null = null;
+
+	// Refetch when userId changes
+	$: if (userId && $isAuthenticated) {
+		loadData(userId);
+	}
+
+	async function loadData(id: string) {
+		loading = true;
+		error = null;
+		try {
+			const [p, preds] = await Promise.all([
+				getUserProfile(id),
+				getUserPredictions(id)
+			]);
+			profile = p;
+			predictions = preds;
+		} catch (e) {
+			error = e instanceof Error ? e.message : 'Failed to load profile';
+		} finally {
+			loading = false;
+		}
+	}
+
+	function formatDate(dateStr: string): string {
+		return new Date(dateStr).toLocaleDateString('en-GB', {
+			day: 'numeric',
+			month: 'long',
+			year: 'numeric'
+		});
+	}
+
+	// Bracket stage display order
+	const stageOrder = ['round_of_32', 'round_of_16', 'quarter_finals', 'semi_finals', 'final', 'winner'];
+	const stageLabels: Record<string, string> = {
+		'group': 'Group Stage',
+		'round_of_32': 'Round of 32',
+		'round_of_16': 'Round of 16',
+		'quarter_finals': 'Quarter Finals',
+		'quarter_final': 'Quarter Finals',
+		'semi_finals': 'Semi Finals',
+		'semi_final': 'Semi Finals',
+		'final': 'Final',
+		'winner': 'Winner'
+	};
+</script>
+
+<svelte:head>
+	<title>{profile?.name ?? 'Player'} - Predictor v2</title>
+</svelte:head>
+
+{#if $isAuthenticated}
+	<div class="container mx-auto mobile-padding py-6">
+		{#if loading}
+			<div class="flex justify-center py-16">
+				<span class="loading loading-spinner loading-lg text-primary"></span>
+			</div>
+		{:else if error}
+			<div class="stadium-card no-glow p-8 text-center">
+				<svg class="w-12 h-12 mx-auto mb-3 text-error/50" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+				</svg>
+				<p class="text-error">{error}</p>
+				<button class="btn btn-ghost btn-sm mt-4" on:click={() => { if (userId) loadData(userId); }}>Retry</button>
+			</div>
+		{:else if profile}
+			<!-- Header -->
+			<div class="mb-8">
+				<div class="flex items-center gap-4">
+					<div class="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-accent grid place-items-center ring-2 ring-primary/20">
+						<span class="text-2xl font-bold text-white leading-none translate-y-0.5">
+							{profile.name.charAt(0).toUpperCase()}
+						</span>
+					</div>
+					<div>
+						<h1 class="text-3xl sm:text-4xl font-display tracking-wide">{profile.name}</h1>
+						<p class="text-sm text-base-content/50">Member since {formatDate(profile.created_at)}</p>
+					</div>
+				</div>
+				{#if isOwnProfile}
+					<a href="/profile" class="btn btn-ghost btn-sm mt-3 gap-1">
+						<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+							<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+						</svg>
+						Account Settings
+					</a>
+				{/if}
+			</div>
+
+			<!-- Stats grid -->
+			<div class="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 mb-8">
+				<div class="stat-card">
+					<p class="stat-title">Leaderboard</p>
+					<p class="stat-value {profile.stats.leaderboard_position && profile.stats.leaderboard_position <= 3 ? 'text-primary' : ''}">
+						{#if profile.stats.leaderboard_position}
+							#{profile.stats.leaderboard_position}
+						{:else}
+							-
+						{/if}
+					</p>
+					<p class="text-xs text-base-content/40 mt-1">of {profile.stats.total_participants}</p>
+				</div>
+				<div class="stat-card">
+					<p class="stat-title">Total Points</p>
+					<p class="stat-value">{profile.stats.total_points}</p>
+				</div>
+				<div class="stat-card">
+					<p class="stat-title">Accuracy</p>
+					<p class="stat-value">{profile.stats.accuracy_pct}%</p>
+				</div>
+				<div class="stat-card">
+					<p class="stat-title">Predictions</p>
+					<p class="stat-value">{profile.stats.total_predictions}</p>
+					<p class="text-xs text-base-content/40 mt-1">
+						{profile.stats.total_match_predictions} match, {profile.stats.total_team_predictions} team
+					</p>
+				</div>
+				<div class="stat-card">
+					<p class="stat-title">Correct Outcomes</p>
+					<p class="stat-value text-success">{profile.stats.correct_outcomes}</p>
+				</div>
+				<div class="stat-card">
+					<p class="stat-title">Exact Scores</p>
+					<p class="stat-value text-primary">{profile.stats.exact_scores}</p>
+				</div>
+			</div>
+
+			<!-- Match Predictions -->
+			{#if predictions && predictions.match_predictions.length > 0}
+				<div class="stadium-card no-glow p-4 sm:p-6 mb-8">
+					<h2 class="text-lg font-display tracking-wide mb-4">Match Predictions</h2>
+					<PredictionTable predictions={predictions.match_predictions} />
+				</div>
+			{/if}
+
+			<!-- Bracket Summary -->
+			{#if predictions && Object.keys(predictions.bracket_summary.stages).length > 0}
+				<div class="stadium-card no-glow p-4 sm:p-6">
+					<h2 class="text-lg font-display tracking-wide mb-4">Bracket Predictions</h2>
+					<div class="space-y-4">
+						{#each Object.entries(predictions.bracket_summary.stages).sort(([a], [b]) => {
+							const ai = stageOrder.indexOf(a);
+							const bi = stageOrder.indexOf(b);
+							return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+						}) as [stage, teams]}
+							<div>
+								<h3 class="text-xs uppercase tracking-wider text-base-content/50 mb-2">
+									{stageLabels[stage] ?? stage}
+								</h3>
+								<div class="flex flex-wrap gap-1.5">
+									{#each teams as team}
+										<span class="inline-flex items-center gap-1 px-2 py-1 bg-base-300/50 rounded-md text-xs font-medium">
+											{team}
+										</span>
+									{/each}
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+			{/if}
+		{/if}
+	</div>
+{/if}

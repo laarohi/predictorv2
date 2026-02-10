@@ -2,6 +2,7 @@
 	import { updateLocalPrediction, unsavedChanges } from '$stores/predictions';
 	import { formatKickoff, getTimeUntilKickoff } from '$stores/fixtures';
 	import { getFlagUrl, hasFlag } from '$lib/utils/flags';
+	import { getPredictionResult, type PredictionResult } from '$lib/utils/predictionResult';
 	import type { Fixture, MatchPrediction } from '$types';
 
 	export let fixture: Fixture;
@@ -14,6 +15,10 @@
 	// This is derived state - single source of truth
 	$: displayHomeScore = unsaved?.home_score ?? prediction?.home_score ?? '';
 	$: displayAwayScore = unsaved?.away_score ?? prediction?.away_score ?? '';
+
+	// Prediction result for color-coding
+	$: result = getPredictionResult(fixture, prediction);
+	$: isFinished = fixture.status === 'finished' && fixture.score != null;
 
 	function handleInput(e: Event, type: 'home' | 'away') {
 		if (fixture.is_locked) return;
@@ -47,9 +52,22 @@
 
 	$: timeUntil = getTimeUntilKickoff(fixture.kickoff);
 	$: isUrgent = !fixture.is_locked && timeUntil && timeUntil.includes('m') && !timeUntil.includes('h');
+
+	function getResultLabel(r: PredictionResult): string {
+		if (r === 'exact') return 'Exact Score';
+		if (r === 'outcome') return 'Correct Result';
+		if (r === 'wrong') return 'Wrong';
+		return '';
+	}
 </script>
 
-<div class="match-card" class:locked={fixture.is_locked}>
+<div
+	class="match-card"
+	class:locked={fixture.is_locked && !isFinished}
+	class:result-exact={result === 'exact'}
+	class:result-outcome={result === 'outcome'}
+	class:result-wrong={result === 'wrong'}
+>
 	<!-- Match header -->
 	<div class="flex justify-between items-center mb-2 sm:mb-4">
 		<div class="flex items-center gap-2">
@@ -62,7 +80,24 @@
 				</span>
 			{/if}
 		</div>
-		{#if fixture.is_locked}
+		{#if isFinished}
+			<span class="result-badge {result}">
+				{#if result === 'exact'}
+					<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+					</svg>
+				{:else if result === 'outcome'}
+					<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+					</svg>
+				{:else if result === 'wrong'}
+					<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				{/if}
+				{getResultLabel(result)}
+			</span>
+		{:else if fixture.is_locked}
 			<span class="flex items-center gap-1.5 text-xs px-2 py-1 bg-error/20 text-error rounded-md border border-error/30">
 				<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -139,6 +174,22 @@
 			<span class="team-name-card">{fixture.away_team}</span>
 		</div>
 	</div>
+
+	<!-- Actual result display for finished matches -->
+	{#if isFinished && fixture.score}
+		<div class="mt-3 pt-3 border-t border-base-content/10 flex items-center justify-center gap-3">
+			<span class="text-xs text-base-content/50 uppercase tracking-wider">FT</span>
+			<span class="text-lg font-display tracking-wide">
+				{fixture.score.home_score} - {fixture.score.away_score}
+			</span>
+			{#if fixture.score.home_score_et != null}
+				<span class="text-xs text-base-content/40">(ET: {fixture.score.home_score_et}-{fixture.score.away_score_et})</span>
+			{/if}
+			{#if fixture.score.home_penalties != null}
+				<span class="text-xs text-base-content/40">(Pen: {fixture.score.home_penalties}-{fixture.score.away_penalties})</span>
+			{/if}
+		</div>
+	{/if}
 
 	<!-- Unsaved indicator -->
 	{#if unsaved}

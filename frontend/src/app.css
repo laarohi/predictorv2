@@ -75,6 +75,38 @@
 		@apply opacity-60 grayscale-[30%];
 	}
 
+	/* Result states — override locked opacity for finished matches */
+	.match-card.result-exact {
+		@apply opacity-100 grayscale-0 border-2 border-success;
+		box-shadow: 0 0 20px rgba(0, 200, 83, 0.15);
+	}
+
+	.match-card.result-outcome {
+		@apply opacity-100 grayscale-0 border-2 border-warning;
+		box-shadow: 0 0 20px rgba(251, 191, 36, 0.12);
+	}
+
+	.match-card.result-wrong {
+		@apply border border-error/30 opacity-80 grayscale-0;
+	}
+
+	/* Result badge shown inside match cards */
+	.result-badge {
+		@apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold;
+	}
+
+	.result-badge.exact {
+		@apply bg-success/20 text-success;
+	}
+
+	.result-badge.outcome {
+		@apply bg-warning/20 text-warning;
+	}
+
+	.result-badge.wrong {
+		@apply bg-error/20 text-error/80;
+	}
+
 	/* VS Badge */
 	.vs-badge {
 		@apply px-2 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-xs font-bold tracking-widest;

@@ -9,3 +9,6 @@ export { default as ThirdPlaceTable } from './ThirdPlaceTable.svelte';
 export { default as ErrorAlert } from './ErrorAlert.svelte';
 export { default as GoogleLoginButton } from './GoogleLoginButton.svelte';
 export { default as Icon } from './Icon.svelte';
+export { default as ScatterPlot } from './ScatterPlot.svelte';
+export { default as ResultCard } from './ResultCard.svelte';
+export { default as PredictionTable } from './PredictionTable.svelte';

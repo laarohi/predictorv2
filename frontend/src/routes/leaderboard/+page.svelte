@@ -397,7 +397,11 @@
 								</div>
 								<div class="flex-1 min-w-0 ml-2">
 									<div class="font-semibold truncate text-sm flex items-center gap-1">
-										{entry.user_name}
+										<a
+											href="/profile/{entry.user_id}"
+											class="hover:text-primary transition-colors"
+											on:click|stopPropagation
+										>{entry.user_name}</a>
 										{#if isCurrentUser}
 											<span class="text-[8px] uppercase tracking-wider px-1.5 py-0.5 bg-primary/20 text-primary rounded-full">
 												You
@@ -577,7 +581,7 @@
 									</td>
 									<td class="py-3 px-4">
 										<div class="flex items-center gap-3">
-											<span class="font-semibold">{entry.user_name}</span>
+											<a href="/profile/{entry.user_id}" class="font-semibold hover:text-primary transition-colors">{entry.user_name}</a>
 											{#if isCurrentUser}
 												<span class="text-[10px] uppercase tracking-wider px-2 py-0.5 bg-primary/20 text-primary rounded-full">
 													You

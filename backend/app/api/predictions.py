@@ -4,14 +4,19 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
+from sqlalchemy.orm import selectinload
 from sqlmodel import select, delete
 
-from app.dependencies import CurrentUser, DbSession
-from app.models.fixture import Fixture
+from app.dependencies import CurrentUser, DbSession, OptionalUser
+from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
+from app.models.user import User
+from app.schemas.fixture import FixtureScore
 from app.schemas.prediction import (
     BracketPrediction,
     BracketPredictionUpdate,
+    CommunityPrediction,
+    CommunityPredictionsResponse,
     MatchPredictionCreate,
     MatchPredictionRead,
     MatchPredictionUpdate,
@@ -280,3 +285,71 @@ async def update_bracket_predictions(
 
     await session.commit()
     return {"status": "ok"}
+
+
+LOCK_MINUTES = 5
+
+
+@router.get("/matches/{fixture_id}/community", response_model=CommunityPredictionsResponse)
+async def get_community_predictions(
+    fixture_id: uuid.UUID,
+    session: DbSession,
+    _user: OptionalUser,
+) -> CommunityPredictionsResponse:
+    """Get all players' predictions for a fixture (blind pool enforced).
+
+    Only returns data if the fixture is locked or finished.
+    """
+    # Load fixture with score
+    result = await session.execute(
+        select(Fixture).options(selectinload(Fixture.score)).where(Fixture.id == fixture_id)
+    )
+    fixture = result.scalar_one_or_none()
+
+    if not fixture:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fixture not found")
+
+    # Blind pool enforcement: only visible after lock or when finished
+    if not fixture.is_locked(LOCK_MINUTES) and fixture.status != MatchStatus.FINISHED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Predictions are not yet visible for this match",
+        )
+
+    # Query all predictions for this fixture with user names
+    result = await session.execute(
+        select(MatchPrediction, User.name)
+        .join(User, MatchPrediction.user_id == User.id)
+        .where(MatchPrediction.fixture_id == fixture_id)
+    )
+    rows = result.all()
+
+    predictions = [
+        CommunityPrediction(
+            user_name=user_name,
+            home_score=pred.home_score,
+            away_score=pred.away_score,
+        )
+        for pred, user_name in rows
+    ]
+
+    # Build actual score if available
+    actual = None
+    if fixture.status == MatchStatus.FINISHED and fixture.score:
+        actual = FixtureScore(
+            home_score=fixture.score.home_score,
+            away_score=fixture.score.away_score,
+            home_score_et=fixture.score.home_score_et,
+            away_score_et=fixture.score.away_score_et,
+            home_penalties=fixture.score.home_penalties,
+            away_penalties=fixture.score.away_penalties,
+            outcome=fixture.score.outcome,
+        )
+
+    return CommunityPredictionsResponse(
+        fixture_id=fixture.id,
+        home_team=fixture.home_team,
+        away_team=fixture.away_team,
+        predictions=predictions,
+        actual=actual,
+    )

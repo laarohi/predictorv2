@@ -8,6 +8,18 @@ from pydantic import BaseModel, Field
 from app.models.fixture import MatchStatus
 
 
+class FixtureScore(BaseModel):
+    """Embedded score data for a finished fixture."""
+
+    home_score: int
+    away_score: int
+    home_score_et: int | None = None
+    away_score_et: int | None = None
+    home_penalties: int | None = None
+    away_penalties: int | None = None
+    outcome: str  # '1', 'X', '2'
+
+
 class FixtureRead(BaseModel):
     """Schema for reading fixture data."""
 
@@ -22,6 +34,7 @@ class FixtureRead(BaseModel):
     minute: int | None
     is_locked: bool
     time_until_lock: int | None  # Seconds until lock, None if already locked
+    score: FixtureScore | None = None
 
     class Config:
         """Pydantic config."""
