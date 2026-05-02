@@ -38,8 +38,8 @@
 		</button>
 	</div>
 {:else}
-	<div class="stadium-card no-glow p-4 sm:p-6">
-		<div class="flex items-center justify-between mb-6">
+	<div class="stadium-card no-glow px-0 py-4 sm:px-6 sm:py-6 -mx-4 sm:mx-0 rounded-none sm:rounded-2xl border-0 sm:border">
+		<div class="flex items-center justify-between mb-6 px-4 sm:px-0">
 			<div>
 				<h2 class="text-xl font-display tracking-wide">Knockout Bracket</h2>
 				<p class="text-xs text-base-content/50 mt-1">

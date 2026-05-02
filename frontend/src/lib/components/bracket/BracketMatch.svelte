@@ -150,18 +150,22 @@
 
 <style>
 	.bracket-match {
-		@apply flex flex-col gap-1 bg-base-200 rounded-xl p-2 border border-base-300;
+		@apply flex flex-col gap-1 bg-base-200 rounded-xl p-2;
 		@apply shadow-sm w-full;
 		position: relative;
 	}
 
-	/* Fixed width only on desktop for bracket alignment */
+	/* Fixed width + border only on desktop for bracket alignment */
 	@media (min-width: 640px) {
 		.bracket-match {
+			@apply border border-base-300;
 			width: 170px;
 		}
 		.bracket-match.compact {
 			width: 150px;
+		}
+		.winner-check {
+			display: block;
 		}
 	}
 
@@ -211,6 +215,7 @@
 
 	.winner-check {
 		@apply w-4 h-4 text-primary flex-shrink-0;
+		display: none;
 	}
 
 	.match-divider {
@@ -241,5 +246,27 @@
 		width: 32px;
 		pointer-events: none;
 		overflow: visible;
+	}
+
+	/* Mobile: force compact sizing on all bracket cards */
+	@media (max-width: 639px) {
+		.bracket-match {
+			@apply p-1 gap-0.5;
+		}
+		.bracket-match .team-slot {
+			@apply px-1.5 py-1;
+		}
+		.bracket-match .team-slot-name {
+			@apply text-xs;
+		}
+		.bracket-match .team-slot-flag {
+			@apply w-4;
+		}
+		.match-divider {
+			@apply py-0;
+		}
+		.vs-text {
+			font-size: 8px;
+		}
 	}
 </style>
