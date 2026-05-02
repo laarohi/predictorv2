@@ -77,17 +77,18 @@
 
 	/* Result states — override locked opacity for finished matches */
 	.match-card.result-exact {
-		@apply opacity-100 grayscale-0 border-2 border-success;
-		box-shadow: 0 0 20px rgba(0, 200, 83, 0.15);
+		@apply opacity-100 grayscale-0 border-2 border-success/60;
+		box-shadow: 0 0 16px rgba(0, 200, 83, 0.08);
 	}
 
 	.match-card.result-outcome {
-		@apply opacity-100 grayscale-0 border-2 border-warning;
-		box-shadow: 0 0 20px rgba(251, 191, 36, 0.12);
+		@apply opacity-100 grayscale-0 border-2 border-warning/60;
+		box-shadow: 0 0 16px rgba(251, 191, 36, 0.06);
 	}
 
 	.match-card.result-wrong {
-		@apply border border-error/30 opacity-80 grayscale-0;
+		@apply opacity-100 grayscale-0 border-2 border-error/60;
+		box-shadow: 0 0 16px rgba(248, 63, 63, 0.08);
 	}
 
 	/* Result badge shown inside match cards */
@@ -104,7 +105,7 @@
 	}
 
 	.result-badge.wrong {
-		@apply bg-error/20 text-error/80;
+		@apply bg-error/20 text-error;
 	}
 
 	/* VS Badge */

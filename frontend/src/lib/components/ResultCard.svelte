@@ -50,7 +50,7 @@
 </script>
 
 <div
-	class="stadium-card no-glow overflow-hidden {result === 'exact' ? 'ring-2 ring-success' : ''} {result === 'outcome' ? 'border-warning' : ''} {result === 'wrong' ? 'border-error/30' : ''}"
+	class="stadium-card no-glow overflow-hidden {result === 'exact' ? 'ring-1 ring-success/50' : ''} {result === 'outcome' ? 'ring-1 ring-warning/50' : ''} {result === 'wrong' ? 'ring-1 ring-error/50' : ''}"
 >
 	<!-- Main row (clickable) -->
 	<button class="w-full p-4 text-left" on:click={toggle}>
@@ -125,19 +125,32 @@
 					actual={communityData.actual}
 					homeTeam={fixture.home_team}
 					awayTeam={fixture.away_team}
+					userPrediction={prediction ? { home_score: prediction.home_score, away_score: prediction.away_score } : null}
 				/>
 				<!-- Legend -->
 				<div class="flex items-center justify-center gap-4 mt-3 text-[10px] text-base-content/40">
-					<div class="flex items-center gap-1">
-						<span class="w-2.5 h-2.5 rounded-full bg-base-content/50"></span>
-						Predictions
-					</div>
 					{#if communityData.actual}
 						<div class="flex items-center gap-1">
-							<span class="w-2.5 h-2.5 bg-primary" style="clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);"></span>
-							Actual Result
+							<span class="w-2.5 h-2.5 bg-success" style="clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);"></span>
+							Exact
+						</div>
+						<div class="flex items-center gap-1">
+							<span class="w-2.5 h-2.5 rounded-full bg-warning"></span>
+							Correct
+						</div>
+						<div class="flex items-center gap-1">
+							<span class="w-2.5 h-2.5 rounded-full bg-error/70"></span>
+							Wrong
+						</div>
+					{:else}
+						<div class="flex items-center gap-1">
+							<span class="w-2.5 h-2.5 rounded-full bg-base-content/40"></span>
+							Predictions
 						</div>
 					{/if}
+				</div>
+				<div class="text-center mt-1.5 text-[9px] text-base-content/30">
+					Numbers show how many players predicted each score
 				</div>
 			{/if}
 		</div>
