@@ -383,6 +383,8 @@ export interface UserMatchPredictionView {
 
 export interface BracketSummary {
 	stages: Record<string, string[]>;
+	phase1_stages: Record<string, string[]>;
+	phase2_stages: Record<string, string[]>;
 }
 
 export interface UserPredictionsResponse {

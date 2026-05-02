@@ -56,9 +56,11 @@ class UserMatchPredictionView(BaseModel):
 
 
 class BracketSummary(BaseModel):
-    """Summary of bracket predictions grouped by stage."""
+    """Summary of bracket predictions grouped by stage, with phase separation."""
 
-    stages: dict[str, list[str]]  # stage -> [team names]
+    stages: dict[str, list[str]]  # stage -> [team names] (merged, backward compat)
+    phase1_stages: dict[str, list[str]] = {}  # Phase 1 bracket
+    phase2_stages: dict[str, list[str]] = {}  # Phase 2 bracket
 
 
 class UserPredictionsResponse(BaseModel):
@@ -161,21 +163,29 @@ async def get_user_predictions(
 
         match_predictions.append(view)
 
-    # Bracket summary: group team predictions by stage
+    # Bracket summary: group team predictions by stage and phase
     result = await session.execute(
         select(TeamPrediction).where(TeamPrediction.user_id == user_id)
     )
     team_preds = result.scalars().all()
 
     stages: dict[str, list[str]] = {}
+    phase1_stages: dict[str, list[str]] = {}
+    phase2_stages: dict[str, list[str]] = {}
     for tp in team_preds:
-        if tp.stage not in stages:
-            stages[tp.stage] = []
-        stages[tp.stage].append(tp.team)
+        stages.setdefault(tp.stage, []).append(tp.team)
+        if tp.phase == PredictionPhase.PHASE_1:
+            phase1_stages.setdefault(tp.stage, []).append(tp.team)
+        else:
+            phase2_stages.setdefault(tp.stage, []).append(tp.team)
 
     return UserPredictionsResponse(
         user_id=user.id,
         user_name=user.name,
         match_predictions=match_predictions,
-        bracket_summary=BracketSummary(stages=stages),
+        bracket_summary=BracketSummary(
+            stages=stages,
+            phase1_stages=phase1_stages,
+            phase2_stages=phase2_stages,
+        ),
     )
