@@ -21,10 +21,23 @@ The seeding script is the *first consumer* of a Football-Data.org integration th
 | `--wipe` flag | **Not in script** | Destructive ops live separately; one-off SQL handles first-run cleanup |
 | Third-place match | Included as new stage `"third_place"` | Football-Data exposes it as a first-class `THIRD_PLACE` stage |
 | API auth | `X-Auth-Token` header from `Settings.football_data_token` | Env var: `FOOTBALL_DATA_TOKEN` |
+| Skip `/teams` API call | Yes | Match response already contains full team objects; saves 1 of 3 calls/run |
+| Consolidate with existing live-scoring code | **Yes — alpha refactor** | A working `FootballDataProvider` already exists in `app/services/external_scores.py`; this spec extracts a shared `FootballDataClient` and removes the now-unused `APIFootballProvider` |
 
 ### Why Football-Data.org over API-Football
 
 Probed both. API-Football's Free tier rejects season `2026` (`"Free plans do not have access to this season, try from 2022 to 2024."`); Football-Data.org's Free tier returns all 104 WC2026 matches with full data. Cost-free, identical-API plan for live-scoring later.
+
+### Pre-existing code we're consolidating with
+
+`backend/app/services/external_scores.py` (298 lines, wired into `admin.py:404` for live-scoring) already contains:
+
+- `ScoreProviderBase` abstract interface
+- `APIFootballProvider` — uses api-sports.io, reads `API_FOOTBALL_KEY` env var **(to be deleted)**
+- `FootballDataProvider` — uses football-data.org, reads `FOOTBALL_DATA_KEY` env var **(env var name inconsistent with our new convention; refactored to use `FOOTBALL_DATA_TOKEN` via the shared client)**
+- `PROVIDERS` registry + `get_score_provider()` factory with auto-detection **(simplified to a single direct constructor)**
+
+The new `FootballDataClient` is the HTTP/auth/rate-limit layer that both `FootballDataProvider` (for live scoring) and `fixture_sync` (for seeding) call into. No duplicated HTTP code, single env-var-handling site, single rate-limit policy.
 
 ## Architecture
 
@@ -32,11 +45,12 @@ Probed both. API-Football's Free tier rejects season `2026` (`"Free plans do not
 backend/
 ├── app/services/external/
 │   ├── __init__.py
-│   └── football_data.py        # HTTP client (~80 lines)
+│   └── football_data.py        # NEW shared HTTP client (~100 lines)
 ├── app/services/
-│   └── fixture_sync.py         # Business logic (~120 lines, simpler than original)
+│   ├── external_scores.py      # REFACTORED: drops APIFootballProvider; FootballDataProvider uses shared client
+│   └── fixture_sync.py         # NEW business logic (~120 lines)
 ├── scripts/
-│   ├── seed_fixtures.py        # CLI wrapper (~100 lines)
+│   ├── seed_fixtures.py        # NEW CLI wrapper (~100 lines)
 │   └── probe_football_data.py  # Discovery tool (already written, kept as reference)
 ├── data/
 │   ├── wc2026_fixtures.json    # Seed cache, committed to git
@@ -49,7 +63,9 @@ backend/
     └── test_fixture_sync.py
 ```
 
-### `app/services/external/football_data.py`
+Plus consequential edits to `app/api/admin.py:404` (drop `get_score_provider()` indirection if removed; or keep call site stable if factory is preserved).
+
+### `app/services/external/football_data.py` *(new shared client)*
 
 Thin async HTTP client for football-data.org/v4. Reads `Settings.football_data_token` for auth and `Settings.football_data_base_url` for the host. Tournament-agnostic: takes a competition code (e.g. `"WC"`).
 
@@ -58,9 +74,14 @@ Thin async HTTP client for football-data.org/v4. Reads `Settings.football_data_t
 ```python
 class FootballDataClient:
     async def get_competition(self, code: str) -> dict
-    async def get_matches(self, code: str) -> list[dict]
-    async def get_teams(self, code: str) -> list[dict]
+    async def get_matches(self, code: str, *, status: str | None = None) -> list[dict]
+    async def get_match(self, match_id: str) -> dict | None  # used by FootballDataProvider.fetch_fixture_score
+
+# Module-level helpers (used by both fixture_sync and external_scores):
+def map_status(api_status: str) -> MatchStatus       # SCHEDULED|TIMED→SCHEDULED, IN_PLAY|...→LIVE, etc.
 ```
+
+The `status` parameter on `get_matches` lets live-scoring filter to e.g. `"LIVE,IN_PLAY,PAUSED"` without a second method.
 
 **Behaviour:**
 
@@ -72,6 +93,19 @@ class FootballDataClient:
   - `FootballDataAuthError` (401, 403)
   - `FootballDataRateLimitError` (429 after retry)
   - `FootballDataError` (catch-all)
+
+### `app/services/external_scores.py` *(refactored, alpha)*
+
+Changes from current state:
+
+- **Delete** `APIFootballProvider` class (~100 lines).
+- **Delete** `ScoreProvider` enum and `PROVIDERS` registry — single provider, no factory needed.
+- **Simplify** `get_score_provider()` to a one-liner returning `FootballDataScoreProvider()`, OR remove it entirely and inline the constructor at the one call site (`admin.py:404`). Choice during implementation; minor.
+- **Rename** `FootballDataProvider` → `FootballDataScoreProvider` for clarity (it's a score provider that uses the football-data backend; the name parallels the new client class).
+- **Refactor** `FootballDataScoreProvider` internals: instead of constructing `httpx` calls inline, delegate to `FootballDataClient.get_matches(competition_code, status="LIVE,IN_PLAY,PAUSED")` and `get_match(match_id)`. The provider becomes a thin mapper from `dict` → `ExternalScore`.
+- **Stop reading** `os.getenv("FOOTBALL_DATA_KEY")` directly — the shared client handles auth via `Settings.football_data_token`.
+
+The `ExternalScore` dataclass and the score-update logic in `admin.py` are unchanged.
 
 ### `app/services/fixture_sync.py`
 
@@ -172,11 +206,10 @@ This is **not** committed as a script. One-time bootstrap step we run by hand an
 
 | Endpoint | Purpose | Calls per run |
 |----------|---------|---------------|
-| `GET /v4/competitions/WC` | Competition metadata, current season info | 1 (optional sanity check) |
-| `GET /v4/competitions/WC/matches` | All 104 matches | 1 |
-| `GET /v4/competitions/WC/teams` | 48 teams (name validation against `flags.ts`) | 1 |
+| `GET /v4/competitions/WC` | Competition metadata (optional sanity check; can be skipped) | 0–1 |
+| `GET /v4/competitions/WC/matches` | All 104 matches; full team objects embedded for resolved fixtures | 1 |
 
-Two-three API calls per fetch run; rate limit is 10/min on Free tier — comfortably under.
+One required API call per seed run (with optional second for sanity check). The `/v4/competitions/WC/teams` endpoint is **not used** — match objects already include each team's `{id, name, shortName, tla, crest}`, so we extract the unique team set directly from the matches response. Rate limit is 10/min on Free tier — comfortably under.
 
 ### Verified response shape (from 2026-05-09 probe)
 
@@ -380,7 +413,7 @@ Expected output: `~72 / ~95 / ~220 / ~88` rows deleted respectively.
 
 ### Flag-name mismatch handling
 
-After upsert, the script extracts unique non-placeholder team names from the seeded fixtures and cross-references against keys in `frontend/src/lib/utils/flags.ts`. Mismatches are summarised:
+After upsert, the script extracts unique non-placeholder team names from the **already-fetched matches response** (no separate `/teams` call needed — every resolved match has a full `homeTeam`/`awayTeam` object) and cross-references against keys in `frontend/src/lib/utils/flags.ts`. Mismatches are summarised:
 
 ```
 Warning: 2 team names not present in frontend flags.ts:
@@ -426,8 +459,9 @@ Non-blocking. Resolving mismatches is a follow-up frontend task.
 - Frontend `flags.ts` updates for newly-introduced team-name aliases — follow-up task once the warning list is reviewed.
 - Adding a `competition_id` FK to `team_predictions` — long-term schema cleanup.
 - A `--prune` flag for deleting DB-only fixtures — explicitly deferred.
-- `tla` (3-letter abbreviation) integration into the schema — Football-Data exposes a stable 3-letter code per team (`MEX`, `RSA`, etc.) which would be more durable than full names for `flags.ts` keying. Future enhancement.
-- Removing the dead-end API-Football integration (`api_football_key`, `api_football_base_url` settings) — kept for now in case of future need; can be cleaned up later if confirmed unused.
+- `tla` (3-letter abbreviation) integration into the schema — Football-Data exposes a stable 3-letter code per team (`MEX`, `RSA`, etc.) which would be more durable than full names for `flags.ts` keying. Future enhancement requiring schema migration.
+- Making `Fixture.home_team` / `away_team` nullable instead of synthesising slot strings — cleaner data model but requires Alembic migration plus frontend null-rendering work. Deferred to post-launch.
+- Adding `external_updated_at` to `Fixture` for live-scoring diff short-circuit using Football-Data's `lastUpdated` field — meaningful Phase 4 throughput optimisation; not blocking for fixture seeding.
 
 ## Future considerations
 
@@ -439,13 +473,34 @@ Non-blocking. Resolving mismatches is a follow-up frontend task.
 
 ## Implementation checklist (for the plan)
 
-1. Create `app/services/external/__init__.py` and `football_data.py` with the HTTP client + domain exceptions.
-2. Create `app/services/fixture_sync.py` with mapping helpers, upsert, `SyncResult`, and `sync_from_api` / `sync_from_cache` entry points.
-3. `backend/data/` directory exists; ensure it's volume-mounted (already done in `docker-compose.yml`).
-4. Create `scripts/seed_fixtures.py` CLI wrapper.
-5. Add `backend/tests/fixtures/wc2026_sample.json` (modelled on probe response shape) and `test_fixture_sync.py`.
-6. Run first-run cleanup SQL (manual one-off).
-7. Run `python -m scripts.seed_fixtures` and inspect `SyncResult`.
-8. Spot-check 3 fixtures in the DB by hand against fifa.com / Wikipedia.
-9. Commit `wc2026_fixtures.json` to git as the auditable seed snapshot.
-10. Commit `backend/data/probe/*.json` as audit trail of the discovery (optional but recommended).
+### Step 1 — Build the new shared client (no behaviour change yet)
+
+1. Create `app/services/external/__init__.py` and `football_data.py` with `FootballDataClient` (`get_competition`, `get_matches(code, *, status=None)`, `get_match(id)`), `map_status` helper, and domain exceptions (`FootballDataAuthError`, `FootballDataRateLimitError`, `FootballDataError`).
+2. Add unit-style smoke tests for `map_status` covering all observed Football-Data status codes.
+3. Verify the existing live-scoring path (admin endpoint) still works unchanged — the new client isn't wired in yet.
+
+### Step 2 — Build fixture seeding on top of the new client
+
+4. Create `app/services/fixture_sync.py` with `_map_stage`, `_map_group`, `_record_from_match`, `_upsert_fixtures`, `SyncResult`, and the two public entry points (`sync_from_api`, `sync_from_cache`).
+5. Add `backend/tests/fixtures/wc2026_sample.json` (modelled on probe response shape; 8 matches covering every stage type) and `test_fixture_sync.py`.
+6. Confirm `backend/data/` is volume-mounted (done in `docker-compose.yml`).
+7. Create `scripts/seed_fixtures.py` CLI wrapper.
+
+### Step 3 — Refactor `external_scores.py` onto the shared client (alpha)
+
+8. Refactor `FootballDataProvider` → `FootballDataScoreProvider`: stop using `httpx` directly; delegate to `FootballDataClient.get_matches(code, status="LIVE,IN_PLAY,PAUSED")` and `get_match(id)`. Keep `_map_status` import from the shared module.
+9. Delete `APIFootballProvider` class.
+10. Delete `ScoreProvider` enum + `PROVIDERS` registry. Simplify or remove `get_score_provider()` factory.
+11. Update `app/api/admin.py:404` to call the new constructor directly (or via the simplified factory).
+12. Run pytest — verify all 70 existing tests still pass.
+
+### Step 4 — Run the seed
+
+13. Run first-run cleanup SQL (manual one-off — wipes fixtures, scores, match_predictions, team_predictions; preserves users and competitions).
+14. Run `python -m scripts.seed_fixtures` and inspect `SyncResult`.
+15. Spot-check 3 fixtures in the DB by hand against fifa.com / Wikipedia.
+
+### Step 5 — Commit clean state
+
+16. Commit `wc2026_fixtures.json` to git as the auditable seed snapshot.
+17. Tidy up: remove `api_football_key` / `api_football_base_url` from `Settings`, remove `API_FOOTBALL_KEY=` from `docker-compose.yml`, remove from `backend/.env.example`, remove from local `.env`.
