@@ -22,6 +22,7 @@ const countryCodeMap: Record<string, string> = {
 	'Haiti': 'ht',
 	'Trinidad and Tobago': 'tt',
 	'Curacao': 'cw',
+	'Curaçao': 'cw',
 
 	// ===== SOUTH AMERICA (CONMEBOL) =====
 	'Brazil': 'br',
@@ -72,6 +73,7 @@ const countryCodeMap: Record<string, string> = {
 	'North Macedonia': 'mk',
 	'Bosnia': 'ba',
 	'Bosnia and Herzegovina': 'ba',
+	'Bosnia-Herzegovina': 'ba',
 	'Montenegro': 'me',
 	'Georgia': 'ge',
 	'Armenia': 'am',
@@ -149,6 +151,7 @@ const countryCodeMap: Record<string, string> = {
 	'Burkina Faso': 'bf',
 	'Congo': 'cg',
 	'DR Congo': 'cd',
+	'Congo DR': 'cd',
 	'Democratic Republic of the Congo': 'cd',
 	'Zambia': 'zm',
 	'Zimbabwe': 'zw',
@@ -162,6 +165,7 @@ const countryCodeMap: Record<string, string> = {
 	'Equatorial Guinea': 'gq',
 	'Gabon': 'ga',
 	'Cape Verde': 'cv',
+	'Cape Verde Islands': 'cv',
 	'Benin': 'bj',
 	'Togo': 'tg',
 	'Niger': 'ne',
