@@ -20,7 +20,7 @@ The seeding script is the *first consumer* of a Football-Data.org integration th
 | Idempotency | Upsert by `external_id`, never destructive | Safe re-runs; handles kickoff changes without losing predictions |
 | `--wipe` flag | **Not in script** | Destructive ops live separately; one-off SQL handles first-run cleanup |
 | Third-place match | Included as new stage `"third_place"` | Football-Data exposes it as a first-class `THIRD_PLACE` stage |
-| API auth | `X-Auth-Token` header from `Settings.api_football_data` | Already plumbed in `.env` and `docker-compose.yml` |
+| API auth | `X-Auth-Token` header from `Settings.football_data_token` | Env var: `FOOTBALL_DATA_TOKEN` |
 
 ### Why Football-Data.org over API-Football
 
@@ -51,7 +51,7 @@ backend/
 
 ### `app/services/external/football_data.py`
 
-Thin async HTTP client for football-data.org/v4. Reads `Settings.api_football_data` for auth and `Settings.football_data_base_url` for the host. Tournament-agnostic: takes a competition code (e.g. `"WC"`).
+Thin async HTTP client for football-data.org/v4. Reads `Settings.football_data_token` for auth and `Settings.football_data_base_url` for the host. Tournament-agnostic: takes a competition code (e.g. `"WC"`).
 
 **Public interface:**
 
@@ -64,7 +64,7 @@ class FootballDataClient:
 
 **Behaviour:**
 
-- Auth header: `X-Auth-Token: <api_football_data>`
+- Auth header: `X-Auth-Token: <football_data_token>`
 - Network timeout: 15s per request
 - Retries: up to 3 attempts on network errors with exponential backoff (1s, 4s, 9s)
 - Rate limit (HTTP 429): one retry honouring `X-RequestCounter-Reset` if present, then raise
@@ -427,7 +427,6 @@ Non-blocking. Resolving mismatches is a follow-up frontend task.
 - Adding a `competition_id` FK to `team_predictions` — long-term schema cleanup.
 - A `--prune` flag for deleting DB-only fixtures — explicitly deferred.
 - `tla` (3-letter abbreviation) integration into the schema — Football-Data exposes a stable 3-letter code per team (`MEX`, `RSA`, etc.) which would be more durable than full names for `flags.ts` keying. Future enhancement.
-- Renaming the env var from `API_FOOTBALL_DATA` to `FOOTBALL_DATA_TOKEN` for clarity. Cosmetic; carrying current name.
 - Removing the dead-end API-Football integration (`api_football_key`, `api_football_base_url` settings) — kept for now in case of future need; can be cleaned up later if confirmed unused.
 
 ## Future considerations

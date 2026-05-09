@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     api_football_base_url: str = "https://v3.football.api-sports.io"
 
     # Football-Data.org
-    api_football_data: str = ""
+    football_data_token: str = ""
     football_data_base_url: str = "https://api.football-data.org/v4"
 
     # Tournament config

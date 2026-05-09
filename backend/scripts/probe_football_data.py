@@ -34,15 +34,15 @@ def _show_rate_limits(resp: httpx.Response, label: str) -> None:
 
 async def main() -> None:
     settings = get_settings()
-    if not settings.api_football_data:
-        print("ERROR: API_FOOTBALL_DATA not set in container env.", file=sys.stderr)
+    if not settings.football_data_token:
+        print("ERROR: FOOTBALL_DATA_TOKEN not set in container env.", file=sys.stderr)
         print("  Run: docker-compose run --rm backend ... (uses .env at run time)", file=sys.stderr)
         sys.exit(1)
 
     out_dir = Path(__file__).parent.parent / "data" / "probe"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    headers = {"X-Auth-Token": settings.api_football_data}
+    headers = {"X-Auth-Token": settings.football_data_token}
     base = settings.football_data_base_url
 
     async with httpx.AsyncClient(timeout=15.0) as client:
