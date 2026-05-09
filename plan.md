@@ -120,25 +120,50 @@ predictorv2/
 
 **Deliverable:** Visual bracket with team selection
 
-### Phase 4: Scoring & Leaderboard
-- [ ] Scoring service (fixed + hybrid modes)
-- [ ] Leaderboard calculation with caching
-- [ ] Live score sync from external API
-- [ ] 60-second polling endpoint
-- [ ] Position change animations
-- [ ] Score breakdown view
+### Phase 4: Scoring & Leaderboard ✅ MOSTLY COMPLETED
+- [x] Scoring service (fixed + hybrid modes) — `backend/app/services/scoring.py`, both strategies via Protocol pattern, 23 tests in `test_scoring.py`
+- [x] Leaderboard calculation with caching — `backend/app/services/leaderboard.py` 30s in-memory TTL, `invalidate_cache()` hooked from admin sync
+- [x] Live score sync from external API (manual) — `external_scores.py` with `FootballDataScoreProvider`, admin-triggered via `POST /admin/scores/sync` (`admin.py:394`)
+- [x] 60-second polling endpoint — `GET /scores/poll` (`scores.py:35`) returns live matches + leaderboard; frontend `startPolling(60000)` in `leaderboard.ts:81`
+- [x] Position change animations — CSS keyframes (`animate-slide-up`) with stagger; movement arrows ▲/▼ from `leaderboard.py:172` position diff
+- [x] Score breakdown view — `LeaderboardEntry.breakdown`, expandable on leaderboard rows + per-user profile pages
+- [ ] **Scheduled background score sync** — currently admin-triggered only; needs an automated poller during match windows (only Phase 4 item that's genuinely open)
 
 **Deliverable:** Complete scoring and live updates
 
 ### Phase 5: Polish & Deploy
-- [ ] Admin dashboard
-- [ ] Production Docker setup
-- [ ] Cloudflare Tunnel or VPS deployment
+- [~] Admin dashboard — backend API complete (`admin.py` with `/stats`, `/users`, `/competitions`, phase activation, score sync); frontend at `/admin/+page.svelte` partially wired
+- [x] Production Docker setup — `docker-compose.yml` `prod` profile + `nginx/nginx.conf` (rate-limiting, gzip, security headers, 1y static cache)
+- [ ] Cloudflare Tunnel or VPS deployment — no `cloudflared` config or deployment automation yet
 - [ ] "Dry run" test with friends
-- [ ] Mobile device testing
+- [ ] Mobile device testing — substantive support exists (375px-first design, separate mobile/desktop views); no automated test suite
 - [ ] Final bug fixes
 
 **Deliverable:** Production-ready for World Cup 2026
+
+---
+
+## Recently shipped (outside the original plan)
+
+These features weren't in the original phase breakdown but landed during build:
+
+- **Results page + community scatter plot** (`746bc2c`, polished `8b92deb`) — post-match feedback UI showing all players' predictions per fixture as an SVG scatter, color-coded by accuracy.
+- **Public player profiles** (`69a695c` + Phase 1/2 separation in `ea9f703`) — per-user breakdowns with phase-separated bracket views.
+- **Mobile knockout bracket redesign** (`bb93c78`) — swipeable two-round pager replacing the always-expanded accordion; works for 4-round (Euro) and 5-round (World Cup) formats.
+- **Frontend design pass** (`67f7a08`) — extracted shared components, standardized CSS, removed dead code.
+- **Configurable scoring system** (`08043a9`) — strategy pattern via YAML config (`fixed` vs `hybrid` modes).
+- **Real WC2026 fixtures seeded from Football-Data.org** (`94f6596`–`7710974`) — shared `FootballDataClient` powers both fixture seeding and live scoring; 104 real fixtures in DB, JSON cache committed for offline re-seed.
+
+## Remaining-work punch list (sorted by criticality for June 11 launch)
+
+1. **Scheduled background score sync** — wraps the existing manual sync in a smart poller; without this, scores require an admin click during every match.
+2. **Frontend TBD rendering for placeholder team strings** — knockout fixtures currently show `slot:round_of_32:537417:home` literally to users until live-scoring resolves them.
+3. **Cloudflare Tunnel / VPS deployment** — Docker prod setup is ready; needs the actual hosting decision and tunnel/DNS plumbing.
+4. **Admin dashboard frontend wiring** — backend API is complete; the UI doesn't fully consume it yet.
+5. **Dry run with friends** — pre-tournament stress test with real users.
+6. **Final mobile pass** — owner: user (you said you'd test the bracket on a real device).
+7. **`flags.ts` alias updates** — cross-reference team names from the seeded fixtures against the flag mapping; add aliases for any mismatches.
+8. **Loose ends from `issues.md`** — duplicate `CORS_ORIGINS` between `docker-compose.yml` and `.env`; `greenlet` missing.
 
 ---
 
