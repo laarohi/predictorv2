@@ -1,6 +1,6 @@
 """Tests for fixture_sync — mapping helpers, upsert, sync entry points."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import pytest
 
@@ -81,7 +81,9 @@ class TestRecordFromMatch:
         assert rec.external_id == "537327"
         assert rec.home_team == "Mexico"
         assert rec.away_team == "South Africa"
-        assert rec.kickoff == datetime(2026, 6, 11, 19, 0, tzinfo=timezone.utc)
+        # Naive UTC, matching the Fixture.kickoff schema convention
+        assert rec.kickoff == datetime(2026, 6, 11, 19, 0)
+        assert rec.kickoff.tzinfo is None
         assert rec.stage == "group"
         assert rec.group == "A"
         assert rec.status == MatchStatus.SCHEDULED
@@ -93,3 +95,113 @@ class TestRecordFromMatch:
         assert rec.away_team == "slot:round_of_32:537417:away"
         assert rec.stage == "round_of_32"
         assert rec.group is None
+
+
+# ----- Upsert tests -----
+
+from decimal import Decimal
+
+import pytest_asyncio
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+from sqlmodel import SQLModel
+
+from app.models.competition import Competition
+from app.services.fixture_sync import SyncResult, _upsert_fixtures
+
+
+@pytest_asyncio.fixture
+async def session() -> AsyncSession:
+    """In-memory SQLite session for fast unit tests."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(SQLModel.metadata.create_all)
+    session_factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with session_factory() as s:
+        yield s
+
+
+@pytest_asyncio.fixture
+async def competition(session: AsyncSession) -> Competition:
+    comp = Competition(name="FIFA World Cup 2026", entry_fee=Decimal("0"))
+    session.add(comp)
+    await session.commit()
+    await session.refresh(comp)
+    return comp
+
+
+def _record(
+    *,
+    ext: str,
+    home: str = "Mexico",
+    away: str = "South Africa",
+    kickoff: datetime = datetime(2026, 6, 11, 19, 0),
+    stage: str = "group",
+    group: str | None = "A",
+) -> FixtureRecord:
+    return FixtureRecord(
+        external_id=ext,
+        home_team=home,
+        away_team=away,
+        kickoff=kickoff,
+        stage=stage,
+        group=group,
+        status=MatchStatus.SCHEDULED,
+    )
+
+
+class TestUpsertFixtures:
+    @pytest.mark.asyncio
+    async def test_inserts_new_fixtures(self, session, competition) -> None:
+        records = [_record(ext="1"), _record(ext="2", home="Brazil", away="Croatia")]
+        result = await _upsert_fixtures(session, records, competition.id)
+        assert result.created == 2
+        assert result.updated == 0
+        assert result.unchanged == 0
+
+    @pytest.mark.asyncio
+    async def test_skips_unchanged(self, session, competition) -> None:
+        records = [_record(ext="1")]
+        await _upsert_fixtures(session, records, competition.id)
+        result2 = await _upsert_fixtures(session, records, competition.id)
+        assert result2.created == 0
+        assert result2.updated == 0
+        assert result2.unchanged == 1
+
+    @pytest.mark.asyncio
+    async def test_updates_kickoff_change(self, session, competition) -> None:
+        await _upsert_fixtures(session, [_record(ext="1")], competition.id)
+        changed = [_record(ext="1", kickoff=datetime(2026, 6, 11, 20, 0))]
+        result = await _upsert_fixtures(session, changed, competition.id)
+        assert result.updated == 1
+        assert result.changed_fields["kickoff"] == 1
+
+    @pytest.mark.asyncio
+    async def test_updates_team_resolution(self, session, competition) -> None:
+        # Simulate a knockout slot getting a real team
+        await _upsert_fixtures(
+            session,
+            [
+                _record(
+                    ext="1",
+                    home="slot:round_of_32:1:home",
+                    away="slot:round_of_32:1:away",
+                    stage="round_of_32",
+                    group=None,
+                )
+            ],
+            competition.id,
+        )
+        resolved = [_record(ext="1", home="USA", away="Spain", stage="round_of_32", group=None)]
+        result = await _upsert_fixtures(session, resolved, competition.id)
+        assert result.updated == 1
+        assert result.changed_fields["home_team"] == 1
+        assert result.changed_fields["away_team"] == 1
+
+    @pytest.mark.asyncio
+    async def test_db_only_logged_not_deleted(self, session, competition) -> None:
+        # Insert one, then sync with a different external_id — original stays
+        await _upsert_fixtures(session, [_record(ext="1")], competition.id)
+        result = await _upsert_fixtures(session, [_record(ext="2")], competition.id)
+        assert result.created == 1
+        assert result.db_only_count == 1
