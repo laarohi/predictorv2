@@ -30,7 +30,6 @@ services:
       - CORS_ORIGINS_STR=${CORS_ORIGINS_STR:-http://localhost:5173,http://localhost:3000}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
-      - API_FOOTBALL_KEY=${API_FOOTBALL_KEY:-}
       - FOOTBALL_DATA_TOKEN=${FOOTBALL_DATA_TOKEN:-}
       - TOURNAMENT_CONFIG_PATH=/app/config/worldcup2026.yml
     volumes:

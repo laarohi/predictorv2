@@ -34,10 +34,6 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/api/auth/google/callback"
 
-    # API-Football (api-sports.io)
-    api_football_key: str = ""
-    api_football_base_url: str = "https://v3.football.api-sports.io"
-
     # Football-Data.org
     football_data_token: str = ""
     football_data_base_url: str = "https://api.football-data.org/v4"
