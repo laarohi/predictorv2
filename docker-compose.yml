@@ -31,11 +31,13 @@ services:
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
       - API_FOOTBALL_KEY=${API_FOOTBALL_KEY:-}
+      - API_FOOTBALL_DATA=${API_FOOTBALL_DATA:-}
       - TOURNAMENT_CONFIG_PATH=/app/config/worldcup2026.yml
     volumes:
       - ./backend/app:/app/app
       - ./backend/scripts:/app/scripts
       - ./backend/tests:/app/tests
+      - ./backend/data:/app/data
       - ./config:/app/config
     ports:
       - "8000:8000"
