@@ -210,3 +210,59 @@ async def sync_from_cache(
     matches = payload.get("matches", [])
     records = [_record_from_match(m) for m in matches]
     return await _upsert_fixtures(session, records, competition_id)
+
+
+from app.services.external.football_data import FootballDataClient
+
+
+class FootballDataEmptyResponseError(FixtureSyncError):
+    """Football-Data returned zero matches — likely wrong competition code."""
+
+
+async def sync_from_api(
+    session: AsyncSession,
+    competition_id: UUID,
+    *,
+    competition_code: str = "WC",
+    cache_path: Path | None = None,
+) -> SyncResult:
+    """Fetch matches from Football-Data, optionally write to cache, then upsert."""
+    client = FootballDataClient()
+    matches = await client.get_matches(competition_code)
+
+    if not matches:
+        raise FootballDataEmptyResponseError(
+            f"Football-Data returned zero matches for competition {competition_code!r}"
+        )
+
+    if cache_path is not None:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps({"matches": matches}, indent=2))
+
+    records = [_record_from_match(m) for m in matches]
+    result = await _upsert_fixtures(session, records, competition_id)
+    result.unmatched_flag_teams = _collect_unmatched_flag_teams(matches)
+    return result
+
+
+def _collect_unmatched_flag_teams(matches: list[dict]) -> list[str]:
+    """Extract unique team names from matches and report any not present in flags.ts.
+
+    Reads frontend/src/lib/utils/flags.ts as plain text and grep-matches keys.
+    Best-effort — failing to read flags.ts logs a warning but doesn't fail the sync.
+    """
+    names: set[str] = set()
+    for m in matches:
+        for side in ("homeTeam", "awayTeam"):
+            t = m.get(side) or {}
+            n = t.get("name")
+            if n:
+                names.add(n)
+
+    flags_path = Path(__file__).parents[3] / "frontend" / "src" / "lib" / "utils" / "flags.ts"
+    try:
+        flags_text = flags_path.read_text()
+    except OSError:
+        return []  # frontend file not accessible from this environment
+
+    return sorted([n for n in names if f"'{n}'" not in flags_text and f'"{n}"' not in flags_text])
