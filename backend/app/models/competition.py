@@ -34,6 +34,9 @@ class Competition(SQLModel, table=True):
     # Configuration reference
     config_file: str | None = None  # Path to YAML config
 
+    # External API identifier (e.g. Football-Data competition code "WC")
+    external_id: str | None = Field(default=None, index=True)
+
     is_active: bool = Field(default=True)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)

@@ -28,12 +28,17 @@ DEFAULT_COMPETITION_CODE = "WC"
 DEFAULT_COMPETITION_NAME = "FIFA World Cup 2026"
 
 
-async def _resolve_competition(session: AsyncSession, name: str) -> Competition:
+async def _resolve_competition(session: AsyncSession, name: str, external_id: str) -> Competition:
+    """Find or create a competition. Backfills external_id if missing on existing row."""
     result = await session.execute(select(Competition).where(Competition.name == name))
     comp = result.scalar_one_or_none()
     if comp is not None:
+        if comp.external_id != external_id:
+            comp.external_id = external_id
+            await session.commit()
+            await session.refresh(comp)
         return comp
-    comp = Competition(name=name)
+    comp = Competition(name=name, external_id=external_id)
     session.add(comp)
     await session.commit()
     await session.refresh(comp)
@@ -60,7 +65,7 @@ async def _main(args: argparse.Namespace) -> int:
     session_factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
     async with session_factory() as session:
-        comp = await _resolve_competition(session, args.competition_name)
+        comp = await _resolve_competition(session, args.competition_name, args.competition_code)
 
         cache_path = Path(args.cache_path)
 
