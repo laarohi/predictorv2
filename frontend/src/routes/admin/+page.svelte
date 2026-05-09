@@ -16,8 +16,14 @@
 		setPhase1Deadline,
 		activatePhase2,
 		deactivatePhase2,
+		getAllUsers,
+		toggleUserAdmin,
+		toggleUserActive,
+		syncScores,
 		type AdminStats,
-		type CompetitionAdminView
+		type CompetitionAdminView,
+		type UserAdminView,
+		type SyncScoresResponse
 	} from '$lib/api/admin';
 
 	// Redirect non-admins
@@ -31,6 +37,7 @@
 
 	let stats: AdminStats | null = null;
 	let competitions: CompetitionAdminView[] = [];
+	let users: UserAdminView[] = [];
 	let loading = true;
 	let error: string | null = null;
 
@@ -48,6 +55,17 @@
 	let activationError: string | null = null;
 	let activationSuccess: string | null = null;
 
+	// Manual score sync
+	let syncing = false;
+	let syncResult: SyncScoresResponse | null = null;
+	let syncedAt: Date | null = null;
+	let syncError: string | null = null;
+
+	// User management
+	let userSearch = '';
+	let togglingUserId: string | null = null;
+	let userActionError: string | null = null;
+
 	onMount(async () => {
 		if ($user?.is_admin) {
 			await loadData();
@@ -58,13 +76,72 @@
 		loading = true;
 		error = null;
 		try {
-			[stats, competitions] = await Promise.all([getAdminStats(), getCompetitions()]);
+			[stats, competitions, users] = await Promise.all([
+				getAdminStats(),
+				getCompetitions(),
+				getAllUsers()
+			]);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load admin data';
 		} finally {
 			loading = false;
 		}
 	}
+
+	async function handleSyncScores() {
+		syncing = true;
+		syncResult = null;
+		syncError = null;
+		try {
+			syncResult = await syncScores();
+			syncedAt = new Date();
+			// Refresh stats so live_fixtures count updates
+			await loadData();
+		} catch (e) {
+			syncError = e instanceof Error ? e.message : 'Failed to sync scores';
+		} finally {
+			syncing = false;
+		}
+	}
+
+	async function handleToggleAdmin(u: UserAdminView) {
+		const action = u.is_admin ? 'remove admin from' : 'grant admin to';
+		if (!confirm(`Are you sure you want to ${action} ${u.name}?`)) return;
+
+		togglingUserId = u.id;
+		userActionError = null;
+		try {
+			const updated = await toggleUserAdmin(u.id);
+			users = users.map((x) => (x.id === updated.id ? updated : x));
+		} catch (e) {
+			userActionError = e instanceof Error ? e.message : 'Failed to update admin status';
+		} finally {
+			togglingUserId = null;
+		}
+	}
+
+	async function handleToggleActive(u: UserAdminView) {
+		const action = u.is_active ? 'deactivate' : 'reactivate';
+		if (!confirm(`Are you sure you want to ${action} ${u.name}?`)) return;
+
+		togglingUserId = u.id;
+		userActionError = null;
+		try {
+			const updated = await toggleUserActive(u.id);
+			users = users.map((x) => (x.id === updated.id ? updated : x));
+		} catch (e) {
+			userActionError = e instanceof Error ? e.message : 'Failed to update active status';
+		} finally {
+			togglingUserId = null;
+		}
+	}
+
+	$: filteredUsers = userSearch.trim()
+		? users.filter((u) => {
+				const q = userSearch.toLowerCase();
+				return u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q);
+			})
+		: users;
 
 	async function handleSetPhase1Deadline() {
 		if (!phase1DeadlineDate) {
@@ -182,6 +259,65 @@
 						</div>
 					</div>
 				{/if}
+
+				<!-- Manual Score Sync -->
+				<div class="stadium-card no-glow p-4 sm:p-6">
+					<div class="flex items-center gap-3 mb-4">
+						<div class="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
+							<svg class="w-5 h-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+							</svg>
+						</div>
+						<div class="flex-1">
+							<h2 class="text-lg font-display tracking-wide">Score Sync</h2>
+							<p class="text-xs text-base-content/50">
+								Manually trigger a Football-Data.org sync. The background scheduler runs every 60s during match windows; this is the manual escape hatch.
+							</p>
+						</div>
+					</div>
+
+					{#if syncError}
+						<div class="alert alert-error mb-4">
+							<span>{syncError}</span>
+						</div>
+					{/if}
+
+					{#if syncResult}
+						<div class="mb-4 p-4 rounded-xl bg-base-200/50">
+							<div class="flex items-center gap-2 mb-2">
+								<span class="text-sm font-medium">Last sync:</span>
+								<span class="text-sm text-base-content/70">{syncedAt?.toLocaleTimeString() ?? ''}</span>
+							</div>
+							<div class="flex flex-wrap gap-3 text-sm">
+								<span class="badge badge-success gap-1">
+									<span class="font-mono">{syncResult.synced}</span> created
+								</span>
+								<span class="badge badge-info gap-1">
+									<span class="font-mono">{syncResult.updated}</span> updated
+								</span>
+								{#if syncResult.errors.length > 0}
+									<span class="badge badge-error gap-1">
+										<span class="font-mono">{syncResult.errors.length}</span> errors
+									</span>
+								{/if}
+							</div>
+							{#if syncResult.errors.length > 0}
+								<div class="mt-3 space-y-1 text-xs text-error/80">
+									{#each syncResult.errors as err}
+										<div>• {err}</div>
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/if}
+
+					<button class="btn btn-success" on:click={handleSyncScores} disabled={syncing}>
+						{#if syncing}
+							<span class="loading loading-spinner loading-sm"></span>
+						{/if}
+						Sync scores now
+					</button>
+				</div>
 
 				<!-- Phase 1 Deadline Control -->
 				<div class="stadium-card no-glow p-4 sm:p-6">
@@ -366,6 +502,91 @@
 							Deactivate Phase 2
 						</button>
 					{/if}
+				</div>
+
+				<!-- User Management -->
+				<div class="stadium-card no-glow p-4 sm:p-6">
+					<div class="flex items-center gap-3 mb-4">
+						<div class="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center">
+							<svg class="w-5 h-5 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+							</svg>
+						</div>
+						<div class="flex-1">
+							<h2 class="text-lg font-display tracking-wide">Users</h2>
+							<p class="text-xs text-base-content/50">
+								{users.length} registered. Toggle admin or active state.
+							</p>
+						</div>
+					</div>
+
+					{#if userActionError}
+						<div class="alert alert-error mb-4">
+							<span>{userActionError}</span>
+						</div>
+					{/if}
+
+					<div class="form-control mb-4">
+						<input
+							type="text"
+							placeholder="Search by name or email..."
+							class="input input-bordered input-sm"
+							bind:value={userSearch}
+						/>
+					</div>
+
+					<div class="overflow-x-auto -mx-4 sm:mx-0">
+						<table class="table table-sm">
+							<thead>
+								<tr>
+									<th>Name</th>
+									<th class="hidden sm:table-cell">Email</th>
+									<th class="text-right">Predictions</th>
+									<th class="text-center">Admin</th>
+									<th class="text-center">Active</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each filteredUsers as u (u.id)}
+									{@const busy = togglingUserId === u.id}
+									<tr class:opacity-50={!u.is_active}>
+										<td>
+											<div class="font-medium">{u.name}</div>
+											<div class="text-[10px] text-base-content/40 sm:hidden">{u.email}</div>
+											<div class="text-[10px] text-base-content/40">{u.auth_provider}</div>
+										</td>
+										<td class="hidden sm:table-cell text-xs text-base-content/70">{u.email}</td>
+										<td class="text-right font-mono text-sm">{u.prediction_count}</td>
+										<td class="text-center">
+											<input
+												type="checkbox"
+												class="toggle toggle-sm toggle-primary"
+												checked={u.is_admin}
+												disabled={busy}
+												on:change={() => handleToggleAdmin(u)}
+											/>
+										</td>
+										<td class="text-center">
+											<input
+												type="checkbox"
+												class="toggle toggle-sm toggle-success"
+												checked={u.is_active}
+												disabled={busy}
+												on:change={() => handleToggleActive(u)}
+											/>
+										</td>
+									</tr>
+								{/each}
+								{#if filteredUsers.length === 0}
+									<tr>
+										<td colspan="5" class="text-center py-6 text-base-content/40 text-sm">
+											{userSearch ? 'No users match your search.' : 'No users yet.'}
+										</td>
+									</tr>
+								{/if}
+							</tbody>
+						</table>
+					</div>
 				</div>
 
 				<!-- Active Competition -->

@@ -28,6 +28,23 @@ export interface CompetitionAdminView {
 	user_count: number;
 }
 
+export interface UserAdminView {
+	id: string;
+	email: string;
+	name: string;
+	auth_provider: string;
+	is_admin: boolean;
+	is_active: boolean;
+	created_at: string;
+	prediction_count: number;
+}
+
+export interface SyncScoresResponse {
+	synced: number;
+	updated: number;
+	errors: string[];
+}
+
 export async function getAdminStats(): Promise<AdminStats> {
 	return api.get<AdminStats>('/admin/stats');
 }
@@ -46,4 +63,20 @@ export async function activatePhase2(bracketDeadline: string): Promise<{ status:
 
 export async function deactivatePhase2(): Promise<{ status: string }> {
 	return api.post('/admin/competition/phase2/deactivate');
+}
+
+export async function getAllUsers(): Promise<UserAdminView[]> {
+	return api.get<UserAdminView[]>('/admin/users');
+}
+
+export async function toggleUserAdmin(userId: string): Promise<UserAdminView> {
+	return api.patch<UserAdminView>(`/admin/users/${userId}/admin`);
+}
+
+export async function toggleUserActive(userId: string): Promise<UserAdminView> {
+	return api.patch<UserAdminView>(`/admin/users/${userId}/active`);
+}
+
+export async function syncScores(): Promise<SyncScoresResponse> {
+	return api.post<SyncScoresResponse>('/admin/scores/sync');
 }
