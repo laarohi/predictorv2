@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { CommunityPrediction, FixtureScore } from '$types';
 	import { getFlagUrl, hasFlag } from '$lib/utils/flags';
+	import { displayTeamName } from '$lib/utils/teamName';
 
 	export let predictions: CommunityPrediction[];
 	export let actual: FixtureScore | null;
@@ -294,7 +295,7 @@
 				class="fill-base-content/60"
 				font-size="11"
 				font-weight="700"
-			>{homeTeam}</text>
+			>{displayTeamName(homeTeam)}</text>
 		{/if}
 		<!-- Away team flag: centered below the plot (X-axis) -->
 		{#if hasFlag(awayTeam)}
@@ -314,7 +315,7 @@
 				class="fill-base-content/60"
 				font-size="11"
 				font-weight="700"
-			>{awayTeam}</text>
+			>{displayTeamName(awayTeam)}</text>
 		{/if}
 
 		<!-- Prediction dots / stars -->

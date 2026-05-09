@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher, afterUpdate } from 'svelte';
 	import { getFlagUrl, hasFlag } from '$lib/utils/flags';
+	import { displayTeamName } from '$lib/utils/teamName';
 
 	export let matchId: string;
 	export let matchNumber: number | null = null; // FIFA official match number
@@ -77,7 +78,7 @@
 			{:else}
 				<div class="team-slot-flag-placeholder"></div>
 			{/if}
-			<span class="team-slot-name">{team1}</span>
+			<span class="team-slot-name">{displayTeamName(team1)}</span>
 		{:else}
 			<span class="team-slot-placeholder">TBD</span>
 		{/if}
@@ -114,7 +115,7 @@
 			{:else}
 				<div class="team-slot-flag-placeholder"></div>
 			{/if}
-			<span class="team-slot-name">{team2}</span>
+			<span class="team-slot-name">{displayTeamName(team2)}</span>
 		{:else}
 			<span class="team-slot-placeholder">TBD</span>
 		{/if}

@@ -2,6 +2,7 @@
 	import { updateLocalPrediction, unsavedChanges } from '$stores/predictions';
 	import { formatKickoff, getTimeUntilKickoff } from '$stores/fixtures';
 	import { getFlagUrl, hasFlag } from '$lib/utils/flags';
+	import { displayTeamName } from '$lib/utils/teamName';
 	import { getPredictionResult, type PredictionResult } from '$lib/utils/predictionResult';
 	import type { Fixture, MatchPrediction } from '$types';
 
@@ -125,7 +126,7 @@
 			{:else}
 				<div class="team-flag-placeholder"></div>
 			{/if}
-			<span class="team-name-card">{fixture.home_team}</span>
+			<span class="team-name-card">{displayTeamName(fixture.home_team)}</span>
 		</div>
 
 		<!-- Score inputs with VS -->
@@ -171,7 +172,7 @@
 			{:else}
 				<div class="team-flag-placeholder"></div>
 			{/if}
-			<span class="team-name-card">{fixture.away_team}</span>
+			<span class="team-name-card">{displayTeamName(fixture.away_team)}</span>
 		</div>
 	</div>
 

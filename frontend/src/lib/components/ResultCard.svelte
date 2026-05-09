@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { getFlagUrl, hasFlag } from '$lib/utils/flags';
+	import { displayTeamName } from '$lib/utils/teamName';
 	import { getPredictionResult } from '$lib/utils/predictionResult';
 	import { getCommunityPredictions } from '$api/predictions';
 	import ScatterPlot from './ScatterPlot.svelte';
@@ -66,13 +67,13 @@
 					{#if hasFlag(fixture.home_team)}
 						<img src={getFlagUrl(fixture.home_team, 'sm')} alt="" class="w-5 h-auto rounded-sm" />
 					{/if}
-					<span class="font-semibold text-sm truncate">{fixture.home_team}</span>
+					<span class="font-semibold text-sm truncate">{displayTeamName(fixture.home_team)}</span>
 					{#if fixture.score}
 						<span class="font-display text-lg tracking-wide mx-1">
 							{fixture.score.home_score} - {fixture.score.away_score}
 						</span>
 					{/if}
-					<span class="font-semibold text-sm truncate">{fixture.away_team}</span>
+					<span class="font-semibold text-sm truncate">{displayTeamName(fixture.away_team)}</span>
 					{#if hasFlag(fixture.away_team)}
 						<img src={getFlagUrl(fixture.away_team, 'sm')} alt="" class="w-5 h-auto rounded-sm" />
 					{/if}

@@ -7,6 +7,7 @@
 	import { getPredictionResult, type PredictionResult } from '$lib/utils/predictionResult';
 	import { getCommunityPredictions } from '$api/predictions';
 	import { getFlagUrl, hasFlag } from '$lib/utils/flags';
+	import { displayTeamName } from '$lib/utils/teamName';
 	import ScatterPlot from '$lib/components/ScatterPlot.svelte';
 	import type { Fixture, CommunityPredictionsResponse } from '$types';
 
@@ -300,13 +301,13 @@
 												{#if hasFlag(fixture.home_team)}
 													<img src={getFlagUrl(fixture.home_team, 'sm')} alt="" class="w-4 h-auto rounded-sm shrink-0" />
 												{/if}
-												<span class="truncate text-xs text-base-content/80">{fixture.home_team}</span>
+												<span class="truncate text-xs text-base-content/80">{displayTeamName(fixture.home_team)}</span>
 												{#if fixture.score}
 													<span class="font-display text-sm tracking-wide shrink-0 mx-0.5">
 														{fixture.score.home_score} - {fixture.score.away_score}
 													</span>
 												{/if}
-												<span class="truncate text-xs text-base-content/80">{fixture.away_team}</span>
+												<span class="truncate text-xs text-base-content/80">{displayTeamName(fixture.away_team)}</span>
 												{#if hasFlag(fixture.away_team)}
 													<img src={getFlagUrl(fixture.away_team, 'sm')} alt="" class="w-4 h-auto rounded-sm shrink-0" />
 												{/if}
@@ -373,13 +374,13 @@
 															{#if hasFlag(fixture.home_team)}
 																<img src={getFlagUrl(fixture.home_team, 'sm')} alt="" class="w-4 h-auto rounded-sm" />
 															{/if}
-															<span class="font-semibold text-xs">{fixture.home_team}</span>
+															<span class="font-semibold text-xs">{displayTeamName(fixture.home_team)}</span>
 															{#if fixture.score}
 																<span class="font-display text-base tracking-wide">
 																	{fixture.score.home_score} - {fixture.score.away_score}
 																</span>
 															{/if}
-															<span class="font-semibold text-xs">{fixture.away_team}</span>
+															<span class="font-semibold text-xs">{displayTeamName(fixture.away_team)}</span>
 															{#if hasFlag(fixture.away_team)}
 																<img src={getFlagUrl(fixture.away_team, 'sm')} alt="" class="w-4 h-auto rounded-sm" />
 															{/if}

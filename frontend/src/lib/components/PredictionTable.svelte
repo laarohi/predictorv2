@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { getFlagUrl, hasFlag } from '$lib/utils/flags';
+	import { displayTeamName } from '$lib/utils/teamName';
 	import type { UserMatchPredictionView } from '$types';
 
 	export let predictions: UserMatchPredictionView[];
@@ -53,9 +54,9 @@
 							{#if hasFlag(pred.home_team)}
 								<img src={getFlagUrl(pred.home_team, 'sm')} alt="" class="w-4 h-auto rounded-sm" />
 							{/if}
-							<span class="font-medium truncate max-w-[80px]">{pred.home_team}</span>
+							<span class="font-medium truncate max-w-[80px]">{displayTeamName(pred.home_team)}</span>
 							<span class="text-base-content/30">vs</span>
-							<span class="font-medium truncate max-w-[80px]">{pred.away_team}</span>
+							<span class="font-medium truncate max-w-[80px]">{displayTeamName(pred.away_team)}</span>
 							{#if hasFlag(pred.away_team)}
 								<img src={getFlagUrl(pred.away_team, 'sm')} alt="" class="w-4 h-auto rounded-sm" />
 							{/if}
@@ -101,9 +102,9 @@
 					{#if hasFlag(pred.home_team)}
 						<img src={getFlagUrl(pred.home_team, 'sm')} alt="" class="w-4 h-auto rounded-sm shrink-0" />
 					{/if}
-					<span class="font-medium truncate">{pred.home_team}</span>
+					<span class="font-medium truncate">{displayTeamName(pred.home_team)}</span>
 					<span class="text-base-content/30 shrink-0">v</span>
-					<span class="font-medium truncate">{pred.away_team}</span>
+					<span class="font-medium truncate">{displayTeamName(pred.away_team)}</span>
 					{#if hasFlag(pred.away_team)}
 						<img src={getFlagUrl(pred.away_team, 'sm')} alt="" class="w-4 h-auto rounded-sm shrink-0" />
 					{/if}
