@@ -205,3 +205,30 @@ class TestUpsertFixtures:
         result = await _upsert_fixtures(session, [_record(ext="2")], competition.id)
         assert result.created == 1
         assert result.db_only_count == 1
+
+
+# ----- sync_from_cache tests -----
+
+from pathlib import Path
+
+from app.services.fixture_sync import sync_from_cache
+
+
+SAMPLE_PATH = Path(__file__).parent / "fixtures" / "wc2026_sample.json"
+
+
+class TestSyncFromCache:
+    @pytest.mark.asyncio
+    async def test_reads_json_and_upserts(self, session, competition) -> None:
+        result = await sync_from_cache(session, competition.id, SAMPLE_PATH)
+        assert result.created == 8
+        assert result.updated == 0
+        # Re-run from same file → all unchanged
+        result2 = await sync_from_cache(session, competition.id, SAMPLE_PATH)
+        assert result2.created == 0
+        assert result2.unchanged == 8
+
+    @pytest.mark.asyncio
+    async def test_missing_file_raises(self, session, competition) -> None:
+        with pytest.raises(FileNotFoundError):
+            await sync_from_cache(session, competition.id, Path("/no/such/file.json"))

@@ -189,3 +189,24 @@ async def _upsert_fixtures(
     out.db_only_count = len(set(existing.keys()) - seen_ext_ids)
     await session.commit()
     return out
+
+
+# ----- Public sync entry points -----
+
+import json
+from pathlib import Path
+
+
+async def sync_from_cache(
+    session: AsyncSession,
+    competition_id: UUID,
+    cache_path: Path,
+) -> SyncResult:
+    """Read a Football-Data /matches response from disk and upsert."""
+    if not cache_path.exists():
+        raise FileNotFoundError(f"Cache file not found: {cache_path}")
+
+    payload = json.loads(cache_path.read_text())
+    matches = payload.get("matches", [])
+    records = [_record_from_match(m) for m in matches]
+    return await _upsert_fixtures(session, records, competition_id)

@@ -1,0 +1,76 @@
+{
+  "matches": [
+    {
+      "id": 1001,
+      "utcDate": "2026-06-11T19:00:00Z",
+      "status": "TIMED",
+      "stage": "GROUP_STAGE",
+      "group": "GROUP_A",
+      "homeTeam": {"id": 769, "name": "Mexico", "shortName": "Mexico", "tla": "MEX"},
+      "awayTeam": {"id": 774, "name": "South Africa", "shortName": "South Africa", "tla": "RSA"}
+    },
+    {
+      "id": 1002,
+      "utcDate": "2026-06-12T19:00:00Z",
+      "status": "TIMED",
+      "stage": "GROUP_STAGE",
+      "group": "GROUP_B",
+      "homeTeam": {"id": 759, "name": "Brazil", "shortName": "Brazil", "tla": "BRA"},
+      "awayTeam": {"id": 763, "name": "Croatia", "shortName": "Croatia", "tla": "CRO"}
+    },
+    {
+      "id": 1003,
+      "utcDate": "2026-06-28T19:00:00Z",
+      "status": "TIMED",
+      "stage": "LAST_32",
+      "group": null,
+      "homeTeam": {"id": null, "name": null, "shortName": null, "tla": null},
+      "awayTeam": {"id": null, "name": null, "shortName": null, "tla": null}
+    },
+    {
+      "id": 1004,
+      "utcDate": "2026-06-29T19:00:00Z",
+      "status": "TIMED",
+      "stage": "LAST_32",
+      "group": null,
+      "homeTeam": {"id": null, "name": null, "shortName": null, "tla": null},
+      "awayTeam": {"id": null, "name": null, "shortName": null, "tla": null}
+    },
+    {
+      "id": 1005,
+      "utcDate": "2026-07-04T19:00:00Z",
+      "status": "TIMED",
+      "stage": "LAST_16",
+      "group": null,
+      "homeTeam": {"id": null, "name": null, "shortName": null, "tla": null},
+      "awayTeam": {"id": null, "name": null, "shortName": null, "tla": null}
+    },
+    {
+      "id": 1006,
+      "utcDate": "2026-07-09T19:00:00Z",
+      "status": "TIMED",
+      "stage": "QUARTER_FINALS",
+      "group": null,
+      "homeTeam": {"id": null, "name": null, "shortName": null, "tla": null},
+      "awayTeam": {"id": null, "name": null, "shortName": null, "tla": null}
+    },
+    {
+      "id": 1007,
+      "utcDate": "2026-07-18T19:00:00Z",
+      "status": "TIMED",
+      "stage": "THIRD_PLACE",
+      "group": null,
+      "homeTeam": {"id": null, "name": null, "shortName": null, "tla": null},
+      "awayTeam": {"id": null, "name": null, "shortName": null, "tla": null}
+    },
+    {
+      "id": 1008,
+      "utcDate": "2026-07-19T19:00:00Z",
+      "status": "TIMED",
+      "stage": "FINAL",
+      "group": null,
+      "homeTeam": {"id": null, "name": null, "shortName": null, "tla": null},
+      "awayTeam": {"id": null, "name": null, "shortName": null, "tla": null}
+    }
+  ]
+}
