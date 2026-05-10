@@ -1,13 +1,13 @@
 """Predictions API routes."""
 
 import uuid
-from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, delete
 
 from app.dependencies import CurrentUser, DbSession, OptionalUser
+from app.models._datetime import utc_now
 from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.user import User
@@ -97,7 +97,7 @@ async def update_match_prediction(
     if prediction:
         prediction.home_score = prediction_data.home_score
         prediction.away_score = prediction_data.away_score
-        prediction.updated_at = datetime.utcnow()
+        prediction.updated_at = utc_now()
     else:
         prediction = MatchPrediction(
             user_id=current_user.id,
@@ -161,7 +161,7 @@ async def batch_update_predictions(
         if prediction:
             prediction.home_score = pred_data.home_score
             prediction.away_score = pred_data.away_score
-            prediction.updated_at = datetime.utcnow()
+            prediction.updated_at = utc_now()
         else:
             prediction = MatchPrediction(
                 user_id=current_user.id,

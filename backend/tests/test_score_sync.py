@@ -1,6 +1,6 @@
 """Tests for the windowing logic in score_sync.has_active_or_imminent_match."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -46,7 +46,7 @@ def _fixture(competition_id, *, kickoff: datetime, status: MatchStatus, ext: str
     )
 
 
-NOW = datetime(2026, 6, 11, 19, 0)
+NOW = datetime(2026, 6, 11, 19, 0, tzinfo=timezone.utc)
 
 
 @pytest.mark.asyncio

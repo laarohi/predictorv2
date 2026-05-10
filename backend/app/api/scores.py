@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from app.dependencies import AdminUser, DbSession, OptionalUser
+from app.models._datetime import utc_now
 from app.models.fixture import Fixture, MatchStatus
 from app.models.score import Score, ScoreSource
 from app.schemas.leaderboard import LeaderboardEntry
@@ -29,7 +30,7 @@ class LivePollingResponse(BaseModel):
 async def get_live_scores(session: DbSession, _user: OptionalUser) -> LiveScoreResponse:
     """Get live and recent scores for polling."""
     matches = await _get_live_matches(session)
-    return LiveScoreResponse(matches=matches, last_updated=datetime.utcnow())
+    return LiveScoreResponse(matches=matches, last_updated=utc_now())
 
 
 @router.get("/poll", response_model=LivePollingResponse)
@@ -46,7 +47,7 @@ async def poll_live_data(session: DbSession, _user: OptionalUser) -> LivePolling
     return LivePollingResponse(
         matches=matches,
         leaderboard=leaderboard.entries,
-        last_updated=datetime.utcnow(),
+        last_updated=utc_now(),
     )
 
 
@@ -121,7 +122,7 @@ async def update_score(
         score.away_penalties = score_data.away_penalties
         score.verified = score_data.verified
         score.source = ScoreSource.MANUAL
-        score.updated_at = datetime.utcnow()
+        score.updated_at = utc_now()
     else:
         score = Score(
             fixture_id=fixture_id,
@@ -138,7 +139,7 @@ async def update_score(
 
     # Update fixture status
     fixture.status = MatchStatus.FINISHED
-    fixture.updated_at = datetime.utcnow()
+    fixture.updated_at = utc_now()
 
     await session.commit()
     await session.refresh(score)

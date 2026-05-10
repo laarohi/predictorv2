@@ -6,7 +6,7 @@ blind pool logic correctly filters predictions by lock/finished state.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -32,7 +32,7 @@ class TestUserMatchPredictionView:
             fixture_id=uuid.uuid4(),
             home_team="Brazil",
             away_team="Germany",
-            kickoff=datetime.utcnow() + timedelta(minutes=2),
+            kickoff=datetime.now(timezone.utc) + timedelta(minutes=2),
             stage="group",
             group="A",
             status=MatchStatus.SCHEDULED,
@@ -51,7 +51,7 @@ class TestUserMatchPredictionView:
             fixture_id=uuid.uuid4(),
             home_team="France",
             away_team="Australia",
-            kickoff=datetime.utcnow() - timedelta(hours=2),
+            kickoff=datetime.now(timezone.utc) - timedelta(hours=2),
             stage="group",
             group="D",
             status=MatchStatus.FINISHED,
@@ -73,7 +73,7 @@ class TestUserMatchPredictionView:
             fixture_id=uuid.uuid4(),
             home_team="England",
             away_team="Iran",
-            kickoff=datetime.utcnow() - timedelta(hours=2),
+            kickoff=datetime.now(timezone.utc) - timedelta(hours=2),
             stage="group",
             group="B",
             status=MatchStatus.FINISHED,
@@ -94,7 +94,7 @@ class TestUserMatchPredictionView:
             fixture_id=uuid.uuid4(),
             home_team="Argentina",
             away_team="Saudi Arabia",
-            kickoff=datetime.utcnow() - timedelta(hours=2),
+            kickoff=datetime.now(timezone.utc) - timedelta(hours=2),
             stage="group",
             group="C",
             status=MatchStatus.FINISHED,
@@ -115,7 +115,7 @@ class TestUserMatchPredictionView:
             fixture_id=uuid.uuid4(),
             home_team="Netherlands",
             away_team="USA",
-            kickoff=datetime.utcnow() - timedelta(hours=2),
+            kickoff=datetime.now(timezone.utc) - timedelta(hours=2),
             stage="round_of_16",
             group=None,
             status=MatchStatus.FINISHED,
@@ -167,7 +167,7 @@ class TestUserPredictionsResponse:
                     fixture_id=uuid.uuid4(),
                     home_team="Qatar",
                     away_team="Ecuador",
-                    kickoff=datetime.utcnow() - timedelta(hours=3),
+                    kickoff=datetime.now(timezone.utc) - timedelta(hours=3),
                     stage="group",
                     group="A",
                     status=MatchStatus.FINISHED,
@@ -218,7 +218,7 @@ class TestBlindPoolPredictionFiltering:
         fixture.id = uuid.uuid4()
         fixture.home_team = "TeamA"
         fixture.away_team = "TeamB"
-        fixture.kickoff = datetime.utcnow()
+        fixture.kickoff = datetime.now(timezone.utc)
         fixture.stage = "group"
         fixture.group = "A"
         fixture.match_number = 1

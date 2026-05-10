@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from app.models._datetime import utc_now
 from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
 from app.models.score import Score, ScoreSource
@@ -48,7 +49,7 @@ async def has_active_or_imminent_match(
     Cheap DB query; no external calls. The scheduler uses this to decide
     whether to skip a tick (saves API quota during off-windows).
     """
-    now = now or datetime.utcnow()
+    now = now or utc_now()
 
     # 1. Anything currently live? Always poll.
     live_q = await session.execute(
@@ -136,7 +137,7 @@ async def _apply_external_score(
 
     fixture.status = ext.status
     fixture.minute = ext.minute
-    fixture.updated_at = datetime.utcnow()
+    fixture.updated_at = utc_now()
 
     score_q = await session.execute(select(Score).where(Score.fixture_id == fixture.id))
     score = score_q.scalar_one_or_none()
@@ -164,7 +165,7 @@ async def _apply_external_score(
     score.home_penalties = ext.home_penalties
     score.away_penalties = ext.away_penalties
     score.source = ScoreSource.API
-    score.updated_at = datetime.utcnow()
+    score.updated_at = utc_now()
     result.updated += 1
 
 

@@ -9,6 +9,7 @@ from sqlalchemy import func
 from sqlmodel import select
 
 from app.dependencies import AdminUser, DbSession
+from app.models._datetime import utc_now
 from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction
@@ -170,7 +171,7 @@ async def toggle_user_admin(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     user.is_admin = not user.is_admin
-    user.updated_at = datetime.utcnow()
+    user.updated_at = utc_now()
     await session.commit()
     await session.refresh(user)
 
@@ -205,7 +206,7 @@ async def toggle_user_active(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     user.is_active = not user.is_active
-    user.updated_at = datetime.utcnow()
+    user.updated_at = utc_now()
     await session.commit()
     await session.refresh(user)
 
@@ -293,13 +294,9 @@ async def activate_phase2(
 
     # Activate Phase 2
     competition.is_phase2_active = True
-    competition.phase2_activated_at = datetime.utcnow()
-    # Convert to timezone-naive datetime (database uses TIMESTAMP WITHOUT TIME ZONE)
-    bracket_deadline = request.bracket_deadline
-    if bracket_deadline.tzinfo is not None:
-        bracket_deadline = bracket_deadline.replace(tzinfo=None)
-    competition.phase2_bracket_deadline = bracket_deadline
-    competition.updated_at = datetime.utcnow()
+    competition.phase2_activated_at = utc_now()
+    competition.phase2_bracket_deadline = request.bracket_deadline
+    competition.updated_at = utc_now()
 
     await session.commit()
 
@@ -339,7 +336,7 @@ async def deactivate_phase2(
 
     # Deactivate Phase 2
     competition.is_phase2_active = False
-    competition.updated_at = datetime.utcnow()
+    competition.updated_at = utc_now()
 
     await session.commit()
 
@@ -368,13 +365,8 @@ async def set_phase1_deadline(
             detail="No active competition found"
         )
 
-    # Convert to timezone-naive datetime (database uses TIMESTAMP WITHOUT TIME ZONE)
-    deadline = request.deadline
-    if deadline.tzinfo is not None:
-        deadline = deadline.replace(tzinfo=None)
-
-    competition.phase1_deadline = deadline
-    competition.updated_at = datetime.utcnow()
+    competition.phase1_deadline = request.deadline
+    competition.updated_at = utc_now()
 
     await session.commit()
 

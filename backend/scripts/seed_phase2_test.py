@@ -12,7 +12,7 @@ Undo with: docker-compose exec backend python -m scripts.seed_phase2_test --undo
 
 import asyncio
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 # Add parent directory to path for imports
@@ -153,12 +153,12 @@ async def seed_phase2_test():
 
         # Activate Phase 2
         competition.is_phase2_active = True
-        competition.phase2_activated_at = datetime.utcnow()
-        competition.phase2_bracket_deadline = datetime.utcnow() + timedelta(days=7)
+        competition.phase2_activated_at = datetime.now(timezone.utc)
+        competition.phase2_bracket_deadline = datetime.now(timezone.utc) + timedelta(days=7)
         print("Activated Phase 2")
 
         # Add knockout fixtures
-        knockout_start = datetime.utcnow() + timedelta(days=1)
+        knockout_start = datetime.now(timezone.utc) + timedelta(days=1)
         fixtures_added = 0
 
         for stage, home_team, away_team, match_number in KNOCKOUT_FIXTURES:

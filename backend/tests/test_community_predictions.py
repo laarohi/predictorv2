@@ -6,7 +6,7 @@ correctly gates visibility.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -116,7 +116,7 @@ class TestBlindPoolLogic:
         fixture.id = uuid.uuid4()
         fixture.home_team = "France"
         fixture.away_team = "Denmark"
-        fixture.kickoff = datetime.utcnow() + timedelta(hours=24)
+        fixture.kickoff = datetime.now(timezone.utc) + timedelta(hours=24)
         fixture.status = MatchStatus.SCHEDULED
         fixture.is_locked.return_value = False
         return fixture
@@ -128,7 +128,7 @@ class TestBlindPoolLogic:
         fixture.id = uuid.uuid4()
         fixture.home_team = "Spain"
         fixture.away_team = "Costa Rica"
-        fixture.kickoff = datetime.utcnow() + timedelta(minutes=3)
+        fixture.kickoff = datetime.now(timezone.utc) + timedelta(minutes=3)
         fixture.status = MatchStatus.SCHEDULED
         fixture.is_locked.return_value = True
         return fixture
@@ -140,7 +140,7 @@ class TestBlindPoolLogic:
         fixture.id = uuid.uuid4()
         fixture.home_team = "Argentina"
         fixture.away_team = "Saudi Arabia"
-        fixture.kickoff = datetime.utcnow() - timedelta(minutes=45)
+        fixture.kickoff = datetime.now(timezone.utc) - timedelta(minutes=45)
         fixture.status = MatchStatus.LIVE
         fixture.is_locked.return_value = True
         return fixture
@@ -152,7 +152,7 @@ class TestBlindPoolLogic:
         fixture.id = uuid.uuid4()
         fixture.home_team = "Germany"
         fixture.away_team = "Japan"
-        fixture.kickoff = datetime.utcnow() - timedelta(hours=3)
+        fixture.kickoff = datetime.now(timezone.utc) - timedelta(hours=3)
         fixture.status = MatchStatus.FINISHED
         fixture.is_locked.return_value = True
         return fixture

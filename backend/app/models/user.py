@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.models._datetime import utc_datetime_column, utc_now
+
 if TYPE_CHECKING:
     from app.models.competition import Competition
     from app.models.prediction import MatchPrediction, TeamPrediction
@@ -35,8 +37,8 @@ class User(SQLModel, table=True):
 
     competition_id: uuid.UUID | None = Field(default=None, foreign_key="competitions.id")
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())
+    updated_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())
 
     # Relationships
     competition: Optional["Competition"] = Relationship(back_populates="users")

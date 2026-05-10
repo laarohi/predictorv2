@@ -1,6 +1,6 @@
 """FastAPI dependencies for auth and database."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Annotated
 
 import bcrypt
@@ -12,6 +12,7 @@ from sqlmodel import select
 
 from app.config import get_settings
 from app.database import get_session
+from app.models._datetime import utc_now
 from app.models.user import User
 from app.schemas.auth import TokenPayload
 
@@ -39,9 +40,9 @@ def create_access_token(user_id: str, expires_delta: timedelta | None = None) ->
     """Create a JWT access token."""
     settings = get_settings()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = utc_now() + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(minutes=settings.jwt_access_token_expire_minutes)
+        expire = utc_now() + timedelta(minutes=settings.jwt_access_token_expire_minutes)
 
     to_encode = {"sub": user_id, "exp": expire}
     return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)

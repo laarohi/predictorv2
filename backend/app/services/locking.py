@@ -1,10 +1,11 @@
 """Prediction locking service."""
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
+from app.models._datetime import utc_now
 from app.models.competition import Competition
 from app.models.fixture import Fixture
 from app.models.prediction import MatchPrediction, PredictionPhase
@@ -36,7 +37,7 @@ def check_fixture_locked(fixture: Fixture, lock_minutes: int = LOCK_MINUTES) -> 
         True if predictions are locked, False otherwise
     """
     lock_time = fixture.kickoff - timedelta(minutes=lock_minutes)
-    return datetime.utcnow() >= lock_time
+    return utc_now() >= lock_time
 
 
 def get_time_until_lock(fixture: Fixture, lock_minutes: int = LOCK_MINUTES) -> timedelta | None:
@@ -50,7 +51,7 @@ def get_time_until_lock(fixture: Fixture, lock_minutes: int = LOCK_MINUTES) -> t
         Time remaining as timedelta, or None if already locked
     """
     lock_time = fixture.kickoff - timedelta(minutes=lock_minutes)
-    remaining = lock_time - datetime.utcnow()
+    remaining = lock_time - utc_now()
     return remaining if remaining.total_seconds() > 0 else None
 
 
@@ -91,7 +92,7 @@ async def is_phase2_bracket_locked(session: AsyncSession) -> bool:
         return False
     if not competition.phase2_bracket_deadline:
         return False
-    return datetime.utcnow() >= competition.phase2_bracket_deadline
+    return utc_now() >= competition.phase2_bracket_deadline
 
 
 async def lock_predictions(session: AsyncSession, fixture_id: str) -> int:
@@ -116,7 +117,7 @@ async def lock_predictions(session: AsyncSession, fixture_id: str) -> int:
     predictions = result.scalars().all()
 
     locked_count = 0
-    now = datetime.utcnow()
+    now = utc_now()
 
     for prediction in predictions:
         prediction.locked_at = now
@@ -135,7 +136,7 @@ async def check_and_lock_upcoming_fixtures(session: AsyncSession) -> dict[str, i
         Dict mapping fixture_id to number of locked predictions
     """
     # Get fixtures within lock window that haven't started
-    lock_threshold = datetime.utcnow() + timedelta(minutes=LOCK_MINUTES)
+    lock_threshold = utc_now() + timedelta(minutes=LOCK_MINUTES)
 
     result = await session.execute(
         select(Fixture).where(

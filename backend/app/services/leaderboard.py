@@ -7,6 +7,8 @@ Supports filtering by phase (overall, phase_1, phase_2).
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+
+from app.models._datetime import utc_now
 from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -108,7 +110,7 @@ async def calculate_leaderboard(
     """
     global _cache
 
-    now = datetime.utcnow()
+    now = utc_now()
     cache_key = phase or "overall"
 
     # Return cached data if valid

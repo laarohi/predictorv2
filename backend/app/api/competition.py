@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from sqlmodel import select
 
 from app.dependencies import CurrentUser, DbSession
+from app.models._datetime import utc_now
 from app.models.competition import Competition
 from app.services.locking import get_current_phase, is_phase2_bracket_locked
 
@@ -52,7 +53,7 @@ async def get_phase_status(
     # Check if phase 1 is locked (past deadline)
     phase1_locked = False
     if competition and competition.phase1_deadline:
-        phase1_locked = datetime.utcnow() >= competition.phase1_deadline
+        phase1_locked = utc_now() >= competition.phase1_deadline
 
     return PhaseStatus(
         current_phase=current_phase.value,

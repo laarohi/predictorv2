@@ -1,7 +1,7 @@
 """Tests for the prediction locking service."""
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 from app.models.fixture import Fixture, MatchStatus
@@ -20,7 +20,7 @@ class TestCheckFixtureLocked:
     def future_fixture(self) -> Fixture:
         """Create a fixture in the future."""
         fixture = MagicMock(spec=Fixture)
-        fixture.kickoff = datetime.utcnow() + timedelta(hours=2)
+        fixture.kickoff = datetime.now(timezone.utc) + timedelta(hours=2)
         fixture.status = MatchStatus.SCHEDULED
         return fixture
 
@@ -28,7 +28,7 @@ class TestCheckFixtureLocked:
     def imminent_fixture(self) -> Fixture:
         """Create a fixture about to start (within lock window)."""
         fixture = MagicMock(spec=Fixture)
-        fixture.kickoff = datetime.utcnow() + timedelta(minutes=3)
+        fixture.kickoff = datetime.now(timezone.utc) + timedelta(minutes=3)
         fixture.status = MatchStatus.SCHEDULED
         return fixture
 
@@ -36,7 +36,7 @@ class TestCheckFixtureLocked:
     def started_fixture(self) -> Fixture:
         """Create a fixture that has already started."""
         fixture = MagicMock(spec=Fixture)
-        fixture.kickoff = datetime.utcnow() - timedelta(minutes=10)
+        fixture.kickoff = datetime.now(timezone.utc) - timedelta(minutes=10)
         fixture.status = MatchStatus.LIVE
         return fixture
 
@@ -60,7 +60,7 @@ class TestCheckFixtureLocked:
     def test_exactly_at_lock_time(self):
         """Fixture exactly at lock boundary should be locked."""
         fixture = MagicMock(spec=Fixture)
-        fixture.kickoff = datetime.utcnow() + timedelta(minutes=LOCK_MINUTES)
+        fixture.kickoff = datetime.now(timezone.utc) + timedelta(minutes=LOCK_MINUTES)
 
         # At exactly the boundary, should be locked
         assert check_fixture_locked(fixture) is True
@@ -72,7 +72,7 @@ class TestGetTimeUntilLock:
     def test_future_fixture_returns_timedelta(self):
         """Should return timedelta for unlocked fixture."""
         fixture = MagicMock(spec=Fixture)
-        fixture.kickoff = datetime.utcnow() + timedelta(hours=1)
+        fixture.kickoff = datetime.now(timezone.utc) + timedelta(hours=1)
 
         result = get_time_until_lock(fixture)
 
@@ -84,7 +84,7 @@ class TestGetTimeUntilLock:
     def test_locked_fixture_returns_none(self):
         """Should return None for locked fixture."""
         fixture = MagicMock(spec=Fixture)
-        fixture.kickoff = datetime.utcnow() - timedelta(minutes=1)
+        fixture.kickoff = datetime.now(timezone.utc) - timedelta(minutes=1)
 
         result = get_time_until_lock(fixture)
 
@@ -93,7 +93,7 @@ class TestGetTimeUntilLock:
     def test_returns_positive_values_only(self):
         """Should only return positive time remaining."""
         fixture = MagicMock(spec=Fixture)
-        fixture.kickoff = datetime.utcnow() + timedelta(minutes=2)
+        fixture.kickoff = datetime.now(timezone.utc) + timedelta(minutes=2)
 
         result = get_time_until_lock(fixture)
 

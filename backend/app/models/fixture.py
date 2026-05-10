@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING, Optional
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.models._datetime import utc_datetime_column, utc_now
+
 if TYPE_CHECKING:
     from app.models.competition import Competition
     from app.models.prediction import MatchPrediction
@@ -34,7 +36,7 @@ class Fixture(SQLModel, table=True):
 
     home_team: str = Field(index=True)
     away_team: str = Field(index=True)
-    kickoff: datetime = Field(index=True)
+    kickoff: datetime = Field(sa_column=utc_datetime_column(index=True))
 
     # Tournament position
     stage: str  # "group", "round_of_32", "round_of_16", "quarter_final", "semi_final", "final"
@@ -48,8 +50,8 @@ class Fixture(SQLModel, table=True):
     # External API reference
     external_id: str | None = Field(default=None, index=True)
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())
+    updated_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())
 
     # Relationships
     competition: "Competition" = Relationship(back_populates="fixtures")
@@ -58,13 +60,11 @@ class Fixture(SQLModel, table=True):
 
     def is_locked(self, lock_minutes: int = 5) -> bool:
         """Check if predictions are locked for this fixture."""
-
         lock_time = self.kickoff - timedelta(minutes=lock_minutes)
-        return datetime.utcnow() >= lock_time
+        return utc_now() >= lock_time
 
     def time_until_lock(self, lock_minutes: int = 5) -> timedelta | None:
         """Get time remaining until predictions lock."""
-
         lock_time = self.kickoff - timedelta(minutes=lock_minutes)
-        remaining = lock_time - datetime.utcnow()
+        remaining = lock_time - utc_now()
         return remaining if remaining.total_seconds() > 0 else None

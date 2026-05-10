@@ -1,7 +1,7 @@
 """Fixtures API routes."""
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from app.dependencies import AdminUser, CurrentUser, DbSession, OptionalUser
+from app.models._datetime import utc_now
 from app.models.fixture import Fixture, MatchStatus
 from app.schemas.fixture import (
     FixtureCreate,
@@ -265,7 +266,7 @@ async def update_fixture(
     for field, value in update_data.items():
         setattr(fixture, field, value)
 
-    fixture.updated_at = datetime.utcnow()
+    fixture.updated_at = utc_now()
     await session.commit()
     await session.refresh(fixture)
     return fixture_to_read(fixture)
@@ -288,7 +289,7 @@ async def update_fixture_status(
     fixture.status = status_data.status
     if status_data.minute is not None:
         fixture.minute = status_data.minute
-    fixture.updated_at = datetime.utcnow()
+    fixture.updated_at = utc_now()
 
     await session.commit()
     await session.refresh(fixture)

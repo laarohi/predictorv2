@@ -5,7 +5,7 @@ fixture_to_read includes score data only for finished matches.
 """
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
 import pytest
@@ -80,7 +80,7 @@ class TestFixtureToRead:
         fixture.id = uuid.uuid4()
         fixture.home_team = "Brazil"
         fixture.away_team = "Germany"
-        fixture.kickoff = datetime.utcnow() - timedelta(hours=3)
+        fixture.kickoff = datetime.now(timezone.utc) - timedelta(hours=3)
         fixture.stage = "group"
         fixture.group = "A"
         fixture.match_number = 1
@@ -109,7 +109,7 @@ class TestFixtureToRead:
         fixture.id = uuid.uuid4()
         fixture.home_team = "France"
         fixture.away_team = "Spain"
-        fixture.kickoff = datetime.utcnow() + timedelta(hours=24)
+        fixture.kickoff = datetime.now(timezone.utc) + timedelta(hours=24)
         fixture.stage = "group"
         fixture.group = "B"
         fixture.match_number = 2
@@ -128,7 +128,7 @@ class TestFixtureToRead:
         fixture.id = uuid.uuid4()
         fixture.home_team = "Argentina"
         fixture.away_team = "Mexico"
-        fixture.kickoff = datetime.utcnow() - timedelta(minutes=30)
+        fixture.kickoff = datetime.now(timezone.utc) - timedelta(minutes=30)
         fixture.stage = "group"
         fixture.group = "C"
         fixture.match_number = 3
@@ -180,7 +180,7 @@ class TestFixtureToRead:
         fixture.id = uuid.uuid4()
         fixture.home_team = "Japan"
         fixture.away_team = "Korea Republic"
-        fixture.kickoff = datetime.utcnow() - timedelta(hours=2)
+        fixture.kickoff = datetime.now(timezone.utc) - timedelta(hours=2)
         fixture.stage = "group"
         fixture.group = "D"
         fixture.match_number = 4
@@ -200,7 +200,7 @@ class TestFixtureToRead:
         fixture.id = uuid.uuid4()
         fixture.home_team = "England"
         fixture.away_team = "Italy"
-        fixture.kickoff = datetime.utcnow() - timedelta(hours=4)
+        fixture.kickoff = datetime.now(timezone.utc) - timedelta(hours=4)
         fixture.stage = "round_of_16"
         fixture.group = None
         fixture.match_number = 49

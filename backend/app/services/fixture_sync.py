@@ -10,20 +10,19 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from app.models._datetime import aware_utc
 from app.models.fixture import MatchStatus
 from app.services.external.football_data import map_status
 
 
 def _parse_utc_kickoff(utc_iso: str) -> datetime:
-    """Parse a Football-Data utcDate (e.g. '2026-06-11T19:00:00Z') to naive UTC.
+    """Parse a Football-Data utcDate (e.g. '2026-06-11T19:00:00Z') to tz-aware UTC.
 
-    The Fixture model stores datetimes without tzinfo (matches the existing
-    convention across the codebase — see Fixture.kickoff and the seed_data.py
-    pattern). Returning naive UTC here makes upsert diffs comparable against
-    DB-loaded values, which SQLite/Postgres return without tzinfo.
+    Returns an aware datetime in UTC. Fixture.kickoff is now a TIMESTAMPTZ
+    column; aware-vs-aware comparisons in `_upsert_fixtures` work directly.
     """
     aware = datetime.fromisoformat(utc_iso.replace("Z", "+00:00"))
-    return aware.astimezone(timezone.utc).replace(tzinfo=None)
+    return aware.astimezone(timezone.utc)
 
 
 class FixtureSyncError(Exception):
@@ -175,7 +174,13 @@ async def _upsert_fixtures(
         for field in _DIFF_FIELDS:
             new_val = getattr(rec, field)
             old_val = getattr(current, field)
-            if new_val != old_val:
+            # kickoff is tz-aware UTC; some DB drivers (aiosqlite) drop tzinfo on
+            # read, so coerce both sides to aware UTC before comparing.
+            if field == "kickoff":
+                if aware_utc(new_val) != aware_utc(old_val):
+                    setattr(current, field, new_val)
+                    changed_here.append(field)
+            elif new_val != old_val:
                 setattr(current, field, new_val)
                 changed_here.append(field)
 

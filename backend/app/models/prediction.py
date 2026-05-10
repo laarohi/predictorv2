@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.models._datetime import utc_datetime_column, utc_now
+
 if TYPE_CHECKING:
     from app.models.fixture import Fixture
     from app.models.user import User
@@ -32,10 +34,10 @@ class MatchPrediction(SQLModel, table=True):
     away_score: int = Field(ge=0)
     phase: PredictionPhase = Field(default=PredictionPhase.PHASE_1)
 
-    locked_at: datetime | None = None  # When this prediction was locked
+    locked_at: datetime | None = Field(default=None, sa_column=utc_datetime_column(nullable=True))
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())
+    updated_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())
 
     # Relationships
     user: "User" = Relationship(back_populates="match_predictions")
@@ -69,10 +71,10 @@ class TeamPrediction(SQLModel, table=True):
     group_position: int | None = None  # 1, 2, or 3 for group stage
     phase: PredictionPhase = Field(default=PredictionPhase.PHASE_1)
 
-    locked_at: datetime | None = None
+    locked_at: datetime | None = Field(default=None, sa_column=utc_datetime_column(nullable=True))
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())
+    updated_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())
 
     # Relationships
     user: "User" = Relationship(back_populates="team_predictions")

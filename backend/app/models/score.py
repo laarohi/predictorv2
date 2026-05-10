@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 
 from sqlmodel import Field, Relationship, SQLModel
 
+from app.models._datetime import utc_datetime_column, utc_now
+
 if TYPE_CHECKING:
     from app.models.fixture import Fixture
 
@@ -38,8 +40,8 @@ class Score(SQLModel, table=True):
     source: ScoreSource = Field(default=ScoreSource.API)
     verified: bool = Field(default=False)  # Admin verified
 
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())
+    updated_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())
 
     # Relationships
     fixture: "Fixture" = Relationship(back_populates="score")

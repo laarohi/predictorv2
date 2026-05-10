@@ -1,6 +1,6 @@
 """Tests for fixture_sync — mapping helpers, upsert, sync entry points."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -81,9 +81,9 @@ class TestRecordFromMatch:
         assert rec.external_id == "537327"
         assert rec.home_team == "Mexico"
         assert rec.away_team == "South Africa"
-        # Naive UTC, matching the Fixture.kickoff schema convention
-        assert rec.kickoff == datetime(2026, 6, 11, 19, 0)
-        assert rec.kickoff.tzinfo is None
+        # Tz-aware UTC, per the system rule
+        assert rec.kickoff == datetime(2026, 6, 11, 19, 0, tzinfo=timezone.utc)
+        assert rec.kickoff.tzinfo is not None
         assert rec.stage == "group"
         assert rec.group == "A"
         assert rec.status == MatchStatus.SCHEDULED
@@ -135,7 +135,7 @@ def _record(
     ext: str,
     home: str = "Mexico",
     away: str = "South Africa",
-    kickoff: datetime = datetime(2026, 6, 11, 19, 0),
+    kickoff: datetime = datetime(2026, 6, 11, 19, 0, tzinfo=timezone.utc),
     stage: str = "group",
     group: str | None = "A",
 ) -> FixtureRecord:
@@ -171,7 +171,7 @@ class TestUpsertFixtures:
     @pytest.mark.asyncio
     async def test_updates_kickoff_change(self, session, competition) -> None:
         await _upsert_fixtures(session, [_record(ext="1")], competition.id)
-        changed = [_record(ext="1", kickoff=datetime(2026, 6, 11, 20, 0))]
+        changed = [_record(ext="1", kickoff=datetime(2026, 6, 11, 20, 0, tzinfo=timezone.utc))]
         result = await _upsert_fixtures(session, changed, competition.id)
         assert result.updated == 1
         assert result.changed_fields["kickoff"] == 1
