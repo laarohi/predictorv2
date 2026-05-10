@@ -91,6 +91,18 @@ Configured in `config/worldcup2026.yml`. See `docs/scoring-system.md` for full d
 - Phase 1 and Phase 2 predictions are stored separately
 - 100% data integrity required - no lost predictions
 
+### Datetime Rule (system-wide invariant)
+
+**Every datetime in this system is timezone-aware UTC.** Naive datetimes are forbidden — comparing or storing one is a bug.
+
+- **DB**: every datetime column is `TIMESTAMPTZ` (PostgreSQL `TIMESTAMP WITH TIME ZONE`). See `backend/app/models/_datetime.py` for the column factory and `default_factory`.
+- **Python**: use `utc_now()` from `app.models._datetime`, never `datetime.utcnow()` (deprecated and naive). Construct test datetimes with `datetime(..., tzinfo=timezone.utc)`.
+- **API**: Pydantic serializes aware datetimes as ISO 8601 with explicit offset (`...Z` or `+00:00`).
+- **Frontend**: `new Date(string).toLocaleString(...)` parses correctly because of the explicit offset, then renders in the user's local timezone via `Intl`.
+- **DB-driver gotcha**: aiosqlite drops tzinfo on read even when the column is declared aware; PostgreSQL preserves it. Use `aware_utc()` (also in `_datetime.py`) at any compare site that touches DB-loaded values, defensively.
+
+The rule was established in commit `c6089cc` and migration `2c5e9a4f7d10`. Violating it silently shifts kickoffs and deadlines by the user's UTC offset — a data-integrity disaster for a prediction app where lock timing matters.
+
 ## Key Files
 
 | File | Purpose |
