@@ -82,3 +82,7 @@ credentials.json
 # Build artifacts
 *.tar.gz
 *.zip
+
+# Git worktrees (isolated workspaces, never tracked)
+worktrees/
+.worktrees/
