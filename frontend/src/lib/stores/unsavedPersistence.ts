@@ -13,6 +13,9 @@ import {
 	unsavedChanges,
 	unsavedBracketPrediction,
 	unsavedPhase2BracketPrediction,
+	fetchMatchPredictions,
+	fetchBracketPredictions,
+	fetchPhase2BracketPredictions,
 	type UnsavedPrediction
 } from '$stores/predictions';
 import type { BracketPrediction, FixturesByGroup } from '$types';
@@ -147,19 +150,29 @@ export function initPersistence(userId: string): void {
 
 		const env = e.newValue ? safeParse<unknown>(e.newValue) : null;
 		const data = env && env.v === CURRENT_VERSION ? env.data : null;
-		const stringified = JSON.stringify(data);
 
-		// Prime the cache BEFORE .set() so this tab's subscriber sees
-		// "no change" and skips the bounce-write.
+		// A removed key means the other tab either Saved (committed to the
+		// server) or Cleared. Either way, this tab's server-state mirror may
+		// be stale, so refetch it after applying the unsaved-store update.
+		const remoteCommitted = e.newValue === null;
+
+		// Prime the cache with the same shape the local subscriber will compute
+		// after .set(), so the resulting subscription fire skips the bounce-write.
 		if (e.key === keyMatches(userId)) {
-			lastWritten.matches = stringified;
-			unsavedChanges.set((data as MatchesData) ?? {});
+			const next: MatchesData = (data as MatchesData) ?? {};
+			lastWritten.matches = JSON.stringify(next);
+			unsavedChanges.set(next);
+			if (remoteCommitted) void fetchMatchPredictions();
 		} else if (e.key === keyP1(userId)) {
-			lastWritten.p1 = stringified;
-			unsavedBracketPrediction.set((data as BracketPrediction) ?? null);
+			const next: BracketPrediction | null = (data as BracketPrediction) ?? null;
+			lastWritten.p1 = JSON.stringify(next);
+			unsavedBracketPrediction.set(next);
+			if (remoteCommitted) void fetchBracketPredictions();
 		} else if (e.key === keyP2(userId)) {
-			lastWritten.p2 = stringified;
-			unsavedPhase2BracketPrediction.set((data as BracketPrediction) ?? null);
+			const next: BracketPrediction | null = (data as BracketPrediction) ?? null;
+			lastWritten.p2 = JSON.stringify(next);
+			unsavedPhase2BracketPrediction.set(next);
+			if (remoteCommitted) void fetchPhase2BracketPredictions();
 		}
 	}
 
