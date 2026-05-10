@@ -41,6 +41,18 @@ export const workingBracketPrediction = derived(
 export const phase2BracketPrediction = writable<BracketPrediction | null>(null);
 export const phase2BracketLoading = writable<boolean>(false);
 export const phase2BracketError = writable<string | null>(null);
+// Unsaved Phase 2 bracket prediction (local changes before saving)
+export const unsavedPhase2BracketPrediction = writable<BracketPrediction | null>(null);
+// Whether there are unsaved Phase 2 bracket changes
+export const hasUnsavedPhase2BracketChanges = derived(
+	unsavedPhase2BracketPrediction,
+	($unsaved) => $unsaved !== null
+);
+// Get the working Phase 2 bracket (unsaved if exists, otherwise saved)
+export const workingPhase2BracketPrediction = derived(
+	[unsavedPhase2BracketPrediction, phase2BracketPrediction],
+	([$unsaved, $saved]) => $unsaved || $saved
+);
 
 // Derived stores
 export const hasUnsavedChanges = derived(
