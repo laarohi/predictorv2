@@ -19,21 +19,31 @@
 	export let hasUnsavedChanges: boolean;
 	export let saveStatus: 'idle' | 'saving' | 'saved' | 'error';
 	export let unsavedChangesCount: number;
+	export let lastLocalSave: Date | null = null;
 
 	export let onClearBracket: () => void;
 	export let onSaveBracket: () => void;
 	export let onSaveAll: () => void;
 	export let onBracketUpdate: (event: CustomEvent<BracketPrediction>) => void;
+
+	function formatLocalTime(d: Date): string {
+		return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+	}
 </script>
 
 <!-- Floating save button for Phase 2 match predictions -->
 {#if hasUnsavedChanges}
-	<div class="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-40">
+	<div class="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-40 flex flex-col items-end gap-1">
 		<SaveButton
 			status={saveStatus}
 			count={unsavedChangesCount}
 			on:save={onSaveAll}
 		/>
+		{#if lastLocalSave}
+			<p class="text-xs text-base-content/50 text-right">
+				Saved locally · {formatLocalTime(lastLocalSave)}
+			</p>
+		{/if}
 	</div>
 {/if}
 
@@ -101,12 +111,17 @@
 
 	<!-- Phase 2 Bracket Save Button -->
 	{#if hasPhase2BracketChanges && !isPhase2BracketLocked}
-		<div class="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-40">
+		<div class="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-40 flex flex-col items-end gap-1">
 			<SaveButton
 				status={phase2BracketSaveStatus}
 				count={1}
 				on:save={onSaveBracket}
 			/>
+			{#if lastLocalSave}
+				<p class="text-xs text-base-content/50 text-right">
+					Saved locally · {formatLocalTime(lastLocalSave)}
+				</p>
+			{/if}
 		</div>
 	{/if}
 

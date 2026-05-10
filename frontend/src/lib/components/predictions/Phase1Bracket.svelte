@@ -14,11 +14,16 @@
 	export let hasBracketSelections: boolean;
 	export let bracketSaveStatus: 'idle' | 'saving' | 'saved' | 'error';
 	export let bracketComponent: KnockoutBracket | undefined = undefined;
+	export let lastLocalSave: Date | null = null;
 
 	export let onRetry: () => void;
 	export let onClear: () => void;
 	export let onSave: () => void;
 	export let onUpdate: (event: CustomEvent<BracketPrediction>) => void;
+
+	function formatLocalTime(d: Date): string {
+		return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+	}
 </script>
 
 {#if bracketLoading && !bracketPrediction}
@@ -77,12 +82,17 @@
 
 	<!-- Bracket Save Button -->
 	{#if hasBracketChanges}
-		<div class="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-40">
+		<div class="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-40 flex flex-col items-end gap-1">
 			<SaveButton
 				status={bracketSaveStatus}
 				count={1}
 				on:save={onSave}
 			/>
+			{#if lastLocalSave}
+				<p class="text-xs text-base-content/50 text-right">
+					Saved locally · {formatLocalTime(lastLocalSave)}
+				</p>
+			{/if}
 		</div>
 	{/if}
 {/if}

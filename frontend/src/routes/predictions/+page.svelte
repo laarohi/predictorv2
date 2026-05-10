@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { isAuthenticated } from '$stores/auth';
+	import { onMount, onDestroy } from 'svelte';
+	import { goto, beforeNavigate } from '$app/navigation';
+	import { isAuthenticated, user } from '$stores/auth';
 	import {
 		fetchMatchPredictions,
 		fetchBracketPredictions,
@@ -18,8 +18,15 @@
 		bracketError,
 		unsavedBracketPrediction,
 		hasUnsavedBracketChanges,
-		phase2BracketPrediction
+		phase2BracketPrediction,
+		unsavedPhase2BracketPrediction,
+		hasUnsavedPhase2BracketChanges
 	} from '$stores/predictions';
+	import {
+		initPersistence,
+		hydrateFromStorage,
+		lastLocalSave
+	} from '$stores/unsavedPersistence';
 	import {
 		fetchGroupFixtures,
 		groupFixtures,
@@ -66,8 +73,12 @@
 	let bracketComponent: KnockoutBracket;
 	let phase2BracketComponent: KnockoutBracket;
 
-	// Phase 2 bracket state (separate from Phase 1)
-	let unsavedPhase2Bracket: BracketPrediction | null = null;
+	// Hydration / persistence lifecycle
+	let fetchesDone = false;
+	let phase2FetchesStarted = false;
+	let hydrated = false;
+	let restorationBanner: { matchCount: number; p1: boolean; p2: boolean } | null = null;
+	let bannerTimeout: ReturnType<typeof setTimeout> | null = null;
 
 	onMount(async () => {
 		if ($isAuthenticated) {
@@ -79,20 +90,96 @@
 
 			// Fetch Phase 2 data if active
 			if ($isPhase2Active) {
+				phase2FetchesStarted = true;
 				await Promise.all([
 					fetchActualKnockoutFixtures(),
 					fetchActualStandings(),
 					fetchPhase2BracketPredictions()
 				]);
 			}
+
+			fetchesDone = true;
 		}
+
+		window.addEventListener('beforeunload', handleBeforeUnload);
 	});
 
-	// Reactively fetch Phase 2 data when it becomes active
-	$: if ($isPhase2Active && $isAuthenticated) {
-		fetchActualKnockoutFixtures();
-		fetchActualStandings();
-		fetchPhase2BracketPredictions();
+	onDestroy(() => {
+		if (typeof window !== 'undefined') {
+			window.removeEventListener('beforeunload', handleBeforeUnload);
+		}
+		if (bannerTimeout !== null) clearTimeout(bannerTimeout);
+	});
+
+	// Reactively fetch Phase 2 data when it becomes active (one-shot guard so
+	// it doesn't re-fire on every dependency change).
+	$: if ($isPhase2Active && $isAuthenticated && !phase2FetchesStarted) {
+		phase2FetchesStarted = true;
+		Promise.all([
+			fetchActualKnockoutFixtures(),
+			fetchActualStandings(),
+			fetchPhase2BracketPredictions()
+		]);
+	}
+
+	// Hydrate once both $user and the initial fetches are ready. The user
+	// store is populated asynchronously by initAuth in +layout.svelte, so a
+	// reactive guard handles whichever finishes last.
+	$: if ($user && fetchesDone && !hydrated) {
+		hydrated = true;
+		initPersistence($user.id);
+		const r = hydrateFromStorage(
+			$user.id,
+			$groupFixtures,
+			$isPhase1Locked,
+			$isPhase2BracketLocked
+		);
+		if (r) {
+			restorationBanner = {
+				matchCount: r.matchCount,
+				p1: r.bracketPhase1Restored,
+				p2: r.bracketPhase2Restored
+			};
+			bannerTimeout = setTimeout(() => {
+				restorationBanner = null;
+				bannerTimeout = null;
+			}, 8000);
+		}
+	}
+
+	// Exit-confirmation guards: prevent accidentally leaving with unsaved work.
+	$: hasAnyUnsaved =
+		$hasUnsavedChanges || $hasUnsavedBracketChanges || $hasUnsavedPhase2BracketChanges;
+
+	beforeNavigate(({ cancel, type }) => {
+		if (!hasAnyUnsaved) return;
+		// Browser-level leaves (refresh, close, external link) are handled by
+		// the beforeunload listener — let it through to avoid double-prompting.
+		if (type === 'leave') return;
+		const ok = confirm(
+			"You have unsaved predictions. Leave anyway?\n\nYour drafts are saved on this device and will be restored when you return, but they won't be submitted until you click Save."
+		);
+		if (!ok) cancel();
+	});
+
+	function handleBeforeUnload(e: BeforeUnloadEvent) {
+		if (!hasAnyUnsaved) return;
+		e.preventDefault();
+		// Required for Chrome / older browsers; modern browsers ignore the
+		// returned string and show their own generic dialog.
+		e.returnValue = '';
+	}
+
+	function dismissBanner() {
+		restorationBanner = null;
+		if (bannerTimeout !== null) {
+			clearTimeout(bannerTimeout);
+			bannerTimeout = null;
+		}
+	}
+
+	function formatLocalTime(d: Date): string {
+		return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 	}
 
 	// Check if bracket has unsaved changes (from store)
@@ -177,7 +264,7 @@
 
 	// Phase 2 bracket handlers
 	function handlePhase2BracketUpdate(event: CustomEvent<BracketPrediction>) {
-		unsavedPhase2Bracket = event.detail;
+		unsavedPhase2BracketPrediction.set(event.detail);
 	}
 
 	function handleClearPhase2Bracket() {
@@ -187,7 +274,7 @@
 	}
 
 	async function handleSavePhase2Bracket() {
-		const bracket = unsavedPhase2Bracket;
+		const bracket = $unsavedPhase2BracketPrediction;
 		if (!bracket) return;
 
 		phase2BracketSaveStatus = 'saving';
@@ -196,14 +283,14 @@
 		phase2BracketSaveStatus = success ? 'saved' : 'error';
 
 		if (success) {
-			unsavedPhase2Bracket = null;
+			unsavedPhase2BracketPrediction.set(null);
 			setTimeout(() => { phase2BracketSaveStatus = 'idle'; }, 2000);
 		}
 	}
 
 	// Phase 2 computed values
-	$: hasPhase2BracketChanges = unsavedPhase2Bracket !== null;
-	$: phase2DisplayBracket = unsavedPhase2Bracket || $phase2BracketPrediction;
+	$: hasPhase2BracketChanges = $hasUnsavedPhase2BracketChanges;
+	$: phase2DisplayBracket = $unsavedPhase2BracketPrediction || $phase2BracketPrediction;
 	$: hasPhase2BracketSelections = phase2DisplayBracket && (
 		phase2DisplayBracket.round_of_16?.some(t => t) ||
 		phase2DisplayBracket.quarter_finals?.some(t => t) ||
@@ -339,6 +426,21 @@
 
 {#if $isAuthenticated}
 	<div class="container mx-auto mobile-padding py-6">
+		{#if restorationBanner}
+			<div class="alert alert-info shadow-md mb-4">
+				<span>
+					Restored
+					{#if restorationBanner.matchCount > 0}
+						{restorationBanner.matchCount} unsaved match prediction{restorationBanner.matchCount === 1 ? '' : 's'}
+					{/if}
+					{#if restorationBanner.matchCount > 0 && (restorationBanner.p1 || restorationBanner.p2)} and {/if}
+					{#if restorationBanner.p1 || restorationBanner.p2}your unsaved bracket{/if}
+					from your last visit. Click Save when ready.
+				</span>
+				<button class="btn btn-sm btn-ghost" on:click={dismissBanner}>Dismiss</button>
+			</div>
+		{/if}
+
 		<!-- Header -->
 		<div class="flex flex-col gap-6 mb-8">
 			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -450,12 +552,17 @@
 
 					<!-- Floating save button for groups -->
 					{#if activeTab === 'groups' && $hasUnsavedChanges}
-						<div class="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-40">
+						<div class="fixed bottom-24 sm:bottom-6 right-4 sm:right-6 z-40 flex flex-col items-end gap-1">
 							<SaveButton
 								status={saveStatus}
 								count={$unsavedChangesCount}
 								on:save={handleSaveAll}
 							/>
+							{#if $lastLocalSave}
+								<p class="text-xs text-base-content/50 text-right">
+									Saved locally · {formatLocalTime($lastLocalSave)}
+								</p>
+							{/if}
 						</div>
 					{/if}
 
@@ -483,6 +590,7 @@
 									hasBracketSelections={!!hasBracketSelections}
 									{bracketSaveStatus}
 									bind:bracketComponent
+									lastLocalSave={$lastLocalSave}
 									onRetry={fetchBracketPredictions}
 									onClear={handleClearBracket}
 									onSave={handleSaveBracket}
@@ -519,6 +627,7 @@
 						hasUnsavedChanges={$hasUnsavedChanges}
 						{saveStatus}
 						unsavedChangesCount={$unsavedChangesCount}
+						lastLocalSave={$lastLocalSave}
 						onClearBracket={handleClearPhase2Bracket}
 						onSaveBracket={handleSavePhase2Bracket}
 						onSaveAll={handleSaveAll}

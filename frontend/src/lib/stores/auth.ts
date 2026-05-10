@@ -7,6 +7,7 @@ import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 import { api } from '$api/client';
 import * as authApi from '$api/auth';
+import { clearAllForUser } from '$stores/unsavedPersistence';
 import type { User, UserCreate, UserLogin } from '$types';
 
 const TOKEN_KEY = 'predictor_token';
@@ -89,7 +90,11 @@ export async function fetchUser(): Promise<User | null> {
 		user.set(userData);
 		return userData;
 	} catch (e) {
-		// Token invalid, clear auth state
+		// Token invalid, clear auth state. Also wipe any persisted draft
+		// buffers for the previous user so they don't bleed into a re-auth
+		// on the same browser.
+		const prevId = get(user)?.id;
+		if (prevId) clearAllForUser(prevId);
 		token.set(null);
 		user.set(null);
 		return null;
@@ -97,6 +102,8 @@ export async function fetchUser(): Promise<User | null> {
 }
 
 export function logout() {
+	const prevId = get(user)?.id;
+	if (prevId) clearAllForUser(prevId);
 	token.set(null);
 	user.set(null);
 	error.set(null);
