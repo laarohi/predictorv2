@@ -101,7 +101,7 @@ Configured in `config/worldcup2026.yml`. See `docs/scoring-system.md` for full d
 - **Frontend**: `new Date(string).toLocaleString(...)` parses correctly because of the explicit offset, then renders in the user's local timezone via `Intl`.
 - **DB-driver gotcha**: aiosqlite drops tzinfo on read even when the column is declared aware; PostgreSQL preserves it. Use `aware_utc()` (also in `_datetime.py`) at any compare site that touches DB-loaded values, defensively.
 
-The rule was established in commit `c6089cc` and migration `2c5e9a4f7d10`. Violating it silently shifts kickoffs and deadlines by the user's UTC offset — a data-integrity disaster for a prediction app where lock timing matters.
+The rule was established in commit `c6089cc`. The original conversion migration was subsequently squashed into the consolidated initial migration (`f06b6a2077d3`) during pre-production prep. Violating the rule silently shifts kickoffs and deadlines by the user's UTC offset — a data-integrity disaster for a prediction app where lock timing matters.
 
 ## Key Files
 
