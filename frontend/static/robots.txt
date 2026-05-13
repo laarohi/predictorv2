@@ -1,0 +1,3 @@
+# Private friends-only prediction app — please don't index.
+User-agent: *
+Disallow: /
