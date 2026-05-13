@@ -41,6 +41,11 @@ export RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
 export RCLONE_CONFIG_R2_ENDPOINT="$R2_ENDPOINT"
 export RCLONE_CONFIG_R2_REGION=auto
 export RCLONE_CONFIG_R2_ACL=private
+# Skip the pre-flight HeadBucket/CreateBucket attempt rclone does by default.
+# That call requires bucket-management (Admin) permission; without this flag,
+# Object-Read-Write tokens get 403 even though they have valid PutObject perms.
+# See https://forum.rclone.org/t/cannot-copy-to-cloudflare-r2-using-copy-failed-to-copy-forbidden-status-code-403-request-id-host-id/41928
+export RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
 
 TIMESTAMP=$(date -u +%Y%m%d-%H%M%SZ)
 DUMP_FILE="/tmp/predictor-${TIMESTAMP}.sql.gz"
