@@ -6,6 +6,7 @@
 @import './lib/styles/panini-leaderboard.css';
 @import './lib/styles/panini-wizard.css';
 @import './lib/styles/panini-results.css';
+@import './lib/styles/panini-auth.css';
 
 @tailwind base;
 @tailwind components;

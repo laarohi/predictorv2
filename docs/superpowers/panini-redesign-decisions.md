@@ -90,6 +90,22 @@ The current Leaderboard supports clicking any row to expand and see a per-phase 
 
 **Why A:** the Panini table is the design we signed off on; expandable rows would change its skim-ability. `/profile/[userId]` already exposes the breakdown so no data is lost. Easy to revert by re-adding the row click + a state machine.
 
+### 2026-05-15 — Profile pages deferred (kept in legacy dark theme)
+
+`/profile` and `/profile/[userId]` are 366 lines + ~similar containing user stats, prediction history, password-change form, and a public-profile view with breakdown. Like the Admin port, a careful Panini rewrite would take hours, and the user-facing version is reachable only by clicking a player name on the Leaderboard.
+
+**Decision:** leave Profile in legacy dark theme. Auth pages (login/register/callback) and all main app routes (Dashboard/Predictions/Leaderboard/Results) are Panini'd, which covers ~95% of the user-visible surface.
+
+**Push back if you want** Profile in Panini too — separate follow-up plan, estimate 3-4 hours.
+
+### 2026-05-15 — Admin page deferred (kept in legacy dark theme)
+
+`/admin` is 626 lines of admin-only form management (phase deadlines, phase 2 activation, score sync, user toggles). A faithful Panini rewrite would take hours, and the page is used by exactly one person (you). Half-porting it would look worse than not porting it.
+
+**Decision:** leave `/admin` in the legacy dark `predictor` theme. It is **not** in `PANINI_ROUTES`, so the layout's dark navbar is still shown on this route. Functionally unchanged.
+
+**Push back if you want** a full Admin Panini design — I'll write a dedicated plan for it. Estimated 4-6 hours of careful work.
+
 ### 2026-05-15 — Wizard reuses KnockoutBracket and Phase2Content unchanged
 
 The new Panini wizard rewrites the **outer** chrome and per-group view in Panini styling, but the **inner** components stay as-is:
