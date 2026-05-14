@@ -90,6 +90,27 @@ The current Leaderboard supports clicking any row to expand and see a per-phase 
 
 **Why A:** the Panini table is the design we signed off on; expandable rows would change its skim-ability. `/profile/[userId]` already exposes the breakdown so no data is lost. Easy to revert by re-adding the row click + a state machine.
 
+### 2026-05-15 — Wizard reuses KnockoutBracket and Phase2Content unchanged
+
+The new Panini wizard rewrites the **outer** chrome and per-group view in Panini styling, but the **inner** components stay as-is:
+
+- `KnockoutBracket.svelte` — used inside the new "Knockout" pill of Phase 1, unchanged.
+- `Phase2Content.svelte` — used when the user toggles to Phase 2, unchanged.
+
+**Why:** these components contain hundreds of lines of interaction logic (drag-drop / click-select, persistence, derived bracket state). Rewriting them in Panini would be a multi-day project on its own and risks breaking the prediction save flow. Visually they will look "off-brand" inside the cream Panini chrome — they still use the dark-theme Tailwind utilities (`bg-base-300/50` etc.) that point to DaisyUI tokens — but they remain fully functional.
+
+**Follow-up:** write a separate plan to restyle these components to match Panini, OR rebuild them on top of Panini primitives. Until then, the wizard is fully usable.
+
+### 2026-05-15 — Bonus questions are UI stubs with no persistence
+
+The new Panini wizard adds a "Bonus" pill with 6 example bonus questions (Who wins the tournament, Top scorer, Most cards, etc.). These currently:
+
+- Render with Panini styling
+- Allow no real interaction (no select widgets are wired up)
+- Have **no backend save path** — the schema for bonus_questions doesn't exist yet
+
+**Why a stub:** the user wants bonus questions in Phase 1 (see earlier decisions). Adding the UI now lets us iterate the design. The full feature requires (a) a `bonus_questions` table on the backend, (b) admin entry of correct answers, (c) scoring rules, (d) prediction persistence. Each of those belongs in a follow-up plan.
+
 ### 2026-05-15 — Bracket exposure value is currently a fixed stub
 
 `stubBracketExposure` returns the same `{ pointsAvailable: 235, picksLocked: 22, picksTotal: 22, finalPick: ARG over FRA }` regardless of user. This is intentional: real bracket-exposure math needs to know (a) which knockout-stage points are still in play given the current bracket state, (b) which of the user's picks are still alive. Push back if you want me to compute a less misleading value from the existing bracket prediction data, even without backend support.
