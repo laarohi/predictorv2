@@ -79,6 +79,41 @@ Originally Task 11 of the Foundation plan. Held until the whole worktree is read
 
 ---
 
+---
+
+## Completion summary (2026-05-15)
+
+Frontend Panini redesign is **complete to the agreed-upon scope** and builds clean.
+
+**Acceptance checks (all green):**
+- `npm run check` — 0 errors, 58 warnings (matches the pre-existing baseline noted in project memory)
+- `npm run build` — ✓ done
+- `npx vitest run` — 22/22 tests passing
+- HTTP smoke on all 10 routes (`/`, `/leaderboard`, `/predictions`, `/results`, `/login`, `/register`, `/admin`, `/profile`, `/auth/callback`, `/panini-sandbox`) — all return 200
+
+**Migrated to Panini (14 commits, on branch `worktree-redesign`):**
+- Foundation: fonts, theme tokens, paper-grain shell, masthead, mobile chrome, flags, icons, sparkline component, sandbox at `/panini-sandbox`
+- Dashboard (`/`): 5-KPI strip, live broadcast bug, countdown, rank trajectory sparkline, closest rivals card, hot pick card, bracket exposure, top 5, upcoming fixtures
+- Leaderboard (`/leaderboard`): tabs, self-card, full standings table with per-row 7-day sparkline
+- Predictions wizard (`/predictions`): phase toggle, per-group pill nav, standings on top with matches below, knockout sub-tab (uses existing KnockoutBracket), bonus questions stub, sticky save bar
+- Results (`/results`): stats strip, filter pills, day-grouped result cards with predicted-vs-actual
+- Login / Register / Auth callback: standalone Panini auth pages, no nav
+
+**Still in legacy dark theme (deferred):**
+- `/admin` — complex 626-line admin tooling; pushback expected since this is admin-only
+- `/profile` and `/profile/[userId]` — reachable via leaderboard clicks; a Panini restyle is a 3-4h follow-up
+
+**Stub data layer:**
+- All "extras" the user approved (sparklines, social signals, hot pick, bracket exposure, underdog stats, steepest climb, bonus haul, live in-progress scores) currently use deterministic stubs in `frontend/src/lib/stubs/panini.ts`. Each stub emits `console.debug('[panini:stub] ...')` in dev so they're easy to find when wiring up real backend data later.
+
+**Known visual mismatches:**
+- The KnockoutBracket component (inside Phase 1 Knockout sub-tab) and Phase2Content (when Phase 2 is active) still use legacy dark-theme Tailwind classes — they're functional but look out-of-brand on the cream Panini canvas. Documented as a follow-up.
+
+**Not touched (correctly):**
+- CLAUDE.md UI guidelines — deferred to merge-time per the worktree rule
+- Backend, scoring engine, prediction persistence — all unchanged
+- `.claude/settings.local.json` — pre-existing modification, not mine
+
 ## Decisions still to make (will land here as I hit them)
 
 ### 2026-05-15 — Drop expandable per-row breakdown on Leaderboard
