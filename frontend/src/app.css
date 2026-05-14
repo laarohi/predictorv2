@@ -3,6 +3,7 @@
  * handler drops @import rules that don't appear before all other at-rules. */
 @import './lib/styles/panini-base.css';
 @import './lib/styles/panini-dashboard.css';
+@import './lib/styles/panini-leaderboard.css';
 
 @tailwind base;
 @tailwind components;
