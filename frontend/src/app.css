@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Panini design system (scoped under .pn) — additive, does not affect dark theme pages */
+@import './lib/styles/panini-base.css';
+
 /* Base styles */
 @layer base {
 	html {
