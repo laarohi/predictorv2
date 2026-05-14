@@ -269,15 +269,6 @@
 	padding: 16px 18px;
 	position: relative;
 }
-.pn-sticker.tilt-1 {
-	transform: rotate(-0.8deg);
-}
-.pn-sticker.tilt-2 {
-	transform: rotate(0.6deg);
-}
-.pn-sticker.tilt-3 {
-	transform: rotate(-0.3deg);
-}
 .pn-sticker .l {
 	font-family: var(--mono);
 	font-size: 10px;

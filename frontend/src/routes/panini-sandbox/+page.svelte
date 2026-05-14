@@ -59,17 +59,17 @@
 	<div
 		style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-bottom: 24px;"
 	>
-		<div class="pn-sticker tilt-1">
+		<div class="pn-sticker">
 			<div class="l"><span class="pip"></span>Rank</div>
 			<div class="v"><em>8</em><span class="small">/32</span></div>
 			<div class="sub"><b>▲ 4</b> · last 7d</div>
 		</div>
-		<div class="pn-sticker tilt-2">
+		<div class="pn-sticker">
 			<div class="l"><span class="pip"></span>Total</div>
 			<div class="v">147</div>
 			<div class="sub"><b>+42</b> · MD2</div>
 		</div>
-		<div class="pn-sticker tilt-3">
+		<div class="pn-sticker">
 			<div class="l"><span class="pip"></span>Exact</div>
 			<div class="v"><span class="green">3</span><span class="small">/16</span></div>
 			<div class="sub"><b>+45 pts</b></div>
