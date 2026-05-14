@@ -29,7 +29,7 @@
 	// Routes that render their own Panini chrome via <PnPageShell> — the
 	// root layout suppresses its dark navbar + mobile bottom-nav for these
 	// so we don't double up. Add a route here when migrating the page.
-	const PANINI_ROUTES = ['/', '/leaderboard', '/predictions', '/panini-sandbox'];
+	const PANINI_ROUTES = ['/', '/leaderboard', '/predictions', '/results', '/panini-sandbox'];
 	$: usesPanini = PANINI_ROUTES.some(
 		(r) => currentPath === r || (r !== '/' && currentPath.startsWith(r))
 	);
