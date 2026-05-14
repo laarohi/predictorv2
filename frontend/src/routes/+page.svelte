@@ -9,7 +9,27 @@
 		formatKickoff,
 		getTimeUntilKickoff
 	} from '$stores/fixtures';
-	import { fetchLeaderboard, currentUserPosition, topThree } from '$stores/leaderboard';
+	import {
+		fetchLeaderboard,
+		currentUserPosition,
+		leaderboard,
+		totalParticipants
+	} from '$stores/leaderboard';
+	import { phase1Countdown, phase1Deadline } from '$stores/phase';
+
+	import PnPageShell from '$components/panini/PnPageShell.svelte';
+	import PnFlag from '$components/panini/PnFlag.svelte';
+	import PnSparkline from '$components/panini/PnSparkline.svelte';
+	import { teamCode } from '$lib/utils/teamCodes';
+	import {
+		stubRankTrajectory,
+		stubBracketExposure,
+		stubBonusHaul,
+		stubLiveScore,
+		stubHotPick,
+		stubSteepestClimb
+	} from '$lib/stubs/panini';
+	import type { Fixture, LeaderboardEntry } from '$types';
 
 	$: if (!$isAuthenticated) {
 		goto('/login');
@@ -21,200 +41,580 @@
 			fetchLeaderboard();
 		}
 	});
+
+	// ---- Derived values from existing stores -------------------------------
+	$: rank = $currentUserPosition?.position ?? 0;
+	$: totalPlayers = $totalParticipants || $leaderboard.length || 32;
+	$: totalPoints = $currentUserPosition?.total_points ?? 0;
+	$: exactCount = $currentUserPosition?.exact_scores ?? 0;
+	$: correctOutcomes = $currentUserPosition?.correct_outcomes ?? 0;
+	$: totalScored = $currentUserPosition?.breakdown?.total_predictions ?? 0;
+	$: movement = $currentUserPosition?.movement ?? 0;
+	$: userId = $user?.id ?? 'anonymous';
+	$: userName = $user?.name ?? 'Player';
+	$: firstName = userName.split(' ')[0];
+
+	// Outcome hit rate (correct / total scored)
+	$: outcomeRate = totalScored > 0 ? Math.round((correctOutcomes / totalScored) * 100) : 0;
+
+	// Top 5 of leaderboard
+	$: topFive = $leaderboard.slice(0, 5);
+
+	// Rivals: ±1 around the current user. Falls back gracefully near edges.
+	$: rivals = (() => {
+		const idx = $leaderboard.findIndex((e) => e.user_id === $user?.id);
+		if (idx === -1) return [];
+		const start = Math.max(0, idx - 1);
+		const end = Math.min($leaderboard.length, idx + 2);
+		return $leaderboard.slice(start, end);
+	})();
+
+	// ---- Stubbed widgets ---------------------------------------------------
+	$: trajectory = stubRankTrajectory(userId, rank || 1, totalPlayers);
+	$: bracketExposure = stubBracketExposure(userId);
+	$: bonusHaul = stubBonusHaul(userId, exactCount);
+	$: climb = stubSteepestClimb(userId, movement, totalPlayers);
+
+	// Hot pick: take up to the first 5 upcoming open fixtures and stub a
+	// "your pick" of 2-1 home for each. Real prediction integration is a
+	// follow-up task — for now this exercises the design.
+	$: hotPickCandidates = $upcomingFixtures.slice(0, 5).map((f) => ({
+		fixtureId: f.id,
+		homeCode: teamCode(f.home_team),
+		awayCode: teamCode(f.away_team),
+		yourScore: [2, 1] as [number, number]
+	}));
+	$: hotPick = stubHotPick(hotPickCandidates);
+
+	// ---- Countdown digits --------------------------------------------------
+	// Use the closest upcoming fixture as the "next lock"; fall back to
+	// phase 1 deadline if no fixtures are loaded yet.
+	$: nextFixture = $upcomingFixtures[0] ?? null;
+	$: countdownText = nextFixture
+		? getTimeUntilKickoff(nextFixture.kickoff)
+		: $phase1Countdown ?? '—';
+
+	function parseCountdown(s: string): { d: number; h: number; m: number; sec: number } {
+		const out = { d: 0, h: 0, m: 0, sec: 0 };
+		if (!s) return out;
+		const dm = s.match(/(\d+)d/);
+		const hm = s.match(/(\d+)h/);
+		const mm = s.match(/(\d+)m/);
+		const sm = s.match(/(\d+)s/);
+		if (dm) out.d = +dm[1];
+		if (hm) out.h = +hm[1];
+		if (mm) out.m = +mm[1];
+		if (sm) out.sec = +sm[1];
+		return out;
+	}
+	$: cd = parseCountdown(countdownText);
+
+	function pad(n: number): string {
+		return String(n).padStart(2, '0');
+	}
+
+	// ---- Strip labels ------------------------------------------------------
+	$: stripLive = (() => {
+		const f = $liveFixtures[0];
+		if (!f) return null;
+		const score = stubLiveScore(f.id, f.minute);
+		return `<b>LIVE</b> · ${teamCode(f.home_team)} ${score.homeScore}–${score.awayScore} ${teamCode(f.away_team)} · ${score.minute}′`;
+	})();
+	$: stripLock = nextFixture
+		? `<b>Next lock</b> ${teamCode(nextFixture.home_team)}–${teamCode(nextFixture.away_team)} in ${countdownText}`
+		: null;
+	$: stripYou = totalPlayers
+		? `<b>You</b> · ${rank}${ordinal(rank)} of ${totalPlayers} · ${totalPoints} pts${movement !== 0 ? ` · ${movement > 0 ? '▲' : '▼'}${Math.abs(movement)}` : ''}`
+		: null;
+
+	function ordinal(n: number): string {
+		if (n % 100 >= 11 && n % 100 <= 13) return 'th';
+		switch (n % 10) {
+			case 1: return 'st';
+			case 2: return 'nd';
+			case 3: return 'rd';
+			default: return 'th';
+		}
+	}
+
+	function rowState(f: Fixture): 'open' | 'soon' | 'locked' {
+		if (f.is_locked) return 'locked';
+		if (f.time_until_lock !== null && f.time_until_lock < 60 * 60 * 1000) return 'soon';
+		return 'open';
+	}
+
+	function shortKickoff(iso: string): { day: string; time: string } {
+		const d = new Date(iso);
+		const day = d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+		const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+		return { day, time };
+	}
+
+	function gapVariant(theirPts: number, yourPts: number): { label: string; cls: string } {
+		const diff = yourPts - theirPts;
+		if (diff > 0) return { label: `+${diff}`, cls: 'up' };
+		if (diff < 0) return { label: `${diff}`, cls: 'dn' };
+		return { label: '—', cls: 'eq' };
+	}
 </script>
 
 <svelte:head>
-	<title>Dashboard - Predictor v2</title>
+	<title>Dashboard — Predictor</title>
 </svelte:head>
 
 {#if $isAuthenticated}
-	<div class="container mx-auto mobile-padding py-6 space-y-6">
-		<!-- Hero Welcome Section -->
-		<div class="stadium-card p-6 sm:p-8 relative overflow-hidden animate-slide-up">
-			<div class="relative z-10">
-				<p class="text-sm text-primary font-medium mb-1">World Cup 2026</p>
-				<h1 class="text-3xl sm:text-4xl font-display tracking-wide mb-2">
-					Welcome back, {$user?.name?.split(' ')[0] || 'Player'}!
-				</h1>
-				<p class="text-base-content/50 text-sm">
-					Track your predictions and climb the leaderboard.
-				</p>
-			</div>
-			<!-- Decorative element -->
-			<div class="absolute -right-8 -top-8 w-32 h-32 rounded-full bg-primary/5 blur-2xl"></div>
-			<div class="absolute -right-4 -bottom-4 w-24 h-24 rounded-full bg-accent/5 blur-xl"></div>
-		</div>
-
-		<!-- Quick Stats -->
-		<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-			<div class="stat-card animate-slide-up stagger-1" style="animation-fill-mode: both;">
-				<div class="stat-title">Position</div>
-				<div class="stat-value text-gradient">
-					#{$currentUserPosition?.position || '-'}
-				</div>
-			</div>
-			<div class="stat-card animate-slide-up stagger-2" style="animation-fill-mode: both;">
-				<div class="stat-title">Points</div>
-				<div class="stat-value">{$currentUserPosition?.total_points || 0}</div>
-			</div>
-			<div class="stat-card animate-slide-up stagger-3" style="animation-fill-mode: both;">
-				<div class="stat-title">Exact Scores</div>
-				<div class="stat-value text-success">{$currentUserPosition?.exact_scores || 0}</div>
-			</div>
-			<div class="stat-card animate-slide-up stagger-4" style="animation-fill-mode: both;">
-				<div class="stat-title">Correct Results</div>
-				<div class="stat-value">{$currentUserPosition?.correct_outcomes || 0}</div>
-			</div>
-		</div>
-
-		<div class="grid lg:grid-cols-2 gap-6">
-			<!-- Live Matches -->
-			<div class="stadium-card animate-slide-up stagger-5" style="animation-fill-mode: both;">
-				<div class="p-4 sm:p-6">
-					<div class="flex items-center gap-2 mb-5">
-						<span class="relative flex h-3 w-3">
-							<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-error opacity-75"></span>
-							<span class="relative inline-flex rounded-full h-3 w-3 bg-error"></span>
-						</span>
-						<h2 class="text-lg font-display tracking-wide">Live Matches</h2>
-					</div>
-					{#if $liveFixtures.length === 0}
-						<div class="text-center py-8">
-							<div class="w-12 h-12 mx-auto mb-3 rounded-xl bg-base-300/50 flex items-center justify-center">
-								<svg class="w-6 h-6 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-								</svg>
-							</div>
-							<p class="text-base-content/50 text-sm">No live matches right now</p>
+	<PnPageShell liveLabel={stripLive} lockLabel={stripLock} youLabel={stripYou}>
+		<!-- ============================================================
+		     DESKTOP
+		     ============================================================ -->
+		<div class="pn-desk">
+			<!-- KPI ROW -->
+			<section class="pn-kpi-row">
+				<div class="pn-kpi">
+					<div>
+						<div class="l"><span class="pip red"></span>Rank</div>
+						<div class="v">
+							<span class="red">{rank || '—'}</span><span class="sm">/{totalPlayers}</span>
 						</div>
-					{:else}
-						<div class="space-y-3">
-							{#each $liveFixtures as fixture}
-								<div class="flex items-center justify-between p-4 bg-base-300/50 rounded-xl border border-base-300/30">
-									<div class="flex-1">
-										<span class="font-semibold">{fixture.home_team}</span>
+					</div>
+					<div class="sub">
+						{#if movement > 0}<span class="up">▲ {movement}</span>
+						{:else if movement < 0}<span class="dn">▼ {Math.abs(movement)}</span>
+						{:else}—{/if}
+						· last update
+					</div>
+				</div>
+				<div class="pn-kpi">
+					<div>
+						<div class="l"><span class="pip"></span>Total</div>
+						<div class="v">{totalPoints}</div>
+					</div>
+					<div class="sub"><b>{exactCount}</b> exact + <b>{correctOutcomes}</b> outcomes</div>
+				</div>
+				<div class="pn-kpi">
+					<div>
+						<div class="l"><span class="pip green"></span>Exact</div>
+						<div class="v">
+							<span class="green">{exactCount}</span><span class="sm">/{totalScored || '—'}</span>
+						</div>
+					</div>
+					<div class="sub"><b>+{exactCount * 10}</b> pts from exact scores</div>
+				</div>
+				<div class="pn-kpi">
+					<div>
+						<div class="l"><span class="pip"></span>Outcomes</div>
+						<div class="v">
+							{correctOutcomes}<span class="sm">/{totalScored || '—'}</span>
+						</div>
+					</div>
+					<div class="sub"><b>{outcomeRate}%</b> hit rate</div>
+				</div>
+				<div class="pn-kpi">
+					<div>
+						<div class="l"><span class="pip"></span>Bonus haul</div>
+						<div class="v">
+							<span class="gold">{bonusHaul.total}</span>
+						</div>
+					</div>
+					<div class="sub">
+						<b>{bonusHaul.fromExact}</b> exact + <b>{bonusHaul.fromUnderdogs}</b> underdog
+					</div>
+				</div>
+			</section>
+
+			<!-- LIVE matches + countdown/trend -->
+			<section class="pn-main2">
+				<div class="pn-card">
+					<div class="pn-card-h">
+						<span><span class="live-dot"></span>LIVE NOW · {$liveFixtures.length} IN PROGRESS</span>
+						<span class="right">MATCH DAY</span>
+					</div>
+					<div class="pn-card-body" style="padding: 14px 18px;">
+						{#if $liveFixtures.length === 0}
+							<div style="padding: 24px 0; text-align: center; font-family: var(--mono); font-size: 12px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">
+								No live matches right now
+							</div>
+						{:else}
+							{#each $liveFixtures as f (f.id)}
+								{@const live = stubLiveScore(f.id, f.minute)}
+								<div class="pn-bcast">
+									<PnFlag code={teamCode(f.home_team)} w={56} h={36} />
+									<div class="team">
+										<span class="nm">{f.home_team}</span>
+										<span class="sub">{f.group ? `Group ${f.group}` : f.stage}</span>
 									</div>
-									<div class="px-4 text-center">
-										<span class="text-2xl font-display tracking-wide">? - ?</span>
-										<div class="text-xs text-error font-medium">{fixture.minute}'</div>
+									<div class="sb">{live.homeScore}–{live.awayScore}<span class="min">{live.minute}′ · {live.half === 1 ? '1H' : '2H'}</span></div>
+									<div class="team r">
+										<span class="nm r">{f.away_team}</span>
+										<span class="sub">{f.group ? `Group ${f.group}` : f.stage}</span>
 									</div>
-									<div class="flex-1 text-right">
-										<span class="font-semibold">{fixture.away_team}</span>
+									<PnFlag code={teamCode(f.away_team)} w={56} h={36} />
+									<div class="pick">
+										<span><b>YOUR PICK</b> · —</span>
+										<span>Scores update live</span>
+										<span>● IN PROGRESS</span>
 									</div>
 								</div>
 							{/each}
-						</div>
-					{/if}
-				</div>
-			</div>
-
-			<!-- Top Leaderboard -->
-			<div class="stadium-card animate-slide-up stagger-6" style="animation-fill-mode: both;">
-				<div class="p-4 sm:p-6">
-					<div class="flex items-center justify-between mb-5">
-						<h2 class="text-lg font-display tracking-wide">Leaderboard</h2>
-						<a href="/leaderboard" class="text-xs text-primary hover:text-primary/80 transition-colors font-medium">
-							View All
-						</a>
+						{/if}
 					</div>
-					{#if $topThree.length === 0}
-						<div class="text-center py-8">
-							<div class="w-12 h-12 mx-auto mb-3 rounded-xl bg-base-300/50 flex items-center justify-center">
-								<svg class="w-6 h-6 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
-								</svg>
+				</div>
+
+				<div class="pn-stack">
+					<div class="pn-card pn-count">
+						<div class="pn-card-h">
+							<span>NEXT LOCK</span>
+							<span class="right">{nextFixture?.stage ?? '—'}</span>
+						</div>
+						<div class="pn-card-body">
+							{#if nextFixture}
+								<div class="who">{teamCode(nextFixture.home_team)} · {teamCode(nextFixture.away_team)}</div>
+								<div class="when">{formatKickoff(nextFixture.kickoff)}</div>
+							{:else}
+								<div class="who">—</div>
+								<div class="when">No upcoming matches</div>
+							{/if}
+							<div class="digits">
+								<div class="digit">{pad(cd.d).slice(0, 1)}</div>
+								<div class="digit">{pad(cd.d).slice(-1)}</div>
+								<div class="sep">:</div>
+								<div class="digit">{pad(cd.h).slice(0, 1)}</div>
+								<div class="digit">{pad(cd.h).slice(-1)}</div>
+								<div class="sep">:</div>
+								<div class="digit">{pad(cd.m).slice(0, 1)}</div>
+								<div class="digit">{pad(cd.m).slice(-1)}</div>
 							</div>
-							<p class="text-base-content/50 text-sm">No standings yet</p>
+							<div class="digit-label">
+								<span>D</span><span>D</span><span class="ph"></span>
+								<span>H</span><span>H</span><span class="ph"></span>
+								<span>M</span><span>M</span>
+							</div>
+							<div class="quick-pick">
+								<span>YOUR PICK</span>
+								<span style="color: var(--paper-3);">— · —</span>
+								<a class="pn-tag red" href="/predictions" style="padding: 2px 8px; text-decoration: none;">Submit →</a>
+							</div>
 						</div>
-					{:else}
-						<div class="space-y-2">
-							{#each $topThree as entry, i}
-								<div
-									class="leaderboard-row"
-									class:current-user={entry.user_id === $user?.id}
-								>
-									<div
-										class="position-badge"
-										class:gold={i === 0}
-										class:silver={i === 1}
-										class:bronze={i === 2}
-									>
-										{entry.position}
-									</div>
-									<div class="flex-1 min-w-0">
-										<a href="/profile/{entry.user_id}" class="font-semibold truncate block hover:text-primary transition-colors">{entry.user_name}</a>
-									</div>
-									<div class="text-xl font-display tracking-wide">{entry.total_points}</div>
-								</div>
-							{/each}
-						</div>
-					{/if}
-				</div>
-			</div>
-		</div>
-
-		<!-- Upcoming Matches -->
-		<div class="stadium-card animate-slide-up stagger-7" style="animation-fill-mode: both;">
-			<div class="p-4 sm:p-6">
-				<div class="flex items-center justify-between mb-5">
-					<h2 class="text-lg font-display tracking-wide">Upcoming Matches</h2>
-					<a href="/predictions" class="text-xs text-primary hover:text-primary/80 transition-colors font-medium">
-						Make Predictions
-					</a>
-				</div>
-				{#if $upcomingFixtures.length === 0}
-					<div class="text-center py-8">
-						<div class="w-12 h-12 mx-auto mb-3 rounded-xl bg-base-300/50 flex items-center justify-center">
-							<svg class="w-6 h-6 text-base-content/30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-							</svg>
-						</div>
-						<p class="text-base-content/50 text-sm">No upcoming matches</p>
 					</div>
-				{:else}
-					<div class="space-y-2">
-						{#each $upcomingFixtures.slice(0, 5) as fixture, i}
-							<div class="flex items-center gap-4 p-3 rounded-lg hover:bg-base-300/30 transition-colors">
-								<div class="flex-1 min-w-0">
-									<div class="flex items-center gap-2 text-sm">
-										<span class="font-semibold truncate">{fixture.home_team}</span>
-										<span class="vs-badge text-[10px]">VS</span>
-										<span class="font-semibold truncate">{fixture.away_team}</span>
-									</div>
-									<div class="text-xs text-base-content/50 mt-1">
-										{formatKickoff(fixture.kickoff)}
-									</div>
-								</div>
+
+					<div class="pn-trend">
+						<div class="trend-h">
+							<span class="l"><span class="pip"></span>Rank trajectory · 7 days</span>
+							<span class="now">
+								<span class="from">{trajectory.ranks[0]} →</span><em>{rank || trajectory.ranks[6]}</em>
+							</span>
+						</div>
+						<PnSparkline ranks={trajectory.ranks} maxRank={trajectory.maxRank} width={240} height={96} />
+						<div class="trend-foot">
+							<span>{movement >= 0 ? 'Climber' : 'Slipped'} · pool of {totalPlayers}</span>
+							<b>{movement > 0 ? '▲' : movement < 0 ? '▼' : '—'} {Math.abs(movement)} places</b>
+						</div>
+					</div>
+				</div>
+			</section>
+
+			<!-- Insights row -->
+			<section class="pn-insights">
+				<!-- Closest rivals -->
+				<div class="pn-insight pn-rival" style="padding: 0;">
+					<div style="padding: 14px 16px 8px;">
+						<div class="l"><span class="pip"></span>Closest rivals</div>
+					</div>
+					<div class="pn-card-body" style="padding: 0 16px 14px;">
+						{#each rivals as r (r.user_id)}
+							{@const g = gapVariant(r.total_points, totalPoints)}
+							<div class="row" class:you={r.user_id === $user?.id}>
+								<div class="pos">{r.position}</div>
 								<div>
-									{#if fixture.is_locked}
-										<span class="inline-flex items-center gap-1 text-xs px-2 py-1 bg-error/10 text-error rounded-md border border-error/20">
-											<svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-											</svg>
-											Locked
-										</span>
-									{:else}
-										<span class="countdown-timer">
-											{getTimeUntilKickoff(fixture.kickoff)}
-										</span>
-									{/if}
+									<div class="nm">
+										{r.user_name}
+										<div class="h">
+											{r.user_id === $user?.id ? 'YOU' : `@${r.user_name.split(' ')[0].toLowerCase()}`}
+											{#if r.exact_scores}· {r.exact_scores} exact{/if}
+										</div>
+									</div>
 								</div>
+								<div class="gap {g.cls}">{r.user_id === $user?.id ? '—' : g.label}</div>
+								<div class="pts">{r.total_points}</div>
+							</div>
+						{:else}
+							<div style="padding: 16px 0; font-family: var(--mono); font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">
+								No leaderboard data yet
 							</div>
 						{/each}
 					</div>
-					{#if $upcomingFixtures.length > 5}
-						<div class="mt-4 pt-4 border-t border-base-300/30 text-center">
-							<a href="/predictions" class="btn btn-ghost btn-sm gap-2">
-								View all {$upcomingFixtures.length} matches
-								<svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3" />
-								</svg>
-							</a>
+				</div>
+
+				<!-- Hot pick -->
+				<div class="pn-insight">
+					<div class="l"><span class="pip"></span>Your hottest open pick</div>
+					{#if hotPick}
+						<div class="matchup" style="margin-top: 4px; margin-bottom: 12px;">
+							<PnFlag code={hotPick.homeCode} w={28} h={20} />
+							<span>{hotPick.homeCode}</span>
+							<span style="color: var(--ink-3); font-size: 12px; font-family: var(--mono);">vs</span>
+							<PnFlag code={hotPick.awayCode} w={28} h={20} />
+							<span>{hotPick.awayCode}</span>
 						</div>
+						<div class="pn-insight-row" style="align-items: baseline; gap: 16px;">
+							<span class="num red">{hotPick.yourScore[0]}–{hotPick.yourScore[1]}</span>
+							<div class="meta">
+								Stub pick · <b>{hotPick.agreesExact} of {hotPick.total}</b> agree exact<br />
+								Potential yield <b>+{hotPick.potentialPoints} pts</b> · <b>{hotPick.multiplier}×</b> avg
+							</div>
+						</div>
+						<div class="corner-tag">High EV</div>
+					{:else}
+						<div class="meta" style="margin-top: 8px;">No open fixtures available.</div>
 					{/if}
+				</div>
+
+				<!-- Bracket exposure -->
+				<div class="pn-insight">
+					<div class="l"><span class="pip"></span>Bracket exposure</div>
+					<div class="pn-insight-row" style="align-items: baseline; gap: 14px;">
+						<span class="num gold">{bracketExposure.pointsAvailable}</span>
+						<div class="meta">
+							Pts available · <b>{bracketExposure.picksLocked} of {bracketExposure.picksTotal}</b> picks<br />
+							{#if bracketExposure.finalPick}
+								Final pick · <b>{bracketExposure.finalPick.winnerCode}</b> over <b>{bracketExposure.finalPick.opponentCode}</b>
+							{/if}
+						</div>
+					</div>
+					<div class="corner-tag red">Locked</div>
+				</div>
+			</section>
+
+			<!-- Bottom: Top 5 + Upcoming -->
+			<section class="pn-bottom">
+				<div>
+					<div class="pn-banner">
+						<span class="n">04</span>
+						<h2>Top <em>5</em></h2>
+						<span class="end">of {totalPlayers}</span>
+					</div>
+					<div class="pn-pod">
+						{#each topFive as e, i (e.user_id)}
+							<div class="row" class:gold={i === 0} class:you={e.user_id === $user?.id}>
+								<div class="pos">{e.position}</div>
+								<div>
+									<div class="nm">{e.user_name}</div>
+									<div class="h">{e.exact_scores} exact · {e.correct_outcomes} outcomes</div>
+								</div>
+								<div class="pts">{e.total_points}</div>
+							</div>
+						{:else}
+							<div style="padding: 16px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">
+								Leaderboard not loaded yet
+							</div>
+						{/each}
+					</div>
+				</div>
+
+				<div>
+					<div class="pn-banner">
+						<span class="n">05</span>
+						<h2>Up <em>next</em></h2>
+						<span class="end">{$upcomingFixtures.length} matches</span>
+					</div>
+					<div class="pn-card" style="padding: 0;">
+						<div class="pn-card-body" style="padding: 0;">
+							<table class="pn-fix-table">
+								<thead>
+									<tr>
+										<th>Kickoff</th>
+										<th>Match</th>
+										<th>Stage</th>
+										<th class="r">Your pick</th>
+										<th class="r">Status</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each $upcomingFixtures.slice(0, 5) as f (f.id)}
+										{@const k = shortKickoff(f.kickoff)}
+										{@const state = rowState(f)}
+										<tr>
+											<td class="kick"><b>{k.day}</b>{k.time}</td>
+											<td>
+												<div class="match">
+													{teamCode(f.home_team)}
+													<span class="vs">VS</span>
+													{teamCode(f.away_team)}
+												</div>
+											</td>
+											<td class="stage">{f.group ? `Group ${f.group}` : f.stage}</td>
+											<td class="pick empty">—</td>
+											<td class="state {state}">●
+												{state === 'locked' ? 'Locked' : state === 'soon' ? 'Soon' : 'Open'}
+											</td>
+										</tr>
+									{:else}
+										<tr><td colspan="5" style="padding: 24px; text-align: center; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No upcoming matches</td></tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+			</section>
+		</div>
+
+		<!-- ============================================================
+		     MOBILE
+		     ============================================================ -->
+		<div class="pn-mob">
+			<!-- Rank hero -->
+			<div class="pn-m-rank">
+				<div class="num">{rank || '—'}<span class="sx">{rank ? ordinal(rank) : ''}</span></div>
+				<div class="info">
+					<div class="l">RANK · {totalPlayers} PLAYERS</div>
+					<div class="nm">{firstName}</div>
+					<div class="move">
+						{#if movement > 0}▲ {movement} places · last update
+						{:else if movement < 0}▼ {Math.abs(movement)} places · last update
+						{:else}— · holding steady{/if}
+					</div>
+				</div>
+				<div class="pts">
+					<div class="v">{totalPoints}</div>
+					<div class="l">PTS</div>
+				</div>
+			</div>
+
+			<!-- 2x2 KPI -->
+			<div class="pn-m-kpis">
+				<div class="pn-m-kpi">
+					<div class="l">Bonus haul</div>
+					<div class="v"><span class="gold">{bonusHaul.total}</span></div>
+					<div class="sub">{bonusHaul.fromUnderdogs} from underdogs</div>
+				</div>
+				<div class="pn-m-kpi">
+					<div class="l">Exact</div>
+					<div class="v"><span class="green">{exactCount}</span><span class="sm">/{totalScored || '—'}</span></div>
+					<div class="sub">+{exactCount * 10} pts</div>
+				</div>
+				<div class="pn-m-kpi">
+					<div class="l">Outcomes</div>
+					<div class="v">{correctOutcomes}<span class="sm">/{totalScored || '—'}</span></div>
+					<div class="sub">{outcomeRate}% hit rate</div>
+				</div>
+				<div class="pn-m-kpi">
+					<div class="l">Climb · 7d</div>
+					<div class="v">
+						{#if movement > 0}<span class="green">▲{movement}</span>
+						{:else if movement < 0}<span class="red">▼{Math.abs(movement)}</span>
+						{:else}<span>—</span>{/if}
+					</div>
+					<div class="sub">rank {climb.rankAmongClimbers} / climbers</div>
+				</div>
+			</div>
+
+			<!-- Live match (first one only on mobile) -->
+			{#if $liveFixtures.length > 0}
+				{@const f = $liveFixtures[0]}
+				{@const live = stubLiveScore(f.id, f.minute)}
+				<div class="pn-m-live">
+					<div class="head">
+						<span><span class="live">LIVE</span> · {teamCode(f.home_team)} vs {teamCode(f.away_team)}</span>
+						<span>{live.minute}′ · {live.half === 1 ? '1H' : '2H'}</span>
+					</div>
+					<div class="body">
+						<div class="team">
+							<PnFlag code={teamCode(f.home_team)} w={42} h={28} />
+							<div class="nm">{f.home_team}</div>
+						</div>
+						<div class="sb">{live.homeScore}–{live.awayScore}<span class="min">{live.minute}′</span></div>
+						<div class="team">
+							<PnFlag code={teamCode(f.away_team)} w={42} h={28} />
+							<div class="nm">{f.away_team}</div>
+						</div>
+						<div class="pick">
+							<span>YOUR PICK · <b>—</b></span>
+							<span>● IN PROGRESS</span>
+						</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Countdown -->
+			{#if nextFixture}
+				<div class="pn-m-count">
+					<div class="info">
+						<div class="l">NEXT LOCK</div>
+						<div class="who">{teamCode(nextFixture.home_team)} vs {teamCode(nextFixture.away_team)}</div>
+						<div class="when">{formatKickoff(nextFixture.kickoff)}</div>
+					</div>
+					<div class="digits">
+						<div class="digit">{pad(cd.h).slice(0, 1)}</div>
+						<div class="digit">{pad(cd.h).slice(-1)}</div>
+						<div class="sep">:</div>
+						<div class="digit">{pad(cd.m).slice(0, 1)}</div>
+						<div class="digit">{pad(cd.m).slice(-1)}</div>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Top 3 + you -->
+			<div class="pn-m-h">
+				<span class="n">04</span>
+				<h2>Top <em>3</em></h2>
+				<span class="end">of {totalPlayers}</span>
+			</div>
+			<div class="pn-m-pod">
+				{#each $leaderboard.slice(0, 3) as e, i (e.user_id)}
+					<div class="pn-m-pod-row" class:gold={i === 0}>
+						<div class="pos">{e.position}</div>
+						<div>
+							<div class="nm">{e.user_name}</div>
+							<div class="h">{e.exact_scores} ex · {e.correct_outcomes} outc</div>
+						</div>
+						<div class="pts">{e.total_points}</div>
+					</div>
+				{/each}
+				{#if $currentUserPosition && $currentUserPosition.position > 3}
+					<div class="pn-m-pod-row you">
+						<div class="pos">{$currentUserPosition.position}</div>
+						<div>
+							<div class="nm">{firstName} · YOU</div>
+							<div class="h">{exactCount} ex · {correctOutcomes} outc</div>
+						</div>
+						<div class="pts">{totalPoints}</div>
+					</div>
 				{/if}
 			</div>
+
+			<!-- Upcoming -->
+			<div class="pn-m-h">
+				<span class="n">05</span>
+				<h2>Up <em>next</em></h2>
+				<span class="end">{$upcomingFixtures.length} open</span>
+			</div>
+			<div class="pn-m-fix">
+				{#each $upcomingFixtures.slice(0, 5) as f (f.id)}
+					{@const k = shortKickoff(f.kickoff)}
+					{@const state = rowState(f)}
+					<div class="pn-m-fix-row">
+						<div class="time"><b>{k.day.split(' ')[0]}</b>{k.time}</div>
+						<div class="match">
+							<PnFlag code={teamCode(f.home_team)} w={16} h={11} />
+							{teamCode(f.home_team)} ·
+							<PnFlag code={teamCode(f.away_team)} w={16} h={11} />
+							{teamCode(f.away_team)}
+							<span class="stage">{f.group ? `Group ${f.group}` : f.stage}</span>
+						</div>
+						<div class="pick empty">
+							—
+							<span class="state {state}">{state === 'locked' ? 'Locked' : state === 'soon' ? 'Soon' : 'Open'}</span>
+						</div>
+					</div>
+				{:else}
+					<div style="padding: 14px; text-align: center; font-family: var(--mono); font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">
+						No upcoming matches
+					</div>
+				{/each}
+			</div>
+
+			<div style="height: 14px;"></div>
 		</div>
-	</div>
+	</PnPageShell>
 {/if}

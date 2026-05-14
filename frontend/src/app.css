@@ -2,6 +2,7 @@
  * MUST come before @tailwind directives: postcss-import / Tailwind's built-in import
  * handler drops @import rules that don't appear before all other at-rules. */
 @import './lib/styles/panini-base.css';
+@import './lib/styles/panini-dashboard.css';
 
 @tailwind base;
 @tailwind components;
