@@ -63,6 +63,11 @@ class PointBreakdown(BaseModel):
     exact_scores: int = 0
     total_predictions: int = 0
 
+    # Bonus-question points (cross-phase — questions live in a separate
+    # category that locks with Phase 1 but isn't part of the match / bracket
+    # phase breakdown). Awarded when admin sets a matching correct_answer.
+    bonus_question_points: int = 0
+
     @computed_field
     @property
     def match_total(self) -> int:
@@ -78,8 +83,8 @@ class PointBreakdown(BaseModel):
     @computed_field
     @property
     def total(self) -> int:
-        """Total points across all phases."""
-        return self.phase1.total + self.phase2.total
+        """Total points across all phases + bonus questions."""
+        return self.phase1.total + self.phase2.total + self.bonus_question_points
 
     # Legacy computed fields for backwards compatibility
     @computed_field

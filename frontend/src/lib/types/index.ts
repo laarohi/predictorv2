@@ -190,7 +190,12 @@ export interface PointBreakdown {
 	exact_scores: number;
 	total_predictions: number;
 
-	// Computed totals (from backend) - combined across phases
+	// Bonus-question points (cross-phase — locked with Phase 1 but separate
+	// from the phase breakdown). Awarded when an admin sets the matching
+	// correct answer on /api/admin/bonus/answers.
+	bonus_question_points: number;
+
+	// Computed totals (from backend) - combined across phases + bonus
 	match_total: number;
 	bracket_total: number;
 	total: number;
