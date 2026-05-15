@@ -555,20 +555,25 @@
 				<div class="ttl"><em>Predict</em></div>
 			</div>
 			<div class="progress-stack">
-				<div class="l">
-					<span><b>{phaseProgress.done}</b> of {phaseProgress.total} matches</span>
-					<span>{phaseProgress.pct}%</span>
+				<div class="big-num" aria-hidden="true">
+					<b>{phaseProgress.done}</b><span class="slash">/{phaseProgress.total}</span>
 				</div>
-				<div class="bar"><div class="bar-fill" style="width: {phaseProgress.pct}%;"></div></div>
-				<div class="l">
-					<span>
-						{#if activePhase === 'phase1'}
-							{#if $isPhase1Locked}Locked{:else}Locks in {$phase1Countdown ?? '—'}{/if}
-						{:else}
-							{#if $isPhase2BracketLocked}Locked{:else}Locks in {$phase2Countdown ?? '—'}{/if}
-						{/if}
-					</span>
-					<span>{$unsavedChangesCount} unsaved</span>
+				<div class="bar-and-labels">
+					<div class="l">
+						<span>Matches predicted</span>
+						<span>{phaseProgress.pct}%</span>
+					</div>
+					<div class="bar"><div class="bar-fill" style="width: {phaseProgress.pct}%;"></div></div>
+					<div class="l">
+						<span>
+							{#if activePhase === 'phase1'}
+								{#if $isPhase1Locked}Locked{:else}Locks in {$phase1Countdown ?? '—'}{/if}
+							{:else}
+								{#if $isPhase2BracketLocked}Locked{:else}Locks in {$phase2Countdown ?? '—'}{/if}
+							{/if}
+						</span>
+						<span>{$unsavedChangesCount} unsaved</span>
+					</div>
 				</div>
 			</div>
 			<div class="toggle-stack">
