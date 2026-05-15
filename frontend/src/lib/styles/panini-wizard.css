@@ -426,16 +426,15 @@
 }
 .pn .pn-mcard .editing-tag {
 	position: absolute;
-	top: -10px;
+	top: -7px;
 	left: 14px;
 	background: var(--red);
 	color: var(--paper);
 	font-family: var(--display);
-	font-size: 10px;
-	letter-spacing: 0.12em;
+	font-size: 9px;
+	letter-spacing: 0.10em;
 	text-transform: uppercase;
-	padding: 3px 9px 4px;
-	border: 1.5px solid var(--paper);
+	padding: 2px 7px 3px;
 	box-shadow: 2px 2px 0 var(--ink);
 	/* Tiny sticker-style tilt — the "no tilts" rule only applies to the
 	 * card itself; small decorative labels can lean for personality. */
