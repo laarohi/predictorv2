@@ -25,8 +25,10 @@ from app.models.fixture import Fixture, MatchStatus
 from app.models.score import Score, ScoreSource
 from app.services.standings import (
     get_actual_group_standings,
+    get_actual_group_standings_with_warnings,
     get_group_positions,
     get_qualifying_third_place_teams,
+    get_qualifying_third_place_teams_with_warnings,
 )
 
 
@@ -189,21 +191,22 @@ async def test_goals_for_tiebreaker_after_gd(session, competition) -> None:
     assert names.index("France") < names.index("Germany")
 
 
-async def test_alphabetical_fallback_when_all_equal(session, competition) -> None:
-    """Final-fallback tiebreaker is team-name alphabetical (NOT FIFA's actual rule).
+# Note: a "two-team H2H separation" can't be constructed from a 4-team
+# round-robin — the H2H result spills into total stats and breaks the
+# overall tie at step 1 already. So 2-way H2H separation is structurally
+# absent from the FIFA-chain test surface. The 3-way separations *are*
+# constructable but require synthetic standings rather than real matches;
+# they're covered by direct unit tests on the helper (test_apply_fifa_*)
+# below.
 
-    FIFA's full tiebreaker chain is: points → GD → goals-for → head-to-head
-    points → head-to-head GD → head-to-head goals → fair-play points → drawing
-    of lots. Our implementation skips head-to-head and fair-play and goes
-    straight to alphabetical. For deterministic outcomes in a prediction app
-    that's acceptable — but if FIFA resolves a real tie via head-to-head and
-    we resolve via alphabetical, the predicted standings will disagree with
-    the official table.
 
-    This test pins the current (simplified) behaviour so anyone changing it
-    has to do so explicitly.
+async def test_alphabetical_fallback_when_all_equal_with_warning(session, competition) -> None:
+    """All four teams draw 0-0 with each other → identical stats AND identical H2H.
+
+    The FIFA chain runs through points (3 each) → GD (0 each) → GF (0 each)
+    → H2H points (3 each) → H2H GD (0 each) → H2H goals (0 each) →
+    *alphabetical with warning*.
     """
-    # All four teams draw 0-0 with each other → identical stats.
     _add_match(session, competition.id, home="Argentina", away="Belgium", home_score=0, away_score=0)
     _add_match(session, competition.id, home="Argentina", away="Croatia", home_score=0, away_score=0)
     _add_match(session, competition.id, home="Argentina", away="Denmark", home_score=0, away_score=0)
@@ -212,8 +215,58 @@ async def test_alphabetical_fallback_when_all_equal(session, competition) -> Non
     _add_match(session, competition.id, home="Croatia", away="Denmark", home_score=0, away_score=0)
     await session.commit()
 
-    standings = await get_actual_group_standings(session)
+    standings, warnings = await get_actual_group_standings_with_warnings(session)
     assert [t["team"] for t in standings["A"]] == ["Argentina", "Belgium", "Croatia", "Denmark"]
+
+    # Exactly one warning naming all four teams in group A
+    assert len(warnings) == 1
+    assert warnings[0]["group"] == "A"
+    assert warnings[0]["context"] == "group_standings"
+    assert warnings[0]["tied_teams"] == ["Argentina", "Belgium", "Croatia", "Denmark"]
+
+
+async def test_head_to_head_separates_when_overall_tie_includes_a_draw_h2h(
+    session, competition
+) -> None:
+    """A pair of teams tied on overall (points, GD, GF) due to a draw H2H —
+    after H2H step (also tied), fall to alphabetical and emit a warning.
+
+    France draws Germany 1-1; both beat Spain 2-0 and beat Italy 1-0.
+      - France: D + W + W = 7 pts; GF=4 GA=1 GD=+3
+      - Germany: D + W + W = 7 pts; GF=4 GA=1 GD=+3
+    H2H: 1-1 draw → both gain 1 H2H pt, 1 H2H goal, 0 H2H GD. Identical.
+    → falls to alphabetical, France before Germany, with a warning.
+    """
+    _add_match(session, competition.id, home="France", away="Germany", home_score=1, away_score=1)
+    _add_match(session, competition.id, home="France", away="Spain", home_score=2, away_score=0)
+    _add_match(session, competition.id, home="France", away="Italy", home_score=1, away_score=0)
+    _add_match(session, competition.id, home="Germany", away="Spain", home_score=2, away_score=0)
+    _add_match(session, competition.id, home="Germany", away="Italy", home_score=1, away_score=0)
+    _add_match(session, competition.id, home="Spain", away="Italy", home_score=1, away_score=0)
+    await session.commit()
+
+    standings, warnings = await get_actual_group_standings_with_warnings(session)
+    top_two = [t["team"] for t in standings["A"][:2]]
+    assert top_two == ["France", "Germany"]
+
+    # Warning fires for the France-Germany tie
+    tied_warning = next((w for w in warnings if set(w["tied_teams"]) == {"France", "Germany"}), None)
+    assert tied_warning is not None, f"expected France/Germany warning, got {warnings}"
+    assert tied_warning["context"] == "group_standings"
+
+
+async def test_no_warning_when_clean_ranking(session, competition) -> None:
+    """A clean group with no ties → no warnings produced."""
+    _add_match(session, competition.id, home="France", away="Germany", home_score=2, away_score=1)
+    _add_match(session, competition.id, home="France", away="Spain", home_score=3, away_score=0)
+    _add_match(session, competition.id, home="France", away="Italy", home_score=1, away_score=0)
+    _add_match(session, competition.id, home="Germany", away="Spain", home_score=2, away_score=1)
+    _add_match(session, competition.id, home="Germany", away="Italy", home_score=2, away_score=1)
+    _add_match(session, competition.id, home="Spain", away="Italy", home_score=1, away_score=0)
+    await session.commit()
+
+    _standings, warnings = await get_actual_group_standings_with_warnings(session)
+    assert warnings == []
 
 
 # ---------------------------------------------------------------------------
@@ -395,3 +448,150 @@ async def test_qualifying_third_place_ignores_groups_with_fewer_than_3_teams(
     top8 = await get_qualifying_third_place_teams(session)
     # Group A has only 2 teams, no 3rd-place. Group B contributes one.
     assert [t["group"] for t in top8] == ["B"]
+
+
+# ---------------------------------------------------------------------------
+# FIFA tiebreaker chain — direct unit tests on the helper
+# These exercise scenarios that are hard to construct via a DB-driven setup,
+# particularly the 3+ way H2H mini-table separations.
+# ---------------------------------------------------------------------------
+
+
+from app.services.standings import _apply_fifa_tiebreakers
+from datetime import timezone as _tz, datetime as _dt
+from uuid import uuid4 as _uuid4
+
+
+def _stand(team: str, group: str, points: int, gd: int, gf: int) -> dict:
+    """Build a minimal team-standings dict matching the shape returned by to_dict()."""
+    return {
+        "team": team,
+        "group": group,
+        "played": 3,
+        "won": 0,
+        "drawn": 0,
+        "lost": 0,
+        "goals_for": gf,
+        "goals_against": gf - gd,
+        "goal_difference": gd,
+        "points": points,
+    }
+
+
+def _h2h(home: str, away: str, hs: int, as_: int, group: str = "A") -> tuple[Fixture, Score]:
+    """Build a (Fixture, Score) tuple for use as group_matches in the helper."""
+    fid = _uuid4()
+    fixture = Fixture(
+        id=fid,
+        competition_id=_uuid4(),
+        home_team=home,
+        away_team=away,
+        kickoff=_dt(2026, 6, 11, 19, 0, tzinfo=_tz.utc),
+        stage="group",
+        group=group,
+        status=MatchStatus.FINISHED,
+    )
+    score = Score(fixture_id=fid, home_score=hs, away_score=as_, source=ScoreSource.API)
+    return fixture, score
+
+
+def test_apply_fifa_tiebreakers_h2h_separates_three_way_tie() -> None:
+    """Three teams tied on overall (points, GD, GF). H2H mini-table:
+    A beats B, B beats C, A beats C → A=6, B=3, C=0 H2H pts.
+    Overall stats are constructed so they're identical despite the H2H spread."""
+    # Construct overall stats: each team plays 3 games. Assume they all faced
+    # a (non-tied) 4th team and produced identical results there, plus the
+    # H2H results we set up. We don't model the 4th team here; we just pass
+    # standings dicts and the H2H matches.
+    teams = [
+        _stand("Argentina", "A", points=5, gd=0, gf=2),
+        _stand("Brazil",    "A", points=5, gd=0, gf=2),
+        _stand("Chile",     "A", points=5, gd=0, gf=2),
+    ]
+    matches = [
+        _h2h("Argentina", "Brazil", 1, 0),  # A beats B
+        _h2h("Brazil",    "Chile",  1, 0),  # B beats C
+        _h2h("Argentina", "Chile",  1, 0),  # A beats C
+    ]
+
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams, group_matches=matches, context="group_standings"
+    )
+
+    # H2H: A=6pts, B=3pts, C=0pts → A first, B second, C third.
+    assert [t["team"] for t in sorted_teams] == ["Argentina", "Brazil", "Chile"]
+    assert warnings == []  # clean H2H ranking, no alphabetical fallback
+
+
+def test_apply_fifa_tiebreakers_h2h_partially_resolves_three_way_tie() -> None:
+    """Three teams tied. H2H separates one but leaves the other two tied
+    on H2H → those two go alphabetical with a single warning."""
+    teams = [
+        _stand("Argentina", "A", points=5, gd=0, gf=2),
+        _stand("Brazil",    "A", points=5, gd=0, gf=2),
+        _stand("Chile",     "A", points=5, gd=0, gf=2),
+    ]
+    # H2H: A beats both. B and C draw with each other.
+    matches = [
+        _h2h("Argentina", "Brazil", 1, 0),
+        _h2h("Argentina", "Chile",  1, 0),
+        _h2h("Brazil",    "Chile",  0, 0),
+    ]
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams, group_matches=matches, context="group_standings"
+    )
+    # H2H: A=6pts, B=1pt, C=1pt → A clearly first; B and C tied on H2H → alphabetical.
+    assert sorted_teams[0]["team"] == "Argentina"
+    assert {sorted_teams[1]["team"], sorted_teams[2]["team"]} == {"Brazil", "Chile"}
+    assert [t["team"] for t in sorted_teams[1:]] == ["Brazil", "Chile"]  # alphabetical
+
+    # One warning, covering the B/C sub-tie
+    assert len(warnings) == 1
+    assert warnings[0]["tied_teams"] == ["Brazil", "Chile"]
+    assert warnings[0]["context"] == "group_standings"
+
+
+def test_apply_fifa_tiebreakers_no_h2h_matches_falls_straight_to_alphabetical() -> None:
+    """When group_matches is None (e.g. cross-group third-place sort), the
+    H2H steps are skipped entirely — any overall tie resolves alphabetically."""
+    teams = [
+        _stand("Wales",   "A", points=3, gd=0, gf=1),
+        _stand("Senegal", "B", points=3, gd=0, gf=1),
+        _stand("Iran",    "C", points=3, gd=0, gf=1),
+    ]
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams, group_matches=None, context="third_place_qualifying"
+    )
+    assert [t["team"] for t in sorted_teams] == ["Iran", "Senegal", "Wales"]
+    assert len(warnings) == 1
+    assert warnings[0]["tied_teams"] == ["Iran", "Senegal", "Wales"]
+    assert warnings[0]["context"] == "third_place_qualifying"
+
+
+# ---------------------------------------------------------------------------
+# Third-place qualifying warnings via the public *_with_warnings function
+# ---------------------------------------------------------------------------
+
+
+async def test_qualifying_third_place_with_warnings_at_8_9_boundary(
+    session, competition
+) -> None:
+    """When several 3rd-placed teams tie on (points, GD, GF) across the 8/9
+    boundary, the cut is alphabetical and a third_place_qualifying warning
+    fires naming the tied teams."""
+    # All 12 groups produce 3rd-placed teams with 3 pts, GD=-1, GF=1 (the
+    # _seed_group(third_place_points=3) pattern). They differ only by group
+    # letter — so the 3rd-place sort produces a 12-way overall tie and
+    # alphabetical ranks T3A..T3L. Top 8 = A..H, cut at the 8/9 boundary.
+    for g in "ABCDEFGHIJKL":
+        _seed_group(session, competition.id, g, third_place_points=3)
+    await session.commit()
+
+    top8, warnings = await get_qualifying_third_place_teams_with_warnings(session)
+    assert len(top8) == 8
+    assert sorted(t["group"] for t in top8) == list("ABCDEFGH")
+
+    # Exactly one third-place tie warning covering all 12 teams
+    tp_warnings = [w for w in warnings if w["context"] == "third_place_qualifying"]
+    assert len(tp_warnings) == 1
+    assert len(tp_warnings[0]["tied_teams"]) == 12
