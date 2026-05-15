@@ -154,12 +154,51 @@
 }
 .pn .pn-wiz-gp.done .gp-prog::before { content: '✓ '; }
 
-/* ==== Group view: standings on top, matches below (full width) ==== */
+/* ==== Group view ====
+ *
+ * Mobile (default): single column — standings table at the top, matches
+ * stacked single-column below. Matches the mobile mockup which prioritises
+ * reading the table at-a-glance before scrolling through matches.
+ *
+ * Desktop (>= 1000px): two columns — standings sticky on the LEFT,
+ * matches grid (still 2-col internally) on the RIGHT. The user can edit
+ * scores in the right column while the live standings stay visible in
+ * the left column without scrolling.
+ *
+ * The threshold is 1000px deliberately (not 700px): an iPad-portrait
+ * viewport (~768-810px) would still be cramped with two columns plus a
+ * 2-col match grid inside the right column. Below 1000px we stack. */
 .pn .pn-wiz-group {
-	display: flex;
-	flex-direction: column;
+	display: grid;
+	grid-template-columns: 1fr;
 	gap: 18px;
 	margin-bottom: 22px;
+	align-items: start; /* prevent flex-style row stretching */
+}
+@media (min-width: 1000px) {
+	/* Only apply the 2-column layout when the section actually CONTAINS
+	 * matches alongside the standings. The third-place view also uses
+	 * .pn-wiz-group but has only a standings table (no .pn-wiz-matches)
+	 * and wants the full page width for its 12-row × 11-column table. */
+	.pn .pn-wiz-group:has(.pn-wiz-matches) {
+		grid-template-columns: minmax(420px, 460px) 1fr;
+		gap: 22px;
+	}
+	/* Sticky standings on the left so users can see the table while
+	 * scrolling through matches in the right column. top: 16px gives a
+	 * small breathing room from the top of the viewport. */
+	.pn .pn-wiz-group:has(.pn-wiz-matches) .pn-stnd {
+		position: sticky;
+		top: 16px;
+	}
+	/* The match grid is already 2-col on >= 700px (see .pn-wiz-matches
+	 * rules below). Inside our narrower right column it stays 2-col. */
+}
+/* Banners (tie-warning, restoration) should span both columns at any
+ * width — they're page-level alerts, not column-specific. */
+.pn .pn-wiz-group > .pn-tie-warn,
+.pn .pn-wiz-group > .pn-restore-banner {
+	grid-column: 1 / -1;
 }
 .pn .pn-stnd {
 	background: var(--paper);
@@ -245,11 +284,22 @@
 	min-width: 0;
 }
 /* Make tables predictable: explicit column widths via colgroup work better
- * than letting auto layout fight with the team name's flex container. */
+ * than letting auto layout fight with the team name's flex container.
+ *
+ * No hard min-width here — the table sits inside a 420px column on desktop
+ * (per the .pn-wiz-group 2-col layout). Tighter cell padding on stat cells
+ * gives the team name enough room to display un-truncated for most names.
+ * If a team name is too long it ellipsises via .nm-text's existing rules. */
 .pn .pn-stnd-table {
 	table-layout: auto;
-	min-width: 460px;
 }
+.pn .pn-stnd-table .stat,
+.pn .pn-stnd-table .grp {
+	padding-left: 4px;
+	padding-right: 4px;
+}
+/* Horizontal scroll fallback in case a team name pushes the table wider
+ * than the container — better than wrapping into multi-line cells. */
 .pn .pn-stnd { overflow-x: auto; }
 
 /* Third-place qualifying table — same shell as standings but with a Group
