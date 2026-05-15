@@ -8,6 +8,7 @@
 @import './lib/styles/panini-bracket.css';
 @import './lib/styles/panini-results.css';
 @import './lib/styles/panini-auth.css';
+@import './lib/styles/panini-profile.css';
 
 @tailwind base;
 @tailwind components;

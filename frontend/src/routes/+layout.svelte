@@ -34,6 +34,7 @@
 		'/leaderboard',
 		'/predictions',
 		'/results',
+		'/profile',
 		'/login',
 		'/register',
 		'/auth',
