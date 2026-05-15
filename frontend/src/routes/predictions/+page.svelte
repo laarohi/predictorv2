@@ -122,14 +122,20 @@
 	$: standingsMap = standingsResult.standingsMap;
 	$: groupStandingsWarnings = standingsResult.warnings;
 
-	// Per-group progress: count of fixtures that have a saved or unsaved pick
-	function groupProgress(g: { group: string; fixtures: Fixture[] }): { done: number; total: number } {
+	// Per-group progress: count of fixtures that have a saved or unsaved pick.
+	// REACTIVE lambda (not plain function) so the call site
+	// `{@const gp = groupProgress(g)}` re-evaluates when livePredictionMap
+	// updates. See the same pattern on predictionState / scoreValue earlier
+	// in this file — Svelte doesn't trace into function bodies for template
+	// reactivity, so a plain function declaration here would freeze the
+	// counter on first render.
+	$: groupProgress = (g: { group: string; fixtures: Fixture[] }) => {
 		let done = 0;
 		for (const f of g.fixtures) {
 			if (livePredictionMap.has(f.id)) done++;
 		}
 		return { done, total: g.fixtures.length };
-	}
+	};
 
 	// Phase 1 knockout bracket is gated on completing every group prediction.
 	// Phase 2 uses real standings so doesn't need the gate.
@@ -403,9 +409,10 @@
 		}
 	}
 
-	function bonusAnswer(qid: string): string {
-		return bonusAnswers.get(qid) ?? '';
-	}
+	// Reactive lambda (same pattern as groupProgress / predictionState above):
+	// the function reference must be reactive so `{@const answer = bonusAnswer(bq.id)}`
+	// in the template re-evaluates when bonusAnswers is reassigned.
+	$: bonusAnswer = (qid: string): string => bonusAnswers.get(qid) ?? '';
 
 	function setBonusAnswer(qid: string, value: string) {
 		const next = new Map(bonusAnswers);
