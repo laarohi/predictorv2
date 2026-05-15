@@ -102,13 +102,20 @@ export function getQualifyingThirdPlaceTeams(
 		}
 	}
 
-	// Sort by: points > goal difference > goals for
+	// Sort by: points > goal difference > goals for > team-name alphabetical
+	// (The alphabetical fallback is NOT FIFA's actual tiebreaker — FIFA uses
+	// head-to-head, fair-play, then drawing-of-lots. We use alphabetical for
+	// deterministic agreement with the backend's standings.py sort, which
+	// also falls back to team name. Both sides must agree to avoid a
+	// prediction app where the predicted standings disagree with the
+	// official table on edge-case ties.)
 	thirdPlaceTeams.sort((a, b) => {
 		if (b.standing.points !== a.standing.points) return b.standing.points - a.standing.points;
 		if (b.standing.goalDifference !== a.standing.goalDifference) {
 			return b.standing.goalDifference - a.standing.goalDifference;
 		}
-		return b.standing.goalsFor - a.standing.goalsFor;
+		if (b.standing.goalsFor !== a.standing.goalsFor) return b.standing.goalsFor - a.standing.goalsFor;
+		return a.team.localeCompare(b.team);
 	});
 
 	// Top 8 qualify
