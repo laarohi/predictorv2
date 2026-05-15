@@ -25,11 +25,24 @@
 		stubRankTrajectory,
 		stubBracketExposure,
 		stubBonusHaul,
-		stubLiveScore,
 		stubHotPick,
 		stubSteepestClimb
 	} from '$lib/stubs/panini';
 	import type { Fixture, LeaderboardEntry } from '$types';
+
+	// Live-ticker projection over a Fixture row. The score_scheduler writes
+	// real numbers into f.score for IN_PLAY / HALFTIME matches via the
+	// Football-Data.org provider. Before the first sync of a live match,
+	// f.score may briefly be null — render as 0–0 (correct by definition).
+	function liveOf(f: Fixture): { homeScore: number; awayScore: number; minute: number; half: 1 | 2 } {
+		const minute = f.minute ?? 0;
+		return {
+			homeScore: f.score?.home_score ?? 0,
+			awayScore: f.score?.away_score ?? 0,
+			minute,
+			half: minute > 45 ? 2 : 1
+		};
+	}
 
 	$: if (!$isAuthenticated) {
 		goto('/login');
@@ -117,7 +130,7 @@
 	$: stripLive = (() => {
 		const f = $liveFixtures[0];
 		if (!f) return null;
-		const score = stubLiveScore(f.id, f.minute);
+		const score = liveOf(f);
 		return `<b>LIVE</b> · ${teamCode(f.home_team)} ${score.homeScore}–${score.awayScore} ${teamCode(f.away_team)} · ${score.minute}′`;
 	})();
 	$: stripLock = nextFixture
@@ -236,7 +249,7 @@
 							</div>
 						{:else}
 							{#each $liveFixtures as f (f.id)}
-								{@const live = stubLiveScore(f.id, f.minute)}
+								{@const live = liveOf(f)}
 								<div class="pn-bcast">
 									<PnFlag code={teamCode(f.home_team)} w={56} h={36} />
 									<div class="team">
@@ -512,7 +525,7 @@
 			<!-- Live match (first one only on mobile) -->
 			{#if $liveFixtures.length > 0}
 				{@const f = $liveFixtures[0]}
-				{@const live = stubLiveScore(f.id, f.minute)}
+				{@const live = liveOf(f)}
 				<div class="pn-m-live">
 					<div class="head">
 						<span><span class="live">LIVE</span> · {teamCode(f.home_team)} vs {teamCode(f.away_team)}</span>
