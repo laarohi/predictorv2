@@ -114,7 +114,46 @@ Frontend Panini redesign is **complete to the agreed-upon scope** and builds cle
 - Backend, scoring engine, prediction persistence — all unchanged
 - `.claude/settings.local.json` — pre-existing modification, not mine
 
-## Decisions still to make (will land here as I hit them)
+## Second-pass closure summary (2026-05-15)
+
+After Luke reviewed the first-pass decisions, every "deferred" item was overturned and the redesign was extended:
+
+**Compose-managed dev container (Luke's question):**
+- Switched from `docker run` to Compose. Edited the worktree's `docker-compose.yml` to remove `container_name: predictor-frontend-dev`, shift host port to 5174, and declare `predictorv2_default` as an external network. Spun up via `docker compose --profile dev up -d frontend-dev`. Container is now `redesign-frontend-dev-1`, joined to both `redesign_default` (own project) and `predictorv2_default` (shared backend). Memory updated.
+
+**Bracket redesign (Luke: "use the new knockout bracket designed in the panini, we need to redesign"):**
+- Built a brand-new `PnKnockoutBracket.svelte` + `PnBracketMatch.svelte` + `panini-bracket.css`. Reuses the existing `bracketResolver` state machine so prediction persistence + click-to-advance behaviour is unchanged from the legacy KnockoutBracket; only the rendering layer is new.
+- Desktop: 9-column wall chart with final in the centre, navy panel + diagonal hatch overlay + gold round headers.
+- Mobile: 4 swipeable pages of round-pairs (R32+R16, R16+QF, QF+SF, SF+Final), animated slot heights, dot indicators, prev/next buttons.
+- Wired into the Predictions wizard's Knockout sub-tab + Phase II view (with `hideR32` for Phase II).
+
+**Phase 2 redesign (covered by bracket overhaul + Panini match cards):**
+- Replaced `Phase2Content.svelte` usage entirely. Phase II now shows the same Panini bracket plus a Panini-styled grid of match-score cards for knockout fixtures, using the same `pn-mcard` + `pn-score-cell` primitives as Phase I groups.
+
+**Leaderboard expander (Luke: "Keep the expander, match the style of the panini design"):**
+- Restored. Click any row (desktop) or card (mobile) to reveal a per-phase breakdown: Phase I + Phase II side-by-side, each with Outcome / Exact / Bonus / Bracket totals plus the phase total in the header. Mono labels, display values, green/gold/navy colour coding.
+
+**Profile pages (Luke: "I want the Profile page in Panini too"):**
+- Both `/profile` (own) and `/profile/[userId]` (public) rewritten with PnPageShell + Panini chrome.
+- Own profile: hero card with avatar + name + rank + badges, 6-KPI strip, account info section, password change form (Email auth only — Google users see a friendly notice), Sign out button.
+- Public profile: hero + KPI strip + bracket picks section (chip-listed by stage with flags) + recent match predictions list with exact/outcome/missed colour coding.
+
+**Admin page (Luke: "I want a full admin page"):**
+- `/admin` rewritten with PnPageShell + Panini chrome. All existing functionality preserved: 4-stat KPI strip, Score Sync section with last-run details + manual trigger, Phase I Deadline form with countdown, Phase II Activation form with active-status badge + countdown, User Management with search and admin/active toggles.
+
+**Mobile + desktop coverage (Luke: "implement both the mobile and the desktop panini mockups"):**
+- Every Panini page has explicit mobile + desktop branches or responsive grid breakpoints that switch layout at 700px / 900px.
+- Mobile-specific touches: collapsed hero (Profile/Admin), 2-col KPI grids (Dashboard / Profile / Admin), single-column match grids in the wizard, swipeable bracket pages.
+
+**Acceptance — all green:**
+- `npm run check` — 0 errors, 59 warnings (1 over the original baseline; well within tolerance)
+- `npx vitest run` — 22 / 22 passing
+- `npm run build` — succeeds
+- HTTP smoke on all 10 routes — 200 OK
+
+---
+
+## First-pass decisions (now historical)
 
 ### 2026-05-15 — Drop expandable per-row breakdown on Leaderboard
 
