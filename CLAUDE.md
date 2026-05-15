@@ -172,6 +172,41 @@ docker-compose logs -f backend
    - Frontend: No `any` types - define interfaces in `/lib/types`
 4. **Phase Separation**: Phase 1 and Phase 2 data must be kept separate (different stores, filtered queries)
 
+## Database migrations
+
+**Alembic is the single source of truth for schema.** Every backend startup
+runs `alembic upgrade head` automatically (`backend/app/database.py:init_db`,
+called from the FastAPI lifespan). There is no `SQLModel.metadata.create_all`
+fallback — tables only ever exist because a migration created them.
+
+Workflow for adding a new table or column:
+
+```bash
+# 1. Add/modify the SQLModel class under backend/app/models/ and
+#    import it in backend/app/models/__init__.py
+# 2. Generate the migration:
+docker-compose exec backend alembic revision --autogenerate -m "describe change"
+# 3. Review the file under backend/alembic/versions/ — autogenerate is good
+#    but not perfect (data migrations, default values, server_default
+#    semantics, enum changes all need a human pass)
+# 4. Restart the backend. init_db() picks up the new revision and applies it.
+docker-compose restart backend
+```
+
+The migration is applied on every environment the backend boots in — dev,
+staging, prod. A failing migration takes the app down at startup, which is
+the safe default for a schema-versioned system. Logs surface the underlying
+error.
+
+If you ever need to manually stamp / downgrade / inspect:
+
+```bash
+docker-compose exec backend alembic current
+docker-compose exec backend alembic history
+docker-compose exec backend alembic downgrade -1
+docker-compose exec backend alembic stamp <revision>   # rarely needed now
+```
+
 ## Testing
 
 ```bash

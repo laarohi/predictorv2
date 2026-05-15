@@ -13,10 +13,13 @@ from app.services.score_scheduler import scheduler_lifespan
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan handler."""
-    settings = get_settings()
-    if settings.debug:
-        await init_db()
+    """Application lifespan handler.
+
+    init_db() runs Alembic migrations on every startup, so the DB always
+    converges to the migration head before requests start serving. No
+    manual `alembic upgrade head` step required in dev or prod.
+    """
+    await init_db()
     async with scheduler_lifespan():
         yield
 

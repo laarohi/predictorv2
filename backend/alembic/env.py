@@ -11,10 +11,14 @@ from sqlmodel import SQLModel
 
 from app.config import get_settings
 
-# Import all models to ensure they're registered with SQLModel
+# Import every model so SQLModel.metadata can see it — required for
+# `alembic revision --autogenerate` to detect new tables / columns.
 from app.models import (  # noqa: F401
+    BonusAnswer,
+    BonusPrediction,
     Competition,
     Fixture,
+    LeaderboardSnapshot,
     MatchPrediction,
     Score,
     TeamPrediction,
