@@ -80,6 +80,47 @@
 		return b.bracket_total;
 	}
 
+	// Row expansion state
+	let expanded = new Set<string>();
+	function toggle(userId: string) {
+		if (expanded.has(userId)) expanded.delete(userId);
+		else expanded.add(userId);
+		expanded = expanded; // trigger reactivity
+	}
+
+	// Phases listed in the per-row expander, in order
+	const DETAIL_PHASES: Array<{ k: 'phase1' | 'phase2'; name: string }> = [
+		{ k: 'phase1', name: 'Phase I' },
+		{ k: 'phase2', name: 'Phase II' }
+	];
+
+	// Per-phase breakdown helpers
+	function phaseTotal(p: PhaseBreakdown): number {
+		return (
+			p.match_outcome_points +
+			p.exact_score_points +
+			p.hybrid_bonus_points +
+			getGroupTotal(p) +
+			p.round_of_32_points +
+			p.round_of_16_points +
+			p.quarter_final_points +
+			p.semi_final_points +
+			p.final_points +
+			p.winner_points
+		);
+	}
+	function phaseBracketSum(p: PhaseBreakdown): number {
+		return (
+			getGroupTotal(p) +
+			p.round_of_32_points +
+			p.round_of_16_points +
+			p.quarter_final_points +
+			p.semi_final_points +
+			p.final_points +
+			p.winner_points
+		);
+	}
+
 	$: yourRank = $currentUserPosition?.position ?? 0;
 	$: yourPoints = $currentUserPosition?.total_points ?? 0;
 	$: leaderPoints = $leaderboard[0]?.total_points ?? 0;
@@ -154,16 +195,18 @@
 								<th class="c">Trend · 7d</th>
 								<th class="r">Total</th>
 								<th class="r">Move</th>
+								<th></th>
 							</tr>
 						</thead>
 						<tbody>
 							{#each $leaderboard as r (r.user_id)}
 								{@const isYou = r.user_id === $user?.id}
 								{@const traj = stubRankTrajectory(r.user_id, r.position, $totalParticipants || $leaderboard.length || 32)}
-								<tr class:you={isYou}>
+								{@const isOpen = expanded.has(r.user_id)}
+								<tr class:you={isYou} class:open={isOpen} on:click={() => toggle(r.user_id)} style="cursor: pointer;">
 									<td class="pos" class:gold={r.position <= 3}>{r.position}</td>
 									<td class="nm-cell">
-										<a href="/profile/{r.user_id}" style="color: inherit; text-decoration: none;">
+										<a href="/profile/{r.user_id}" style="color: inherit; text-decoration: none;" on:click|stopPropagation>
 											{r.user_name}
 											<span class="h">{isYou ? 'YOU' : `@${r.user_name.split(' ')[0].toLowerCase()}`}</span>
 										</a>
@@ -189,9 +232,33 @@
 										{:else if r.movement < 0}<span class="dn">▼{Math.abs(r.movement)}</span>
 										{:else}<span class="eq">—</span>{/if}
 									</td>
+									<td class="expand"><span class="chev">▾</span></td>
 								</tr>
+								{#if isOpen}
+									<tr class="detail">
+										<td colspan="10">
+											<div class="pn-lb-detail">
+												{#each DETAIL_PHASES as ph (ph.k)}
+													{@const p = r.breakdown[ph.k]}
+													<div class="phase">
+														<div class="ph-h">
+															<span>{ph.name}</span>
+															<b>{phaseTotal(p)} pts</b>
+														</div>
+														<div class="grid">
+															<div class="cell"><div class="l">Outcome</div><div class="v">{p.match_outcome_points}</div></div>
+															<div class="cell"><div class="l">Exact</div><div class="v exact">{p.exact_score_points}</div></div>
+															<div class="cell"><div class="l">Bonus</div><div class="v bonus">{p.hybrid_bonus_points}</div></div>
+															<div class="cell"><div class="l">Bracket</div><div class="v bracket">{phaseBracketSum(p)}</div></div>
+														</div>
+													</div>
+												{/each}
+											</div>
+										</td>
+									</tr>
+								{/if}
 							{:else}
-								<tr><td colspan="9" style="padding: 24px; text-align: center; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No standings yet</td></tr>
+								<tr><td colspan="10" style="padding: 24px; text-align: center; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No standings yet</td></tr>
 							{/each}
 						</tbody>
 					</table>
@@ -231,11 +298,21 @@
 			<div class="pn-m-lb-rows">
 				{#each $leaderboard as r (r.user_id)}
 					{@const isYou = r.user_id === $user?.id}
-					<div class="pn-m-lb-row" class:gold={r.position <= 3} class:you={isYou}>
+					{@const isOpen = expanded.has(r.user_id)}
+					<div
+						class="pn-m-lb-row"
+						class:gold={r.position <= 3}
+						class:you={isYou}
+						class:open={isOpen}
+						role="button"
+						tabindex="0"
+						on:click={() => toggle(r.user_id)}
+						on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggle(r.user_id)}
+					>
 						<div class="pos">{r.position}</div>
 						<div>
 							<div class="nm">{r.user_name}</div>
-							<div class="h">{r.exact_scores} ex · {r.correct_outcomes} outc</div>
+							<div class="h">{r.exact_scores} ex · {r.correct_outcomes} outc · <span class="chev">▾</span></div>
 						</div>
 						<div class="pts">{r.total_points}</div>
 						<div class="mv">
@@ -244,6 +321,25 @@
 							{:else}<span class="eq">—</span>{/if}
 						</div>
 					</div>
+					{#if isOpen}
+						<div class="pn-m-lb-detail">
+							{#each DETAIL_PHASES as ph (ph.k)}
+								{@const p = r.breakdown[ph.k]}
+								<div class="phase">
+									<div class="ph-h">
+										<span>{ph.name}</span>
+										<b>{phaseTotal(p)} pts</b>
+									</div>
+									<div class="grid">
+										<div class="cell"><div class="l">Out</div><div class="v">{p.match_outcome_points}</div></div>
+										<div class="cell"><div class="l">Exact</div><div class="v exact">{p.exact_score_points}</div></div>
+										<div class="cell"><div class="l">Bonus</div><div class="v bonus">{p.hybrid_bonus_points}</div></div>
+										<div class="cell"><div class="l">Brkt</div><div class="v bracket">{phaseBracketSum(p)}</div></div>
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
 				{:else}
 					<div style="padding: 24px; text-align: center; font-family: var(--mono); font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">
 						No standings yet
