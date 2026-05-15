@@ -92,9 +92,10 @@
 	margin-top: 4px;
 }
 
-.pn .pn-lb-card .pn-card-body { padding: 0; }
+.pn .pn-lb-card .pn-card-body { padding: 0; overflow-x: auto; }
 .pn .pn-lb-table {
 	width: 100%;
+	min-width: 720px;
 	border-collapse: collapse;
 }
 .pn .pn-lb-table th {
@@ -117,7 +118,7 @@
 	vertical-align: middle;
 }
 .pn .pn-lb-table tr.you td { background: rgba(212, 154, 46, 0.18); }
-.pn .pn-lb-table tr:hover:not(.you) td { background: var(--paper-2); }
+.pn .pn-lb-table tr:hover:not(.you):not(.detail) td { background: var(--paper-2); }
 .pn .pn-lb-table td.pos {
 	font-family: var(--display);
 	font-size: 26px;

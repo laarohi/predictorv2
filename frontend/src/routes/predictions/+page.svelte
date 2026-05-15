@@ -58,9 +58,12 @@
 		initialPhaseSet = true;
 	}
 
-	// The pill bar shows one tab per group + a Knockout pill + a Bonus pill
-	type PillId = string; // e.g. 'group:A' | 'knockout' | 'bonus'
-	let activePill: PillId = '';
+	// Section toggle controls the outer mode (Groups / Knockout / Bonus).
+	// Group pills are a sub-selection that only appears in the Groups section.
+	type Section = 'groups' | 'knockout' | 'bonus';
+	let activeSection: Section = 'groups';
+	// Active group pill — either a group letter (e.g. 'A') or 'thirdplace'.
+	let activeGroupPill: string = '';
 
 	let saveStatus: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
 
@@ -88,9 +91,9 @@
 		}
 	});
 
-	// Default the active pill to the first group once fixtures load
-	$: if (!activePill && $groupFixtures.length > 0) {
-		activePill = `group:${$groupFixtures[0].group}`;
+	// Default the active group pill to the first group once fixtures load
+	$: if (!activeGroupPill && $groupFixtures.length > 0) {
+		activeGroupPill = $groupFixtures[0].group;
 	}
 
 	// ---- Derived: standings, progress, predictions -----------------------
@@ -139,9 +142,24 @@
 	})();
 
 	// ---- Selected group's fixtures ---------------------------------------
-	$: selectedGroup = activePill.startsWith('group:')
-		? $groupFixtures.find((g) => g.group === activePill.slice(6)) ?? null
-		: null;
+	$: selectedGroup =
+		activeGroupPill && activeGroupPill !== 'thirdplace'
+			? $groupFixtures.find((g) => g.group === activeGroupPill) ?? null
+			: null;
+
+	// ---- Third-place qualifying standings (top 8 of 12 advance to R32) ----
+	$: thirdPlaceStandings = (() => {
+		const thirds = [];
+		for (const std of Object.values(standingsMap)) {
+			if (std[2]) thirds.push(std[2]);
+		}
+		return thirds.sort((a, b) => {
+			if (b.points !== a.points) return b.points - a.points;
+			if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
+			if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
+			return a.team.localeCompare(b.team);
+		});
+	})();
 
 	// ---- Score input handlers --------------------------------------------
 	function handleScoreInput(fixtureId: string, side: 'home' | 'away', raw: string) {
@@ -305,48 +323,103 @@
 					<span>{$unsavedChangesCount} unsaved</span>
 				</div>
 			</div>
-			{#if $isPhase2Active}
+			<div class="toggle-stack">
+				{#if $isPhase2Active}
+					<div class="phase-toggle">
+						<button class:on={activePhase === 'phase1'} on:click={() => (activePhase = 'phase1')}>Phase I</button>
+						<button class:on={activePhase === 'phase2'} on:click={() => (activePhase = 'phase2')}>Phase II</button>
+					</div>
+				{/if}
 				<div class="phase-toggle">
-					<button class:on={activePhase === 'phase1'} on:click={() => (activePhase = 'phase1')}>Phase I</button>
-					<button class:on={activePhase === 'phase2'} on:click={() => (activePhase = 'phase2')}>Phase II</button>
+					<button class:on={activeSection === 'groups'} on:click={() => (activeSection = 'groups')}>Groups</button>
+					<button class:on={activeSection === 'knockout'} on:click={() => (activeSection = 'knockout')}>Knockout</button>
+					<button class:on={activeSection === 'bonus'} on:click={() => (activeSection = 'bonus')}>Bonus</button>
 				</div>
-			{/if}
+			</div>
 		</section>
 
 		<!-- Phase 1 wizard -->
 		{#if activePhase === 'phase1'}
-			<!-- Pill nav: groups + knockout + bonus -->
-			<section class="pn-wiz-nav">
-				{#each $groupFixtures as g (g.group)}
-					{@const gp = groupProgress(g)}
+			<!-- Group pills (only when the Groups section is selected) -->
+			{#if activeSection === 'groups'}
+				<section class="pn-wiz-nav">
+					{#each $groupFixtures as g (g.group)}
+						{@const gp = groupProgress(g)}
+						<button
+							class="pn-wiz-gp"
+							class:active={activeGroupPill === g.group}
+							class:done={gp.done === gp.total && gp.total > 0}
+							on:click={() => (activeGroupPill = g.group)}
+						>
+							Group {g.group}
+							<span class="gp-prog">{gp.done}/{gp.total}</span>
+						</button>
+					{/each}
 					<button
-						class="pn-wiz-gp"
-						class:active={activePill === `group:${g.group}`}
-						class:done={gp.done === gp.total && gp.total > 0}
-						on:click={() => (activePill = `group:${g.group}`)}
+						class="pn-wiz-gp special"
+						class:active={activeGroupPill === 'thirdplace'}
+						on:click={() => (activeGroupPill = 'thirdplace')}
 					>
-						Group {g.group}
-						<span class="gp-prog">{gp.done}/{gp.total}</span>
+						3rd Place
 					</button>
-				{/each}
-				<button
-					class="pn-wiz-gp special"
-					class:active={activePill === 'knockout'}
-					on:click={() => (activePill = 'knockout')}
-				>
-					Knockout
-				</button>
-				<button
-					class="pn-wiz-gp special"
-					class:active={activePill === 'bonus'}
-					on:click={() => (activePill = 'bonus')}
-				>
-					Bonus
-				</button>
-			</section>
+				</section>
+			{/if}
 
 			<!-- Group view -->
-			{#if selectedGroup}
+			{#if activeSection === 'groups' && activeGroupPill === 'thirdplace'}
+				<section class="pn-wiz-group">
+					<div class="pn-stnd">
+						<div class="h">
+							<span>Third-place standings · top 8 advance to R32</span>
+							<span class="live">LIVE</span>
+						</div>
+						<table class="pn-stnd-table">
+							<thead>
+								<tr>
+									<th></th>
+									<th class="c">Grp</th>
+									<th>Team</th>
+									<th class="c">P</th>
+									<th class="c">W</th>
+									<th class="c">D</th>
+									<th class="c">L</th>
+									<th class="c">GD</th>
+									<th>Pts</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each thirdPlaceStandings as t, i (t.team)}
+									<tr class:qualifies={i < 8}>
+										<td>
+											<span class="pos" class:adv={i < 8} class:out={i >= 8}>{i + 1}</span>
+										</td>
+										<td class="grp">{t.group}</td>
+										<td>
+											<span class="team">
+												<PnFlag code={teamCode(t.team)} w={20} h={14} />
+												<span class="nm-text">{t.team}</span>
+											</span>
+										</td>
+										<td class="stat">{t.played}</td>
+										<td class="stat">{t.won}</td>
+										<td class="stat">{t.drawn}</td>
+										<td class="stat">{t.lost}</td>
+										<td class="stat gd" class:pos={t.goalDifference >= 0} class:neg={t.goalDifference < 0}>
+											{t.goalDifference > 0 ? '+' : ''}{t.goalDifference}
+										</td>
+										<td>{t.points}</td>
+									</tr>
+								{:else}
+									<tr><td colspan="9" style="padding: 24px; text-align: center; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No third-place standings yet — fill in some group predictions</td></tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 10px;">
+						★ Top 8 third-placed teams (gold rows) qualify for the Round of 32 under FIFA 2026 format
+					</p>
+				</section>
+			{:else if activeSection === 'groups' && selectedGroup}
 				{@const group = selectedGroup}
 				{@const standings = standingsMap[group.group] ?? []}
 				<section class="pn-wiz-group">
@@ -377,7 +450,7 @@
 										<td>
 											<span class="team">
 												<PnFlag code={teamCode(t.team)} w={20} h={14} />
-												{t.team}
+												<span class="nm-text">{t.team}</span>
 											</span>
 										</td>
 										<td class="stat">{t.played}</td>
@@ -457,7 +530,7 @@
 						{/each}
 					</div>
 				</section>
-			{:else if activePill === 'knockout'}
+			{:else if activeSection === 'knockout'}
 				<PnKnockoutBracket
 					bind:this={bracketComponent}
 					prediction={displayBracket}
@@ -473,7 +546,7 @@
 						</button>
 					{/if}
 				</div>
-			{:else if activePill === 'bonus'}
+			{:else if activeSection === 'bonus'}
 				<section class="pn-bonus-row">
 					{#each BONUS_QUESTIONS as bq (bq.id)}
 						<div class="pn-bonus">

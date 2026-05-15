@@ -9,10 +9,22 @@
 	display: grid;
 	grid-template-columns: 1fr auto auto;
 	gap: 24px;
-	align-items: stretch;
+	align-items: center;
 	padding: 18px 0 16px;
 	border-bottom: 2.5px solid var(--ink);
 	margin-bottom: 20px;
+}
+@media (max-width: 699px) {
+	.pn .pn-wiz-hero {
+		grid-template-columns: 1fr;
+		gap: 14px;
+	}
+}
+.pn .pn-wiz-hero .toggle-stack {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	align-items: stretch;
 }
 .pn .pn-wiz-hero .title-block {
 	display: flex;
@@ -37,7 +49,6 @@
 .pn .pn-wiz-hero .title-block .ttl em { color: var(--red); font-style: normal; }
 .pn .pn-wiz-hero .phase-toggle {
 	display: flex;
-	align-self: center;
 	border: 2px solid var(--ink);
 }
 .pn .pn-wiz-hero .phase-toggle button {
@@ -89,13 +100,13 @@
 	background: var(--red);
 }
 
-/* ==== Pill navigator ==== */
+/* ==== Pill navigator (group pills only) ==== */
 .pn .pn-wiz-nav {
 	display: flex;
+	flex-wrap: wrap;
 	gap: 8px;
 	margin-bottom: 22px;
-	overflow-x: auto;
-	padding: 4px 4px 12px;
+	padding: 4px 0 12px;
 	border-bottom: 1.5px dashed var(--paper-3);
 }
 .pn .pn-wiz-gp {
@@ -222,6 +233,32 @@
 	display: flex;
 	align-items: center;
 	gap: 8px;
+	min-width: 0;
+}
+.pn .pn-stnd-table .team .nm-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	min-width: 0;
+}
+/* Make tables predictable: explicit column widths via colgroup work better
+ * than letting auto layout fight with the team name's flex container. */
+.pn .pn-stnd-table {
+	table-layout: auto;
+	min-width: 460px;
+}
+.pn .pn-stnd { overflow-x: auto; }
+
+/* Third-place qualifying table — same shell as standings but with a Group
+ * letter column. Top-8 qualify, highlighted gold. */
+.pn .pn-stnd-table tr.qualifies td { background: rgba(212, 154, 46, 0.16); }
+.pn .pn-stnd-table tr.qualifies td .pos { color: var(--gold); font-weight: 700; }
+.pn .pn-stnd-table .grp {
+	font-family: var(--display);
+	font-size: 14px;
+	text-align: center;
+	color: var(--ink-3);
+	width: 32px;
 }
 .pn .pn-stnd-table .stat {
 	text-align: center;
