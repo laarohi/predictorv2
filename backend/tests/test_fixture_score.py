@@ -163,15 +163,21 @@ class TestFixtureToRead:
         assert result.score is None
         assert result.status == MatchStatus.SCHEDULED
 
-    def test_live_fixture_excludes_score(self, live_fixture_with_score):
-        """Live fixture should NOT include score even if Score object exists.
+    def test_live_fixture_includes_score(self, live_fixture_with_score):
+        """Live fixture SHOULD include score so the Dashboard can render the
+        in-progress scoreline.
 
-        Score data is only embedded when status == FINISHED to prevent
-        premature result exposure.
+        Behaviour changed in feat(live-scores): predictions lock 5 minutes
+        before kickoff, so by the time a match is LIVE everyone's pick is
+        already locked in — there's no "premature result exposure" risk.
+        Exposing the score lets the score_scheduler's Football-Data.org
+        writes flow through to the frontend in real time.
         """
         result = fixture_to_read(live_fixture_with_score)
 
-        assert result.score is None
+        assert result.score is not None
+        assert result.score.home_score == 1
+        assert result.score.away_score == 0
         assert result.status == MatchStatus.LIVE
 
     def test_finished_fixture_without_score_object(self):
