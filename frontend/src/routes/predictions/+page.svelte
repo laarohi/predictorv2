@@ -137,7 +137,15 @@
 			$isPhase1Locked,
 			$isPhase2BracketLocked
 		);
-		if (r) restorationBanner = r;
+		if (r) {
+			restorationBanner = r;
+			// Auto-dismiss after 5s. The user can still click × to dismiss
+			// it sooner; if they do, restorationBanner is already null when
+			// this timeout fires so the assignment is a harmless no-op.
+			setTimeout(() => {
+				restorationBanner = null;
+			}, 5000);
+		}
 	}
 
 	onDestroy(() => {
