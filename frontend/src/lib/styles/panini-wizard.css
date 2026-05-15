@@ -476,10 +476,18 @@
 	padding: 12px 18px;
 	border-top: 3px solid var(--red);
 	display: grid;
-	grid-template-columns: 1fr auto;
+	grid-template-columns: 1fr auto auto;
 	gap: 14px;
 	align-items: center;
 	z-index: 10;
+}
+.pn .pn-wiz-foot .saved-tag {
+	font-family: var(--mono);
+	font-size: 10px;
+	color: var(--paper-3);
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	white-space: nowrap;
 }
 .pn .pn-wiz-foot .stats {
 	font-family: var(--mono);
@@ -635,6 +643,62 @@
 	color: var(--ink-3);
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
+}
+
+/* ==== Draft-restoration banner ====
+ * Shown when localStorage drafts are rehydrated on page load (the user had
+ * unsaved changes from a previous session that got mirrored to localStorage).
+ * Cream paper + ink border + GOLD offset shadow (vs the red shadow on the
+ * tie-warn banner) — distinguishes "good news, we restored your work" from
+ * "warning, you need to act". Dismissible via the × button. */
+.pn .pn-restore-banner {
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--gold);
+	padding: 12px 16px;
+	margin-bottom: 22px;
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 14px;
+	align-items: center;
+	font-family: var(--body);
+	font-size: 13px;
+	line-height: 1.45;
+	color: var(--ink);
+}
+.pn .pn-restore-banner .content {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+.pn .pn-restore-banner .icon {
+	color: var(--gold);
+	font-size: 26px;
+	font-family: var(--display);
+	line-height: 1;
+	flex-shrink: 0;
+}
+.pn .pn-restore-banner .text b {
+	font-family: var(--display);
+	color: var(--ink);
+	margin-right: 6px;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+}
+.pn .pn-restore-banner .dismiss {
+	background: transparent;
+	border: 2px solid var(--ink);
+	width: 32px;
+	height: 32px;
+	cursor: pointer;
+	font-family: var(--display);
+	font-size: 18px;
+	line-height: 1;
+	color: var(--ink);
+}
+.pn .pn-restore-banner .dismiss:hover {
+	background: var(--ink);
+	color: var(--paper);
 }
 
 /* ==== Tie-warning banner ====

@@ -39,6 +39,11 @@
 		phase2Countdown
 	} from '$stores/phase';
 	import { applyFifaTiebreakers, computeGroupStandingsMapWithWarnings } from '$lib/utils/standings';
+	import {
+		initPersistence,
+		hydrateFromStorage,
+		lastLocalSave
+	} from '$stores/unsavedPersistence';
 	import { teamCode } from '$lib/utils/teamCodes';
 	import type { Fixture, MatchPrediction, BracketPrediction, TeamAdvancementPrediction } from '$types';
 
@@ -67,6 +72,18 @@
 
 	let saveStatus: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
 
+	// Cross-tab + cross-refresh draft persistence (silent localStorage mirror).
+	// fetchesDone gates hydration so we only overlay localStorage drafts AFTER
+	// the server baseline is loaded — otherwise the rehydrated drafts would
+	// get clobbered by fetchMatchPredictions resetting unsavedChanges.
+	let fetchesDone = false;
+	let hydrated = false;
+	let restorationBanner: {
+		matchCount: number;
+		bracketPhase1Restored: boolean;
+		bracketPhase2Restored: boolean;
+	} | null = null;
+
 	onMount(async () => {
 		if ($isAuthenticated) {
 			await Promise.all([
@@ -81,9 +98,26 @@
 					fetchPhase2BracketPredictions()
 				]);
 			}
+			fetchesDone = true;
 		}
 		window.addEventListener('beforeunload', handleBeforeUnload);
 	});
+
+	// Hydrate drafts from localStorage + start the persistence subscription
+	// once user is loaded AND initial fetches are done AND we have group
+	// fixtures to dedupe locked matches against. Runs at most once per user
+	// session via the `hydrated` guard.
+	$: if ($user && fetchesDone && !hydrated && $groupFixtures.length > 0) {
+		hydrated = true;
+		initPersistence($user.id);
+		const r = hydrateFromStorage(
+			$user.id,
+			$groupFixtures,
+			$isPhase1Locked,
+			$isPhase2BracketLocked
+		);
+		if (r) restorationBanner = r;
+	}
 
 	onDestroy(() => {
 		if (typeof window !== 'undefined') {
@@ -414,6 +448,10 @@
 	// in the template re-evaluates when bonusAnswers is reassigned.
 	$: bonusAnswer = (qid: string): string => bonusAnswers.get(qid) ?? '';
 
+	function formatLocalTime(d: Date): string {
+		return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+	}
+
 	function setBonusAnswer(qid: string, value: string) {
 		const next = new Map(bonusAnswers);
 		if (value) next.set(qid, value);
@@ -465,6 +503,28 @@
 
 {#if $isAuthenticated}
 	<PnPageShell>
+		{#if restorationBanner}
+			<div class="pn-restore-banner">
+				<div class="content">
+					<span class="icon">✦</span>
+					<div class="text">
+						<b>Drafts restored from your last session.</b>
+						{#if restorationBanner.matchCount > 0}
+							{restorationBanner.matchCount} unsaved match
+							{restorationBanner.matchCount === 1 ? 'pick' : 'picks'}{#if restorationBanner.bracketPhase1Restored || restorationBanner.bracketPhase2Restored},{/if}
+						{/if}
+						{#if restorationBanner.bracketPhase1Restored}
+							Phase I bracket{#if restorationBanner.bracketPhase2Restored},{/if}
+						{/if}
+						{#if restorationBanner.bracketPhase2Restored}
+							Phase II bracket
+						{/if}
+						— remember to press Save when you're done.
+					</div>
+				</div>
+				<button class="dismiss" aria-label="Dismiss" on:click={() => (restorationBanner = null)}>×</button>
+			</div>
+		{/if}
 		<!-- Hero / progress / phase toggle -->
 		<section class="pn-wiz-hero">
 			<div class="title-block">
@@ -860,6 +920,9 @@
 						{/if}
 					{/if}
 				</div>
+				{#if $lastLocalSave}
+					<span class="saved-tag">Saved locally · {formatLocalTime($lastLocalSave)}</span>
+				{/if}
 				<button
 					class="submit-btn"
 					class:success={saveStatus === 'saved'}
@@ -987,6 +1050,9 @@
 						<b>{$unsavedChangesCount}</b> match {$unsavedChangesCount === 1 ? 'pick' : 'picks'} unsaved
 					{/if}
 				</div>
+				{#if $lastLocalSave}
+					<span class="saved-tag">Saved locally · {formatLocalTime($lastLocalSave)}</span>
+				{/if}
 				<button
 					class="submit-btn"
 					class:success={saveStatus === 'saved'}
