@@ -47,7 +47,7 @@
 }
 .pn .pn-ad-user {
 	display: grid;
-	grid-template-columns: 1fr auto auto;
+	grid-template-columns: auto 1fr auto auto;
 	gap: 12px;
 	align-items: center;
 	background: var(--paper);
@@ -56,6 +56,58 @@
 }
 .pn .pn-ad-user.admin { background: rgba(212, 154, 46, 0.12); }
 .pn .pn-ad-user.inactive { opacity: 0.55; }
+.pn .pn-ad-user.paid { border-left: 6px solid var(--green); }
+
+/* Custom paid toggle — Panini-styled checkbox */
+.pn .pn-ad-user .paid-toggle {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	cursor: pointer;
+	user-select: none;
+	min-width: 76px;
+}
+.pn .pn-ad-user .paid-toggle input {
+	position: absolute;
+	opacity: 0;
+	pointer-events: none;
+	width: 0;
+	height: 0;
+}
+.pn .pn-ad-user .paid-toggle .box {
+	width: 22px;
+	height: 22px;
+	background: var(--paper);
+	border: 2px solid var(--ink);
+	display: grid;
+	place-items: center;
+	font-family: var(--display);
+	font-size: 14px;
+	color: var(--paper);
+	box-shadow: 2px 2px 0 var(--ink);
+	flex-shrink: 0;
+}
+.pn .pn-ad-user.paid .paid-toggle .box {
+	background: var(--green);
+	color: var(--paper);
+	border-color: var(--green);
+	box-shadow: 2px 2px 0 var(--ink);
+}
+.pn .pn-ad-user .paid-toggle .lbl {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+.pn .pn-ad-user.paid .paid-toggle .lbl {
+	color: var(--green);
+	font-weight: 700;
+}
+.pn .pn-ad-user .paid-toggle:hover .box {
+	transform: translate(-1px, -1px);
+	box-shadow: 3px 3px 0 var(--ink);
+}
 .pn .pn-ad-user .who .nm {
 	font-family: var(--display);
 	font-size: 15px;

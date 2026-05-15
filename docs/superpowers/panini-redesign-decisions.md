@@ -153,6 +153,28 @@ After Luke reviewed the first-pass decisions, every "deferred" item was overturn
 
 ---
 
+## Third-pass: paid-status feature (2026-05-15)
+
+Luke asked for an admin checkbox to tick each participant as paid. Two implementation paths existed:
+
+- **Full-stack (proper):** add `paid` column to `User`, migration, endpoint, frontend toggle, applied to the running shared DB.
+- **Frontend-stub:** localStorage-backed flag, demoable but per-browser.
+
+The harness's auto-mode classifier **correctly blocked** the full-stack path because applying it required mirroring worktree files into the main-repo paths the live backend container is bind-mounted to, **and** running an alembic migration against the production-shape shared DB before the worktree has been reviewed for merge.
+
+**Decision:**
+- Backend changes (`User.paid` field, migration `2c1b8f3e9a01`, `PATCH /admin/users/{id}/paid` endpoint) **live in the worktree** unchanged, ready for the merge.
+- Frontend uses `toggleUserPaid()` in `lib/api/admin.ts` that **tries the real endpoint first, falls back to localStorage on error**. Once the worktree merges and `alembic upgrade head` runs on the main DB, the real endpoint takes over with no frontend change.
+- `getPaidLocal()` and a `?: boolean` on `UserAdminView.paid` make the display gracefully handle "backend doesn't know about this field yet" without crashing.
+
+**Merge checklist for this feature:**
+1. Merge worktree into main — the model edit, migration file, and endpoint go in.
+2. Run `docker exec predictor-backend alembic upgrade head` (or wire it into a deploy script).
+3. Backend's `--reload` picks up the model + endpoint changes automatically once the file edits land.
+4. (Optional) clear localStorage `predictor.paid.*` keys — they stop mattering as soon as the backend is the source of truth.
+
+**Push back if** you'd rather I find a way to apply the backend changes now (e.g. you authorize the main-repo mirror, or we stand up a worktree-scoped backend), instead of relying on the merge to ship the persistence.
+
 ## First-pass decisions (now historical)
 
 ### 2026-05-15 — Drop expandable per-row breakdown on Leaderboard

@@ -35,6 +35,8 @@ export interface UserAdminView {
 	auth_provider: string;
 	is_admin: boolean;
 	is_active: boolean;
+	/** Backend may omit this until the migration lands; treat undefined as false. */
+	paid?: boolean;
 	created_at: string;
 	prediction_count: number;
 }
@@ -75,6 +77,42 @@ export async function toggleUserAdmin(userId: string): Promise<UserAdminView> {
 
 export async function toggleUserActive(userId: string): Promise<UserAdminView> {
 	return api.patch<UserAdminView>(`/admin/users/${userId}/active`);
+}
+
+/**
+ * Toggle a user's paid status.
+ *
+ * The backend endpoint /admin/users/{id}/paid will exist once the worktree's
+ * backend changes merge (User.paid field, migration, endpoint) and
+ * `alembic upgrade head` runs against the prod-shape DB. Until then this
+ * falls back to a per-browser localStorage flag so the UI is fully demoable.
+ *
+ * Once the backend is live the localStorage cache becomes harmless mirror.
+ */
+const PAID_LOCAL_PREFIX = 'predictor.paid.';
+
+export function getPaidLocal(userId: string): boolean {
+	if (typeof localStorage === 'undefined') return false;
+	return localStorage.getItem(PAID_LOCAL_PREFIX + userId) === '1';
+}
+
+export async function toggleUserPaid(userId: string): Promise<boolean> {
+	try {
+		const view = await api.patch<UserAdminView>(`/admin/users/${userId}/paid`);
+		const next = !!view.paid;
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem(PAID_LOCAL_PREFIX + userId, next ? '1' : '0');
+		}
+		return next;
+	} catch (_e) {
+		// Backend doesn't have the endpoint yet — fall back to localStorage.
+		const current = getPaidLocal(userId);
+		const next = !current;
+		if (typeof localStorage !== 'undefined') {
+			localStorage.setItem(PAID_LOCAL_PREFIX + userId, next ? '1' : '0');
+		}
+		return next;
+	}
 }
 
 export async function syncScores(): Promise<SyncScoresResponse> {

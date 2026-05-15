@@ -44,6 +44,7 @@ class UserAdminView(BaseModel):
     auth_provider: str
     is_admin: bool
     is_active: bool
+    paid: bool
     created_at: datetime
     prediction_count: int
 
@@ -150,6 +151,7 @@ async def get_all_users(
             auth_provider=user.auth_provider.value,
             is_admin=user.is_admin,
             is_active=user.is_active,
+            paid=user.paid,
             created_at=user.created_at,
             prediction_count=count,
         )
@@ -187,6 +189,7 @@ async def toggle_user_admin(
         auth_provider=user.auth_provider.value,
         is_admin=user.is_admin,
         is_active=user.is_active,
+        paid=user.paid,
         created_at=user.created_at,
         prediction_count=count or 0,
     )
@@ -222,6 +225,43 @@ async def toggle_user_active(
         auth_provider=user.auth_provider.value,
         is_admin=user.is_admin,
         is_active=user.is_active,
+        paid=user.paid,
+        created_at=user.created_at,
+        prediction_count=count or 0,
+    )
+
+
+@router.patch("/users/{user_id}/paid", response_model=UserAdminView)
+async def toggle_user_paid(
+    user_id: uuid.UUID,
+    session: DbSession,
+    _admin: AdminUser,
+) -> UserAdminView:
+    """Toggle paid status for a user (admin only). Used to track who has
+    paid the competition entry fee."""
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.paid = not user.paid
+    user.updated_at = utc_now()
+    await session.commit()
+    await session.refresh(user)
+
+    count = await session.scalar(
+        select(func.count(MatchPrediction.id)).where(MatchPrediction.user_id == user_id)
+    )
+
+    return UserAdminView(
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        auth_provider=user.auth_provider.value,
+        is_admin=user.is_admin,
+        is_active=user.is_active,
+        paid=user.paid,
         created_at=user.created_at,
         prediction_count=count or 0,
     )

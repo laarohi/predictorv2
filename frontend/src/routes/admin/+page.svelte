@@ -19,6 +19,8 @@
 		getAllUsers,
 		toggleUserAdmin,
 		toggleUserActive,
+		toggleUserPaid,
+		getPaidLocal,
 		syncScores,
 		type AdminStats,
 		type CompetitionAdminView,
@@ -105,6 +107,24 @@
 		} finally {
 			togglingUserId = null;
 		}
+	}
+
+	async function handleTogglePaid(u: UserAdminView) {
+		togglingUserId = u.id;
+		userActionError = null;
+		try {
+			const next = await toggleUserPaid(u.id);
+			users = users.map((x) => (x.id === u.id ? { ...x, paid: next } : x));
+		} catch (e) {
+			userActionError = e instanceof Error ? e.message : 'Failed to update paid status';
+		} finally {
+			togglingUserId = null;
+		}
+	}
+
+	/** Effective paid state for a user — backend value if present, else localStorage. */
+	function paidOf(u: UserAdminView): boolean {
+		return u.paid ?? getPaidLocal(u.id);
 	}
 
 	async function handleToggleActive(u: UserAdminView) {
@@ -369,7 +389,18 @@
 					/>
 					<div class="pn-ad-users">
 						{#each filteredUsers as u (u.id)}
-							<div class="pn-ad-user" class:admin={u.is_admin} class:inactive={!u.is_active}>
+							{@const isPaid = paidOf(u)}
+							<div class="pn-ad-user" class:admin={u.is_admin} class:inactive={!u.is_active} class:paid={isPaid}>
+								<label class="paid-toggle" title={isPaid ? 'Mark as unpaid' : 'Mark as paid'}>
+									<input
+										type="checkbox"
+										checked={isPaid}
+										disabled={togglingUserId === u.id}
+										on:change={() => handleTogglePaid(u)}
+									/>
+									<span class="box" aria-hidden="true">{isPaid ? '✓' : ''}</span>
+									<span class="lbl">{isPaid ? 'Paid' : 'Unpaid'}</span>
+								</label>
 								<div class="who">
 									<div class="nm">{u.name}</div>
 									<div class="em">{u.email} · {u.auth_provider === 'google' ? 'GOOGLE' : 'EMAIL'}</div>
