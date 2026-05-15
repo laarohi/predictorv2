@@ -12,6 +12,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	buildGroupPositions,
 	getQualifyingThirdPlaceTeams,
+	getQualifyingThirdPlaceTeamsWithWarnings,
 	resolveMatchSource,
 	initializeBracketState,
 	setMatchWinner,
@@ -150,9 +151,9 @@ describe('getQualifyingThirdPlaceTeams', () => {
 
 	it('breaks ties alphabetically by team name as the final fallback', () => {
 		// Mirrors backend's behavior in standings.py — required so frontend
-		// and backend agree on edge cases where all stats tie.
-		// Insertion order is reversed (Z then A) to prove the sort isn't
-		// just relying on object key order.
+		// and backend agree on edge cases where all stats tie. H2H isn't
+		// applicable here (cross-group), so the chain goes:
+		// points → GD → GF → alphabetical (+ TieWarning).
 		const standings: GroupStandingsMap = {
 			Z: [
 				_ts('1Z', 'Z', 9, 5),
@@ -169,6 +170,49 @@ describe('getQualifyingThirdPlaceTeams', () => {
 		};
 		const top8 = getQualifyingThirdPlaceTeams(standings);
 		expect(top8.map((t) => t.team)).toEqual(['Aardvark', 'Zebra']);
+	});
+
+	it('returns a third_place_qualifying TieWarning when alphabetical fallback fires', () => {
+		// Same 2-team tie as above, now also asserting the warning surface.
+		const standings: GroupStandingsMap = {
+			A: [
+				_ts('1A', 'A', 9, 5),
+				_ts('2A', 'A', 6, 2),
+				_ts('Aardvark', 'A', 3, 0, 2),
+				_ts('4A', 'A', 0, -5)
+			],
+			Z: [
+				_ts('1Z', 'Z', 9, 5),
+				_ts('2Z', 'Z', 6, 2),
+				_ts('Zebra', 'Z', 3, 0, 2),
+				_ts('4Z', 'Z', 0, -5)
+			]
+		};
+		const { qualifying, warnings } = getQualifyingThirdPlaceTeamsWithWarnings(standings);
+		expect(qualifying.map((t) => t.team)).toEqual(['Aardvark', 'Zebra']);
+		expect(warnings.length).toBe(1);
+		expect(warnings[0].context).toBe('third_place_qualifying');
+		expect(warnings[0].tiedTeams).toEqual(['Aardvark', 'Zebra']);
+	});
+
+	it('returns no warnings when third-place ranking is clean', () => {
+		const standings: GroupStandingsMap = {
+			A: [
+				_ts('1A', 'A', 9, 5),
+				_ts('2A', 'A', 6, 2),
+				_ts('ClearWinner', 'A', 6, +3, 5),
+				_ts('4A', 'A', 0, -5)
+			],
+			B: [
+				_ts('1B', 'B', 9, 5),
+				_ts('2B', 'B', 6, 2),
+				_ts('ClearSecond', 'B', 3, 0, 2),
+				_ts('4B', 'B', 0, -5)
+			]
+		};
+		const { qualifying, warnings } = getQualifyingThirdPlaceTeamsWithWarnings(standings);
+		expect(qualifying.map((t) => t.team)).toEqual(['ClearWinner', 'ClearSecond']);
+		expect(warnings).toEqual([]);
 	});
 
 	it('returns fewer than 8 when not enough groups have a 3rd-placed team', () => {

@@ -17,7 +17,7 @@ import {
 	getMatchByNumber
 } from '$lib/config/bracketConfig';
 import type { BracketPrediction, ThirdPlaceMappingTable } from '$types';
-import type { TeamStanding } from './standings';
+import { applyFifaTiebreakers, type TeamStanding, type TieWarning } from './standings';
 import thirdPlaceMappingJson from '$lib/config/thirdPlaceMapping.json';
 
 // Type the imported JSON properly
@@ -84,42 +84,55 @@ export function buildGroupPositions(standings: GroupStandingsMap): Record<string
 }
 
 /**
- * Determine which 8 third-place teams qualify
- * Returns them sorted by ranking (best first)
+ * Determine which 8 third-place teams qualify.
+ *
+ * Uses FIFA's tiebreaker chain (up to head-to-head goals) via
+ * `applyFifaTiebreakers`. Head-to-head isn't applicable here because the
+ * third-placed teams come from different groups (they never played each
+ * other), so any tie that survives points/GD/GF falls to alphabetical
+ * with a TieWarning — see `getQualifyingThirdPlaceTeamsWithWarnings`.
  */
 export function getQualifyingThirdPlaceTeams(
 	standings: GroupStandingsMap
 ): Array<{ group: string; team: string; standing: TeamStanding }> {
-	const thirdPlaceTeams: Array<{ group: string; team: string; standing: TeamStanding }> = [];
+	return getQualifyingThirdPlaceTeamsWithWarnings(standings).qualifying;
+}
 
+/**
+ * Same as getQualifyingThirdPlaceTeams but also returns alphabetical-tie warnings.
+ *
+ * Warnings here are particularly load-bearing: a tie at the 8/9 boundary
+ * affects who actually advances to R32, which the UI should prompt the user
+ * to resolve by adjusting scores.
+ */
+export function getQualifyingThirdPlaceTeamsWithWarnings(
+	standings: GroupStandingsMap
+): {
+	qualifying: Array<{ group: string; team: string; standing: TeamStanding }>;
+	warnings: TieWarning[];
+} {
+	const thirdPlaceStandings: TeamStanding[] = [];
 	for (const [group, groupStandings] of Object.entries(standings)) {
 		if (groupStandings[2]) {
-			thirdPlaceTeams.push({
-				group,
-				team: groupStandings[2].team,
-				standing: groupStandings[2]
-			});
+			// Ensure `group` is set even if the standing object originated elsewhere.
+			thirdPlaceStandings.push({ ...groupStandings[2], group });
 		}
 	}
 
-	// Sort by: points > goal difference > goals for > team-name alphabetical
-	// (The alphabetical fallback is NOT FIFA's actual tiebreaker — FIFA uses
-	// head-to-head, fair-play, then drawing-of-lots. We use alphabetical for
-	// deterministic agreement with the backend's standings.py sort, which
-	// also falls back to team name. Both sides must agree to avoid a
-	// prediction app where the predicted standings disagree with the
-	// official table on edge-case ties.)
-	thirdPlaceTeams.sort((a, b) => {
-		if (b.standing.points !== a.standing.points) return b.standing.points - a.standing.points;
-		if (b.standing.goalDifference !== a.standing.goalDifference) {
-			return b.standing.goalDifference - a.standing.goalDifference;
-		}
-		if (b.standing.goalsFor !== a.standing.goalsFor) return b.standing.goalsFor - a.standing.goalsFor;
-		return a.team.localeCompare(b.team);
-	});
+	const { sorted, warnings } = applyFifaTiebreakers(
+		thirdPlaceStandings,
+		[],
+		new Map(),
+		'third_place_qualifying'
+	);
 
-	// Top 8 qualify
-	return thirdPlaceTeams.slice(0, 8);
+	const qualifying = sorted.slice(0, 8).map((s) => ({
+		group: s.group,
+		team: s.team,
+		standing: s
+	}));
+
+	return { qualifying, warnings };
 }
 
 /**
