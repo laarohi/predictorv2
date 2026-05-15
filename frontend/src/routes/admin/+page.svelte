@@ -19,21 +19,18 @@
 		getAllUsers,
 		toggleUserAdmin,
 		toggleUserActive,
+		toggleUserPaid,
+		getPaidLocal,
 		syncScores,
 		type AdminStats,
 		type CompetitionAdminView,
 		type UserAdminView,
 		type SyncScoresResponse
 	} from '$lib/api/admin';
+	import PnPageShell from '$components/panini/PnPageShell.svelte';
 
-	// Redirect non-admins
-	$: if ($isAuthenticated && !$user?.is_admin) {
-		goto('/');
-	}
-
-	$: if (!$isAuthenticated) {
-		goto('/login');
-	}
+	$: if ($isAuthenticated && !$user?.is_admin) goto('/');
+	$: if (!$isAuthenticated) goto('/login');
 
 	let stats: AdminStats | null = null;
 	let competitions: CompetitionAdminView[] = [];
@@ -41,35 +38,29 @@
 	let loading = true;
 	let error: string | null = null;
 
-	// Phase 1 deadline form
 	let phase1DeadlineDate = '';
 	let phase1DeadlineTime = '12:00';
 	let settingPhase1 = false;
 	let phase1Error: string | null = null;
 	let phase1Success: string | null = null;
 
-	// Phase 2 activation form
 	let bracketDeadlineDate = '';
 	let bracketDeadlineTime = '12:00';
 	let activating = false;
 	let activationError: string | null = null;
 	let activationSuccess: string | null = null;
 
-	// Manual score sync
 	let syncing = false;
 	let syncResult: SyncScoresResponse | null = null;
 	let syncedAt: Date | null = null;
 	let syncError: string | null = null;
 
-	// User management
 	let userSearch = '';
 	let togglingUserId: string | null = null;
 	let userActionError: string | null = null;
 
 	onMount(async () => {
-		if ($user?.is_admin) {
-			await loadData();
-		}
+		if ($user?.is_admin) await loadData();
 	});
 
 	async function loadData() {
@@ -95,7 +86,6 @@
 		try {
 			syncResult = await syncScores();
 			syncedAt = new Date();
-			// Refresh stats so live_fixtures count updates
 			await loadData();
 		} catch (e) {
 			syncError = e instanceof Error ? e.message : 'Failed to sync scores';
@@ -107,7 +97,6 @@
 	async function handleToggleAdmin(u: UserAdminView) {
 		const action = u.is_admin ? 'remove admin from' : 'grant admin to';
 		if (!confirm(`Are you sure you want to ${action} ${u.name}?`)) return;
-
 		togglingUserId = u.id;
 		userActionError = null;
 		try {
@@ -120,10 +109,27 @@
 		}
 	}
 
+	async function handleTogglePaid(u: UserAdminView) {
+		togglingUserId = u.id;
+		userActionError = null;
+		try {
+			const next = await toggleUserPaid(u.id);
+			users = users.map((x) => (x.id === u.id ? { ...x, paid: next } : x));
+		} catch (e) {
+			userActionError = e instanceof Error ? e.message : 'Failed to update paid status';
+		} finally {
+			togglingUserId = null;
+		}
+	}
+
+	/** Effective paid state for a user — backend value if present, else localStorage. */
+	function paidOf(u: UserAdminView): boolean {
+		return u.paid ?? getPaidLocal(u.id);
+	}
+
 	async function handleToggleActive(u: UserAdminView) {
 		const action = u.is_active ? 'deactivate' : 'reactivate';
 		if (!confirm(`Are you sure you want to ${action} ${u.name}?`)) return;
-
 		togglingUserId = u.id;
 		userActionError = null;
 		try {
@@ -148,11 +154,9 @@
 			phase1Error = 'Please select a deadline date';
 			return;
 		}
-
 		settingPhase1 = true;
 		phase1Error = null;
 		phase1Success = null;
-
 		try {
 			const deadline = `${phase1DeadlineDate}T${phase1DeadlineTime}:00`;
 			const result = await setPhase1Deadline(deadline);
@@ -170,11 +174,9 @@
 			activationError = 'Please select a deadline date';
 			return;
 		}
-
 		activating = true;
 		activationError = null;
 		activationSuccess = null;
-
 		try {
 			const deadline = `${bracketDeadlineDate}T${bracketDeadlineTime}:00`;
 			const result = await activatePhase2(deadline);
@@ -189,11 +191,9 @@
 
 	async function handleDeactivatePhase2() {
 		if (!confirm('Are you sure you want to deactivate Phase 2?')) return;
-
 		activating = true;
 		activationError = null;
 		activationSuccess = null;
-
 		try {
 			await deactivatePhase2();
 			activationSuccess = 'Phase 2 deactivated';
@@ -205,422 +205,225 @@
 		}
 	}
 
-	// Get the active competition
 	$: activeCompetition = competitions.find((c) => c.is_active);
 </script>
 
 <svelte:head>
-	<title>Admin Dashboard - Predictor v2</title>
+	<title>Admin — Predictor</title>
 </svelte:head>
 
 {#if $isAuthenticated && $user?.is_admin}
-	<div class="container mx-auto mobile-padding py-6">
-		<!-- Header -->
-		<div class="mb-8">
-			<h1 class="text-3xl sm:text-4xl font-display tracking-wide">Admin Dashboard</h1>
-			<p class="text-sm text-base-content/50 mt-1">Manage competition and view statistics</p>
-		</div>
+	<PnPageShell>
+		<section class="pn-pf-hero">
+			<div class="av" style="background: var(--gold); color: var(--ink);">★</div>
+			<div class="nm-block">
+				<div class="nm">Admin <em>console</em></div>
+				<div class="sub">Manage competition, phases, scores, and users</div>
+			</div>
+			<div class="rank-block">
+				<div class="l">Phase</div>
+				<div class="v" style="color: var(--gold);">{$isPhase2Active ? 'II' : 'I'}</div>
+				<div class="of">{activeCompetition?.name ?? 'no competition active'}</div>
+			</div>
+		</section>
 
 		{#if loading}
-			<div class="flex justify-center py-16">
-				<span class="loading loading-spinner loading-lg text-primary"></span>
-			</div>
+			<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">Loading admin data…</p>
 		{:else if error}
-			<div class="alert alert-error">
-				<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-				</svg>
-				<span>{error}</span>
-				<button class="btn btn-sm btn-ghost" on:click={loadData}>Retry</button>
-			</div>
+			<div class="pn-pf-alert error">{error} · <button class="pn-btn ghost" style="padding: 4px 10px; font-size: 11px;" on:click={loadData}>Retry</button></div>
 		{:else}
-			<div class="space-y-8">
-				<!-- Stats Grid -->
-				{#if stats}
-					<div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-						<div class="stadium-card no-glow p-4">
-							<p class="text-xs text-base-content/50 uppercase tracking-wider">Users</p>
-							<p class="text-2xl font-display mt-1">{stats.total_users}</p>
-							<p class="text-xs text-base-content/40">{stats.active_users} active</p>
-						</div>
-						<div class="stadium-card no-glow p-4">
-							<p class="text-xs text-base-content/50 uppercase tracking-wider">Fixtures</p>
-							<p class="text-2xl font-display mt-1">{stats.total_fixtures}</p>
-							<p class="text-xs text-base-content/40">{stats.completed_fixtures} completed</p>
-						</div>
-						<div class="stadium-card no-glow p-4">
-							<p class="text-xs text-base-content/50 uppercase tracking-wider">Predictions</p>
-							<p class="text-2xl font-display mt-1">{stats.total_predictions}</p>
-						</div>
-						<div class="stadium-card no-glow p-4">
-							<p class="text-xs text-base-content/50 uppercase tracking-wider">Live</p>
-							<p class="text-2xl font-display mt-1 text-success">{stats.live_fixtures}</p>
-							<p class="text-xs text-base-content/40">matches</p>
-						</div>
+			<!-- Stats -->
+			{#if stats}
+				<section class="pn-pf-stats">
+					<div class="pn-pf-stat">
+						<div class="l">Users</div>
+						<div class="v">{stats.total_users}</div>
+						<div class="sub">{stats.active_users} active</div>
 					</div>
-				{/if}
-
-				<!-- Manual Score Sync -->
-				<div class="stadium-card no-glow p-4 sm:p-6">
-					<div class="flex items-center gap-3 mb-4">
-						<div class="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
-							<svg class="w-5 h-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-							</svg>
-						</div>
-						<div class="flex-1">
-							<h2 class="text-lg font-display tracking-wide">Score Sync</h2>
-							<p class="text-xs text-base-content/50">
-								Manually trigger a Football-Data.org sync. The background scheduler runs every 60s during match windows; this is the manual escape hatch.
-							</p>
-						</div>
+					<div class="pn-pf-stat">
+						<div class="l">Fixtures</div>
+						<div class="v">{stats.total_fixtures}</div>
+						<div class="sub">{stats.completed_fixtures} completed</div>
 					</div>
+					<div class="pn-pf-stat">
+						<div class="l">Predictions</div>
+						<div class="v">{stats.total_predictions}</div>
+					</div>
+					<div class="pn-pf-stat">
+						<div class="l">Live</div>
+						<div class="v exact">{stats.live_fixtures}</div>
+						<div class="sub">matches</div>
+					</div>
+				</section>
+			{/if}
 
-					{#if syncError}
-						<div class="alert alert-error mb-4">
-							<span>{syncError}</span>
-						</div>
-					{/if}
-
+			<!-- Score Sync -->
+			<section class="pn-pf-section">
+				<div class="h"><span>Score Sync</span><span class="right">Football-Data.org</span></div>
+				<div class="body">
+					{#if syncError}<div class="pn-pf-alert error" style="margin-bottom: 12px;">{syncError}</div>{/if}
 					{#if syncResult}
-						<div class="mb-4 p-4 rounded-xl bg-base-200/50">
-							<div class="flex items-center gap-2 mb-2">
-								<span class="text-sm font-medium">Last sync:</span>
-								<span class="text-sm text-base-content/70">{syncedAt?.toLocaleTimeString() ?? ''}</span>
-							</div>
-							<div class="flex flex-wrap gap-3 text-sm">
-								<span class="badge badge-success gap-1">
-									<span class="font-mono">{syncResult.synced}</span> created
-								</span>
-								<span class="badge badge-info gap-1">
-									<span class="font-mono">{syncResult.updated}</span> updated
-								</span>
+						<div class="pn-ad-syncresult">
+							<div>Last sync: <b>{syncedAt?.toLocaleTimeString() ?? ''}</b></div>
+							<div class="pills">
+								<span class="pn-tag got">{syncResult.synced} created</span>
+								<span class="pn-tag">{syncResult.updated} updated</span>
 								{#if syncResult.errors.length > 0}
-									<span class="badge badge-error gap-1">
-										<span class="font-mono">{syncResult.errors.length}</span> errors
-									</span>
+									<span class="pn-tag red">{syncResult.errors.length} errors</span>
 								{/if}
 							</div>
 							{#if syncResult.errors.length > 0}
-								<div class="mt-3 space-y-1 text-xs text-error/80">
+								<div style="margin-top: 8px;">
 									{#each syncResult.errors as err}
-										<div>• {err}</div>
+										<div style="color: var(--red); font-size: 10.5px;">• {err}</div>
 									{/each}
 								</div>
 							{/if}
 						</div>
 					{/if}
-
-					<button class="btn btn-success" on:click={handleSyncScores} disabled={syncing}>
-						{#if syncing}
-							<span class="loading loading-spinner loading-sm"></span>
-						{/if}
-						Sync scores now
+					<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.06em; margin-bottom: 12px;">
+						The background scheduler runs every 60s during match windows; this is the manual escape hatch.
+					</p>
+					<button class="pn-btn gold" type="button" on:click={handleSyncScores} disabled={syncing}>
+						{syncing ? 'Syncing…' : 'Sync scores now'}
 					</button>
 				</div>
+			</section>
 
-				<!-- Phase 1 Deadline Control -->
-				<div class="stadium-card no-glow p-4 sm:p-6">
-					<div class="flex items-center gap-3 mb-6">
-						<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-							<svg class="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-							</svg>
-						</div>
-						<div>
-							<h2 class="text-lg font-display tracking-wide">Phase 1 Deadline</h2>
-							<p class="text-xs text-base-content/50">Group stage predictions deadline</p>
-						</div>
-					</div>
-
-					<!-- Current Status -->
-					<div class="mb-6 p-4 rounded-xl bg-base-200/50">
-						<div class="flex items-center justify-between">
-							<span class="text-sm text-base-content/70">Deadline:</span>
+			<!-- Phase 1 Deadline -->
+			<section class="pn-pf-section">
+				<div class="h"><span>Phase I Deadline</span><span class="right">Group stage lock</span></div>
+				<div class="body">
+					<div class="pn-ad-status">
+						<span>
+							<b>DEADLINE</b>
 							{#if $phase1Deadline}
-								<span class="text-sm font-medium">{new Date($phase1Deadline).toLocaleString()}</span>
+								· {new Date($phase1Deadline).toLocaleString()}
 							{:else}
-								<span class="badge badge-ghost">Not set</span>
+								· <span class="warn">NOT SET</span>
 							{/if}
-						</div>
+						</span>
 						{#if $phase1Deadline}
-							<div class="flex items-center justify-between mt-2">
-								<span class="text-sm text-base-content/70">Time remaining:</span>
-								<span class="text-sm font-mono font-medium {$phase1Countdown === 'Locked' ? 'text-error' : 'text-success'}">{$phase1Countdown}</span>
-							</div>
+							<span class="{$phase1Countdown === 'Locked' ? 'warn' : 'ok'}">{$phase1Countdown}</span>
 						{/if}
 					</div>
 
-					{#if phase1Error}
-						<div class="alert alert-error mb-4">
-							<span>{phase1Error}</span>
-						</div>
-					{/if}
+					{#if phase1Error}<div class="pn-pf-alert error" style="margin-bottom: 12px;">{phase1Error}</div>{/if}
+					{#if phase1Success}<div class="pn-pf-alert success" style="margin-bottom: 12px;">{phase1Success}</div>{/if}
 
-					{#if phase1Success}
-						<div class="alert alert-success mb-4">
-							<span>{phase1Success}</span>
-						</div>
-					{/if}
-
-					<div class="space-y-4">
-						<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-							<div class="form-control">
-								<label class="label" for="phase1-deadline-date">
-									<span class="label-text">Deadline Date</span>
-								</label>
-								<input
-									id="phase1-deadline-date"
-									type="date"
-									class="input input-bordered"
-									bind:value={phase1DeadlineDate}
-								/>
-							</div>
-							<div class="form-control">
-								<label class="label" for="phase1-deadline-time">
-									<span class="label-text">Time</span>
-								</label>
-								<input
-									id="phase1-deadline-time"
-									type="time"
-									class="input input-bordered"
-									bind:value={phase1DeadlineTime}
-								/>
-							</div>
-						</div>
-						<button
-							class="btn btn-primary w-full sm:w-auto"
-							on:click={handleSetPhase1Deadline}
-							disabled={settingPhase1}
-						>
-							{#if settingPhase1}
-								<span class="loading loading-spinner loading-sm"></span>
-							{/if}
-							{$phase1Deadline ? 'Update Deadline' : 'Set Deadline'}
-						</button>
-					</div>
-				</div>
-
-				<!-- Phase 2 Control -->
-				<div class="stadium-card no-glow p-4 sm:p-6">
-					<div class="flex items-center gap-3 mb-6">
-						<div class="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center">
-							<svg class="w-5 h-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
-							</svg>
+					<div class="pn-pf-form row2">
+						<div>
+							<label for="p1-date">Date</label>
+							<input id="p1-date" type="date" bind:value={phase1DeadlineDate} />
 						</div>
 						<div>
-							<h2 class="text-lg font-display tracking-wide">Phase 2 Control</h2>
-							<p class="text-xs text-base-content/50">Activate knockout predictions phase</p>
+							<label for="p1-time">Time</label>
+							<input id="p1-time" type="time" bind:value={phase1DeadlineTime} />
 						</div>
-					</div>
-
-					<!-- Current Status -->
-					<div class="mb-6 p-4 rounded-xl bg-base-200/50">
-						<div class="flex items-center justify-between">
-							<span class="text-sm text-base-content/70">Status:</span>
-							{#if $isPhase2Active}
-								<span class="badge badge-success gap-1">
-									<span class="w-2 h-2 rounded-full bg-success animate-pulse"></span>
-									Active
-								</span>
-							{:else}
-								<span class="badge badge-ghost">Inactive</span>
-							{/if}
-						</div>
-						{#if $phase2BracketDeadline}
-							<div class="flex items-center justify-between mt-2">
-								<span class="text-sm text-base-content/70">Bracket Deadline:</span>
-								<span class="text-sm font-medium">{new Date($phase2BracketDeadline).toLocaleString()}</span>
-							</div>
-							<div class="flex items-center justify-between mt-2">
-								<span class="text-sm text-base-content/70">Time remaining:</span>
-								<span class="text-sm font-mono font-medium {$phase2Countdown === 'Locked' ? 'text-error' : 'text-success'}">{$phase2Countdown}</span>
-							</div>
-						{/if}
-					</div>
-
-					<!-- Activation/Deactivation -->
-					{#if activationError}
-						<div class="alert alert-error mb-4">
-							<span>{activationError}</span>
-						</div>
-					{/if}
-
-					{#if activationSuccess}
-						<div class="alert alert-success mb-4">
-							<span>{activationSuccess}</span>
-						</div>
-					{/if}
-
-					{#if !$isPhase2Active}
-						<div class="space-y-4">
-							<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-								<div class="form-control">
-									<label class="label" for="deadline-date">
-										<span class="label-text">Bracket Deadline Date</span>
-									</label>
-									<input
-										id="deadline-date"
-										type="date"
-										class="input input-bordered"
-										bind:value={bracketDeadlineDate}
-									/>
-								</div>
-								<div class="form-control">
-									<label class="label" for="deadline-time">
-										<span class="label-text">Time</span>
-									</label>
-									<input
-										id="deadline-time"
-										type="time"
-										class="input input-bordered"
-										bind:value={bracketDeadlineTime}
-									/>
-								</div>
-							</div>
-							<button
-								class="btn btn-accent w-full sm:w-auto"
-								on:click={handleActivatePhase2}
-								disabled={activating}
-							>
-								{#if activating}
-									<span class="loading loading-spinner loading-sm"></span>
-								{/if}
-								Activate Phase 2
+						<div class="full">
+							<button class="pn-btn" type="button" on:click={handleSetPhase1Deadline} disabled={settingPhase1}>
+								{settingPhase1 ? 'Setting…' : 'Set Phase I deadline'}
 							</button>
 						</div>
-					{:else}
-						<button
-							class="btn btn-outline btn-error"
-							on:click={handleDeactivatePhase2}
-							disabled={activating}
-						>
-							{#if activating}
-								<span class="loading loading-spinner loading-sm"></span>
-							{/if}
-							Deactivate Phase 2
-						</button>
-					{/if}
+					</div>
 				</div>
+			</section>
 
-				<!-- User Management -->
-				<div class="stadium-card no-glow p-4 sm:p-6">
-					<div class="flex items-center gap-3 mb-4">
-						<div class="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center">
-							<svg class="w-5 h-5 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-							</svg>
-						</div>
-						<div class="flex-1">
-							<h2 class="text-lg font-display tracking-wide">Users</h2>
-							<p class="text-xs text-base-content/50">
-								{users.length} registered. Toggle admin or active state.
-							</p>
-						</div>
-					</div>
-
-					{#if userActionError}
-						<div class="alert alert-error mb-4">
-							<span>{userActionError}</span>
-						</div>
-					{/if}
-
-					<div class="form-control mb-4">
-						<input
-							type="text"
-							placeholder="Search by name or email..."
-							class="input input-bordered input-sm"
-							bind:value={userSearch}
-						/>
-					</div>
-
-					<div class="overflow-x-auto -mx-4 sm:mx-0">
-						<table class="table table-sm">
-							<thead>
-								<tr>
-									<th>Name</th>
-									<th class="hidden sm:table-cell">Email</th>
-									<th class="text-right">Predictions</th>
-									<th class="text-center">Admin</th>
-									<th class="text-center">Active</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each filteredUsers as u (u.id)}
-									{@const busy = togglingUserId === u.id}
-									<tr class:opacity-50={!u.is_active}>
-										<td>
-											<div class="font-medium">{u.name}</div>
-											<div class="text-[10px] text-base-content/40 sm:hidden">{u.email}</div>
-											<div class="text-[10px] text-base-content/40">{u.auth_provider}</div>
-										</td>
-										<td class="hidden sm:table-cell text-xs text-base-content/70">{u.email}</td>
-										<td class="text-right font-mono text-sm">{u.prediction_count}</td>
-										<td class="text-center">
-											<input
-												type="checkbox"
-												class="toggle toggle-sm toggle-primary"
-												checked={u.is_admin}
-												disabled={busy}
-												on:change={() => handleToggleAdmin(u)}
-											/>
-										</td>
-										<td class="text-center">
-											<input
-												type="checkbox"
-												class="toggle toggle-sm toggle-success"
-												checked={u.is_active}
-												disabled={busy}
-												on:change={() => handleToggleActive(u)}
-											/>
-										</td>
-									</tr>
-								{/each}
-								{#if filteredUsers.length === 0}
-									<tr>
-										<td colspan="5" class="text-center py-6 text-base-content/40 text-sm">
-											{userSearch ? 'No users match your search.' : 'No users yet.'}
-										</td>
-									</tr>
+			<!-- Phase 2 Activation -->
+			<section class="pn-pf-section">
+				<div class="h"><span>Phase II Activation</span><span class="right">Knockout stage</span></div>
+				<div class="body">
+					<div class="pn-ad-status">
+						<span>
+							<b>STATUS</b> ·
+							{#if $isPhase2Active}
+								<span class="ok">ACTIVE</span>
+								{#if $phase2BracketDeadline}
+									· Bracket locks {new Date($phase2BracketDeadline).toLocaleString()}
 								{/if}
-							</tbody>
-						</table>
+							{:else}
+								<span class="warn">NOT ACTIVE</span>
+							{/if}
+						</span>
+						{#if $phase2BracketDeadline}
+							<span class="{$phase2Countdown === 'Locked' ? 'warn' : 'ok'}">{$phase2Countdown}</span>
+						{/if}
+					</div>
+
+					{#if activationError}<div class="pn-pf-alert error" style="margin-bottom: 12px;">{activationError}</div>{/if}
+					{#if activationSuccess}<div class="pn-pf-alert success" style="margin-bottom: 12px;">{activationSuccess}</div>{/if}
+
+					<div class="pn-pf-form row2">
+						<div>
+							<label for="p2-date">Bracket lock date</label>
+							<input id="p2-date" type="date" bind:value={bracketDeadlineDate} />
+						</div>
+						<div>
+							<label for="p2-time">Time</label>
+							<input id="p2-time" type="time" bind:value={bracketDeadlineTime} />
+						</div>
+						<div class="full" style="display: flex; gap: 10px; flex-wrap: wrap;">
+							<button class="pn-btn gold" type="button" on:click={handleActivatePhase2} disabled={activating}>
+								{activating ? 'Working…' : ($isPhase2Active ? 'Update Phase II deadline' : 'Activate Phase II')}
+							</button>
+							{#if $isPhase2Active}
+								<button class="pn-btn navy" type="button" on:click={handleDeactivatePhase2} disabled={activating}>
+									Deactivate Phase II
+								</button>
+							{/if}
+						</div>
 					</div>
 				</div>
+			</section>
 
-				<!-- Active Competition -->
-				{#if activeCompetition}
-					<div class="stadium-card no-glow p-4 sm:p-6">
-						<div class="flex items-center gap-3 mb-4">
-							<div class="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
-								<svg class="w-5 h-5 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-								</svg>
+			<!-- User Management -->
+			<section class="pn-pf-section">
+				<div class="h"><span>User Management</span><span class="right">{filteredUsers.length} of {users.length}</span></div>
+				<div class="body">
+					{#if userActionError}<div class="pn-pf-alert error" style="margin-bottom: 12px;">{userActionError}</div>{/if}
+					<input
+						class="pn-ad-search"
+						placeholder="Search by name or email…"
+						bind:value={userSearch}
+						type="search"
+					/>
+					<div class="pn-ad-users">
+						{#each filteredUsers as u (u.id)}
+							{@const isPaid = paidOf(u)}
+							<div class="pn-ad-user" class:admin={u.is_admin} class:inactive={!u.is_active} class:paid={isPaid}>
+								<label class="paid-toggle" title={isPaid ? 'Mark as unpaid' : 'Mark as paid'}>
+									<input
+										type="checkbox"
+										checked={isPaid}
+										disabled={togglingUserId === u.id}
+										on:change={() => handleTogglePaid(u)}
+									/>
+									<span class="box" aria-hidden="true">{isPaid ? '✓' : ''}</span>
+									<span class="lbl">{isPaid ? 'Paid' : 'Unpaid'}</span>
+								</label>
+								<div class="who">
+									<div class="nm">{u.name}</div>
+									<div class="em">{u.email} · {u.auth_provider === 'google' ? 'GOOGLE' : 'EMAIL'}</div>
+								</div>
+								<div class="badges">
+									{#if u.is_admin}<span class="pn-tag gold">Admin</span>{/if}
+									<span class="pn-tag {u.is_active ? 'got' : 'red'}">{u.is_active ? 'Active' : 'Inactive'}</span>
+								</div>
+								<div class="actions">
+									<button class="pn-btn ghost" type="button" on:click={() => handleToggleAdmin(u)} disabled={togglingUserId === u.id}>
+										{u.is_admin ? '− Admin' : '+ Admin'}
+									</button>
+									<button class="pn-btn navy" type="button" on:click={() => handleToggleActive(u)} disabled={togglingUserId === u.id}>
+										{u.is_active ? 'Deactivate' : 'Reactivate'}
+									</button>
+								</div>
 							</div>
-							<div>
-								<h2 class="text-lg font-display tracking-wide">{activeCompetition.name}</h2>
-								<p class="text-xs text-base-content/50">Active Competition</p>
-							</div>
-						</div>
-
-						<div class="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-							<div>
-								<p class="text-base-content/50">Fixtures</p>
-								<p class="font-medium">{activeCompetition.fixture_count}</p>
-							</div>
-							<div>
-								<p class="text-base-content/50">Participants</p>
-								<p class="font-medium">{activeCompetition.user_count}</p>
-							</div>
-							<div>
-								<p class="text-base-content/50">Entry Fee</p>
-								<p class="font-medium">${activeCompetition.entry_fee}</p>
-							</div>
-						</div>
+						{:else}
+							<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No users match search</p>
+						{/each}
 					</div>
-				{/if}
-			</div>
+				</div>
+			</section>
 		{/if}
-	</div>
+	</PnPageShell>
 {/if}

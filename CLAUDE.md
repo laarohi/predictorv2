@@ -163,8 +163,31 @@ docker-compose exec backend python scripts/seed_phase2_test.py
 
 ## UI Guidelines
 
-- Dark mode default (sports/premium aesthetic)
-- High contrast with green/red for win/loss
-- Save actions must show feedback only after backend confirms
-- Mobile: show one logical group at a time, avoid grid layouts
-- Phase tabs for switching between Phase 1 and Phase 2 predictions
+The site uses the **Panini** design system — a sticker-album-inspired theme on cream paper with navy ink, red accents, and gold highlights. Every user-visible page (Dashboard, Predictions, Leaderboard, Results, Profile, Admin, Login/Register/Auth callback) renders inside `<PnPageShell>`, which establishes the `.pn` CSS scope.
+
+**Design tokens** (CSS variables on `.pn`, defined in `frontend/src/lib/styles/panini-base.css`):
+- `--paper` `#f1ebde` (canvas) · `--paper-2` `#e9e1cf` · `--paper-3` `#dfd4ba`
+- `--ink` `#0e1d40` (navy text) · `--ink-2` `#514a3d` · `--ink-3` `#8a826f` (subdued)
+- `--red` `#c8281f` (signals, "you", urgency) · `--red-deep` `#8a1610`
+- `--gold` `#d49a2e` (highlights, hot picks, exact scores)
+- `--green` `#1b6c3e` (correct outcomes) · `--navy` `#1a3168` (deep panels)
+
+**Typography:**
+- `var(--display)` — Archivo Black (uppercase, tight) for numbers, titles, big stats
+- `var(--display2)` — Archivo (regular display for medium-weight headings)
+- `var(--body)` — IBM Plex Sans
+- `var(--mono)` — IBM Plex Mono (labels, metadata, kickoffs)
+
+**Sticker shadows:** all cards use offset hard shadows (`box-shadow: 5px 5px 0 var(--ink)`). **Do not apply `transform: rotate(...)` to card-level containers** (sticker, KPI, match, profile-hero) — only small decorative accents (the crest logo, corner-tag pills, avatar chips) may carry a slight rotation. Soft drop shadows are out of style.
+
+**Component primitives** (in `panini-base.css`): `pn-card`, `pn-sticker`, `pn-tag`, `pn-btn`, `pn-banner`. Page-specific stylesheets live under `frontend/src/lib/styles/panini-*.css` and are imported by `app.css` ahead of the `@tailwind` directives (the import position is load-bearing; PostCSS drops `@import` rules that appear after other at-rules).
+
+**Save actions** still show feedback only after the backend confirms.
+**Mobile** still: one logical group at a time, avoid grid-of-cards on small screens.
+**Phase tabs** still: switch between Phase 1 and Phase 2 predictions. The Phase I/II toggle and the Groups/Knockout/Bonus section toggle live as a stacked pair in the wizard hero.
+**Bracket** gating: in Phase 1 the Knockout sub-section is locked until every group prediction is filled in (uses predicted standings to seed R32 — would otherwise show TBD slots).
+**Score inputs** are capped at 15 goals per side, enforced live in the input event so the user sees the cap immediately.
+
+**Flag swatches** are 2/3-stripe gradient placeholders (`PnFlag.svelte`) — earmarked for a real flag library in a follow-up plan.
+
+**Backend-dependent widgets** (sparklines, social signals, hot pick, bracket exposure, underdog hits, steepest climb) use deterministic stubs in `frontend/src/lib/stubs/panini.ts` until the backend supports them. Each stub logs `[panini:stub] <name>` in dev so they're greppable.

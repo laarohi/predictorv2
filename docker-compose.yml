@@ -60,10 +60,16 @@ services:
     depends_on:
       - backend
 
-  # Development-only frontend with hot reload
+  # Development-only frontend with hot reload.
+  # container_name intentionally omitted so Compose auto-names per project
+  # (e.g. `predictorv2-frontend-dev-1` for the main repo, `redesign-frontend-
+  # dev-1` for a parallel worktree). A parallel worktree dev container needs
+  # to override the host port locally (e.g. "5174:5174" + --port 5174) and
+  # join the existing predictorv2_default network to reach the shared
+  # backend; see docs/superpowers/panini-redesign-decisions.md for the
+  # exact recipe.
   frontend-dev:
     image: node:20-alpine
-    container_name: predictor-frontend-dev
     working_dir: /app
     environment:
       - NODE_ENV=development

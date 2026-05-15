@@ -34,6 +34,9 @@ class User(SQLModel, table=True):
     auth_provider: AuthProvider = Field(default=AuthProvider.EMAIL)
     is_admin: bool = Field(default=False)
     is_active: bool = Field(default=True)
+    # Admin-managed flag tracking whether this participant has paid their
+    # entry. Default false; only mutated by /api/admin/users/{id}/paid.
+    paid: bool = Field(default=False)
 
     competition_id: uuid.UUID | None = Field(default=None, foreign_key="competitions.id")
 

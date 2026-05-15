@@ -36,7 +36,15 @@
       "Bash(git add:*)",
       "Bash(docker cp:*)",
       "Bash(npx svelte-kit sync:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Bash(git stash *)",
+      "Bash(git commit -m ' *)",
+      "Bash(docker-compose run *)",
+      "Bash(sed -i '' 's/^API_FOOTBALL_DATA=/FOOTBALL_DATA_TOKEN=/' /Users/lukeaarohi/pyfiles/predictorv2/.env)",
+      "Bash(echo \"sed_exit=$?\")",
+      "Bash(git fetch *)",
+      "Bash(docker --context predictor compose -f /Users/lukeaarohi/pyfiles/predictorv2/docker-compose.yml --profile prod ps)",
+      "Bash(docker --context predictor compose -f /Users/lukeaarohi/pyfiles/predictorv2/docker-compose.yml --profile prod logs --tail=60 cloudflared)"
     ]
   },
   "outputStyle": "Explanatory"
