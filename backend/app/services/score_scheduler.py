@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import get_settings
 from app.services.score_sync import has_active_or_imminent_match, sync_scores_once
+from app.services.snapshots import take_daily_snapshots
 
 
 logger = logging.getLogger(__name__)
@@ -40,8 +41,22 @@ def _make_session_factory() -> async_sessionmaker[AsyncSession]:
 
 async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> None:
     """One iteration of the loop. Wraps each tick in its own session so a
-    failure on one tick can't poison subsequent ticks."""
+    failure on one tick can't poison subsequent ticks.
+
+    Each tick does two things:
+      (a) Take today's leaderboard snapshot if not already taken (idempotent
+          per-user-per-day, cheap no-op after the first call of the day).
+      (b) If a match is live or imminent, sync scores from Football-Data.
+
+    Snapshot taking is gated by its own try/except so a snapshot failure
+    can't break the live-score path.
+    """
     async with session_factory() as session:
+        try:
+            await take_daily_snapshots(session)
+        except Exception:  # noqa: BLE001
+            logger.exception("score_scheduler: snapshot tick failed")
+
         if not await has_active_or_imminent_match(session):
             return
         result = await sync_scores_once(session)

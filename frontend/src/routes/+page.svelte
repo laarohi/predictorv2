@@ -29,16 +29,39 @@
 		stubHotPick,
 		stubSteepestClimb
 	} from '$lib/stubs/panini';
+	import {
+		getMyRankTrajectory,
+		getSteepestClimbers,
+		type RankTrajectoryResponse,
+		type SteepestClimbersResponse
+	} from '$api/leaderboard';
 	import type { Fixture, LeaderboardEntry } from '$types';
 
 	$: if (!$isAuthenticated) {
 		goto('/login');
 	}
 
-	onMount(() => {
+	// Real trajectory + climbers data (replaces stubRankTrajectory + stubSteepestClimb).
+	// Null while loading; arrays remain empty until the daily snapshot task has
+	// run for at least two days. We keep the stub as a fallback for the first
+	// ~7 days so the chart isn't broken-looking before history accumulates.
+	let realTrajectory: RankTrajectoryResponse | null = null;
+	let realClimbers: SteepestClimbersResponse | null = null;
+
+	onMount(async () => {
 		if ($isAuthenticated) {
 			fetchAllFixtures();
 			fetchLeaderboard();
+			try {
+				[realTrajectory, realClimbers] = await Promise.all([
+					getMyRankTrajectory(7),
+					getSteepestClimbers(7, 32)
+				]);
+			} catch (_e) {
+				// Backend not reachable / endpoint missing — keep stubs as fallback
+				realTrajectory = null;
+				realClimbers = null;
+			}
 		}
 	});
 
@@ -70,10 +93,34 @@
 	})();
 
 	// ---- Stubbed widgets ---------------------------------------------------
-	$: trajectory = stubRankTrajectory(userId, rank || 1, totalPlayers);
+	// Rank trajectory: real backend data once we have >= 2 days of snapshots;
+	// stub fallback while history accumulates (newly-installed deployment).
+	$: trajectory = (() => {
+		if (realTrajectory && realTrajectory.points.length >= 2) {
+			return {
+				ranks: realTrajectory.points.map((p) => p.position),
+				maxRank: realTrajectory.total_participants
+			};
+		}
+		return stubRankTrajectory(userId, rank || 1, totalPlayers);
+	})();
 	$: bracketExposure = stubBracketExposure(userId);
 	$: bonusHaul = stubBonusHaul(userId, exactCount);
-	$: climb = stubSteepestClimb(userId, movement, totalPlayers);
+	// Steepest climb: real climbers if available, stub fallback otherwise.
+	$: climb = (() => {
+		if (realClimbers && realClimbers.entries.length > 0) {
+			const me = realClimbers.entries.find((e) => e.user_id === userId);
+			const myRank = me
+				? realClimbers.entries.findIndex((e) => e.user_id === userId) + 1
+				: realClimbers.entries.length + 1;
+			return {
+				yourPlaces: me?.places ?? movement,
+				rankAmongClimbers: myRank,
+				totalPlayers
+			};
+		}
+		return stubSteepestClimb(userId, movement, totalPlayers);
+	})();
 
 	// Hot pick: take up to the first 5 upcoming open fixtures and stub a
 	// "your pick" of 2-1 home for each. Real prediction integration is a
