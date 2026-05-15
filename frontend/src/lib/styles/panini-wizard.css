@@ -345,11 +345,16 @@
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	cursor: pointer;
-	display: grid;
-	grid-template-columns: 1fr auto auto;
+	display: flex;
 	align-items: center;
-	gap: 8px;
+	justify-content: center;
+	gap: 10px;
 	color: var(--ink);
+}
+/* Chevron pushed to the right so the label + progress stay visually
+ * centered while the open/close indicator anchors to the edge. */
+.pn .pn-wiz-nav-mobile .trigger .chev {
+	margin-left: auto;
 }
 .pn .pn-wiz-nav-mobile .trigger .prog {
 	font-family: var(--mono);
@@ -378,6 +383,11 @@
 	background: var(--gold);
 	color: var(--ink);
 }
+/* The menu element name `.menu` collides with daisyUI's `.menu`
+ * component, which applies `display:flex; flex-direction:column;
+ * flex-wrap:wrap` — combined with our max-height, items wrap into
+ * multiple visual columns once they overflow. Override to force a
+ * single vertical column. */
 .pn .pn-wiz-nav-mobile .menu {
 	position: absolute;
 	top: calc(100% + 6px);
@@ -392,28 +402,33 @@
 	box-shadow: 4px 4px 0 var(--ink);
 	max-height: 60vh;
 	overflow-y: auto;
+	display: block;
+	flex-wrap: nowrap;
+}
+.pn .pn-wiz-nav-mobile .menu li {
+	display: block;
+	width: 100%;
 }
 .pn .pn-wiz-nav-mobile .menu li button {
 	width: 100%;
 	background: transparent;
 	border: 0;
 	border-bottom: 1px dashed var(--paper-3);
-	padding: 10px 14px;
+	padding: 12px 14px;
 	font-family: var(--display);
 	font-size: 14px;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	cursor: pointer;
-	display: grid;
-	grid-template-columns: 1fr auto;
-	gap: 12px;
+	display: flex;
 	align-items: center;
+	justify-content: center;
+	gap: 10px;
 	color: var(--ink);
-	text-align: left;
 }
 .pn .pn-wiz-nav-mobile .menu li:last-child button { border-bottom: 0; }
 .pn .pn-wiz-nav-mobile .menu li button:hover {
-	background: var(--paper-2);
+	filter: brightness(0.95);
 }
 .pn .pn-wiz-nav-mobile .menu li button .prog {
 	font-family: var(--mono);
@@ -426,12 +441,19 @@
 	color: var(--paper);
 }
 .pn .pn-wiz-nav-mobile .menu li button.active .prog { color: var(--paper-3); }
+/* Match the desktop pill colours rather than a faint tint: solid green
+ * for done, solid red for tied. Same shade the user sees in the desktop
+ * grid so the at-a-glance signal is consistent. */
 .pn .pn-wiz-nav-mobile .menu li button.done {
-	background: rgba(46, 110, 64, 0.18); /* faint green tint */
+	background: var(--green);
+	color: var(--paper);
 }
+.pn .pn-wiz-nav-mobile .menu li button.done .prog { color: var(--paper-3); }
 .pn .pn-wiz-nav-mobile .menu li button.tied {
-	background: rgba(200, 40, 31, 0.18); /* faint red tint */
+	background: var(--red);
+	color: var(--paper);
 }
+.pn .pn-wiz-nav-mobile .menu li button.tied .prog { color: var(--paper-3); }
 .pn .pn-wiz-nav-mobile .pn-wiz-gp.special.wide {
 	width: 100%;
 	padding: 10px 14px;
@@ -446,6 +468,10 @@
 	font-size: 13px;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
 	cursor: pointer;
 	display: flex;
 	align-items: center;
