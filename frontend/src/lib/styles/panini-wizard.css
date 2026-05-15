@@ -415,25 +415,28 @@
 }
 .pn .pn-mcard.locked { opacity: 0.6; }
 .pn .pn-mcard.empty { border-style: dashed; }
-/* While a user has the cursor inside a score input of this card, hoist
- * the card slightly so it visually pops above its neighbours. The
- * .editing-tag inside the card surfaces a red "Editing" chip in the
- * top-right corner, mirroring the original Panini mock. */
+/* While a user has the cursor inside a score input of this card, swap
+ * the card's offset shadow from ink → red (a touch larger, 5px). The
+ * border stays ink — a full red border was too visually aggressive,
+ * and the mock confirms only the SHADOW switches colour. The
+ * .editing-tag chip below sits stuck onto the top-left corner like a
+ * paper sticker, paper-outlined with its own small ink shadow. */
 .pn .pn-mcard.editing {
-	border-color: var(--red);
 	box-shadow: 5px 5px 0 var(--red);
 }
 .pn .pn-mcard .editing-tag {
 	position: absolute;
-	top: -1px;
-	right: -1px;
+	top: -9px;
+	left: 14px;
 	background: var(--red);
 	color: var(--paper);
 	font-family: var(--display);
 	font-size: 10px;
-	letter-spacing: 0.10em;
+	letter-spacing: 0.12em;
 	text-transform: uppercase;
-	padding: 3px 8px 4px;
+	padding: 3px 9px 4px;
+	border: 1.5px solid var(--paper);
+	box-shadow: 2px 2px 0 var(--ink);
 	z-index: 2;
 }
 .pn .pn-mcard .meta {
