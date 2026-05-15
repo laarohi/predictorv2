@@ -25,11 +25,11 @@
 	});
 
 	function fmtCurrency(n: number): string {
-		// Configurable later; for now treat entry_fee as a single-currency
-		// value with the £ glyph. Switch to Intl.NumberFormat once the
-		// competition has a configurable `currency_code` field.
+		// Single-currency for now — Euros. Swap to Intl.NumberFormat keyed
+		// off a Competition.currency_code field if a future pool ever runs
+		// in a different currency.
 		if (!n || n === 0) return '—';
-		return `£${n.toFixed(0)}`;
+		return `€${n.toFixed(0)}`;
 	}
 
 	function fmtDate(iso: string | null): string {
