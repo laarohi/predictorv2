@@ -35,6 +35,22 @@
 		grid-template-columns: 1fr;
 		gap: 14px;
 	}
+	/* The vertical ink-pipe separators between hero sections only make
+	 * sense when the sections sit SIDE-BY-SIDE. Once the grid collapses
+	 * to a single column on mobile, the pipes hang off the left of each
+	 * stacked section like vestigial tabs — strip them. */
+	.pn .pn-wiz-hero .progress-stack,
+	.pn .pn-wiz-hero .toggle-stack {
+		border-left: 0;
+		padding-left: 0;
+	}
+	/* The 60px big-num is too dominant on a narrow viewport. The mock's
+	 * mobile band uses 32px; we go 40px so the number stays the visual
+	 * anchor without overwhelming the rest of the hero. */
+	.pn .pn-wiz-hero .progress-stack .big-num b { font-size: 40px; }
+	.pn .pn-wiz-hero .progress-stack .big-num .slash { font-size: 18px; }
+	/* Slimmer bar on mobile to match the reduced surrounding sizes. */
+	.pn .pn-wiz-hero .progress-stack .bar { height: 10px; }
 }
 .pn .pn-wiz-hero .toggle-stack {
 	display: flex;
