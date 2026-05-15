@@ -711,7 +711,7 @@
 								{#each standings as t, i (t.team)}
 									<tr>
 										<td>
-											<span class="pos" class:adv={i < 2} class:out={i >= 2}>{i + 1}</span>
+											<span class="pos" class:adv={i < 2} class:maybe={i === 2} class:out={i >= 3}>{i + 1}</span>
 										</td>
 										<td>
 											<span class="team">
@@ -734,6 +734,11 @@
 							</tbody>
 						</table>
 					</div>
+					<div class="pn-stnd-legend">
+						<span><span class="pip green"></span>Advances (top 2)</span>
+						<span><span class="pip gold"></span>Best 3rd match</span>
+						<span><span class="pip grey"></span>Out</span>
+					</div>
 
 					<!-- Matches -->
 					<div class="pn-wiz-matches">
@@ -745,9 +750,9 @@
 									<span>{new Date(f.kickoff).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · {new Date(f.kickoff).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
 								</div>
 								<div class="row">
-									<div class="team">
+									<div class="team" title={f.home_team}>
 										<PnFlag code={teamCode(f.home_team)} w={28} h={20} />
-										<span class="nm">{f.home_team}</span>
+										<span class="nm">{teamCode(f.home_team)}</span>
 									</div>
 									<div class="pn-score">
 										<input
@@ -782,9 +787,9 @@
 											aria-label="{f.away_team} score"
 										/>
 									</div>
-									<div class="team r">
+									<div class="team r" title={f.away_team}>
 										<PnFlag code={teamCode(f.away_team)} w={28} h={20} />
-										<span class="nm">{f.away_team}</span>
+										<span class="nm">{teamCode(f.away_team)}</span>
 									</div>
 								</div>
 								<div class="save-row">
@@ -982,9 +987,9 @@
 									<span>{new Date(f.kickoff).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · {new Date(f.kickoff).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
 								</div>
 								<div class="row">
-									<div class="team">
+									<div class="team" title={f.home_team}>
 										<PnFlag code={teamCode(f.home_team)} w={28} h={20} />
-										<span class="nm">{f.home_team}</span>
+										<span class="nm">{teamCode(f.home_team)}</span>
 									</div>
 									<div class="pn-score">
 										<input
@@ -1019,9 +1024,9 @@
 											aria-label="{f.away_team} score"
 										/>
 									</div>
-									<div class="team r">
+									<div class="team r" title={f.away_team}>
 										<PnFlag code={teamCode(f.away_team)} w={28} h={20} />
-										<span class="nm">{f.away_team}</span>
+										<span class="nm">{teamCode(f.away_team)}</span>
 									</div>
 								</div>
 								<div class="save-row">
