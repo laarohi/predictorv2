@@ -632,3 +632,38 @@
 	letter-spacing: 0.08em;
 	text-transform: uppercase;
 }
+
+/* ==== Tie-warning banner ====
+ * Shown above predicted standings tables when the user's predicted scores
+ * produce a tie that falls through FIFA's chain (points → GD → GF → H2H)
+ * and lands on alphabetical fallback. Encourages the user to adjust scores
+ * if they want a specific team to advance. */
+.pn .pn-tie-warn {
+	background: rgba(200, 40, 31, 0.10);
+	border: 2.5px solid var(--red);
+	box-shadow: 4px 4px 0 var(--red);
+	padding: 12px 16px;
+	margin-bottom: 14px;
+	font-family: var(--body);
+	font-size: 13px;
+	line-height: 1.45;
+	color: var(--ink);
+}
+.pn .pn-tie-warn h4 {
+	font-family: var(--display);
+	font-size: 13px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--red);
+	margin: 0 0 6px;
+}
+.pn .pn-tie-warn p {
+	margin: 0 0 6px;
+}
+.pn .pn-tie-warn p:last-child {
+	margin-bottom: 0;
+}
+.pn .pn-tie-warn .teams {
+	font-weight: 700;
+	color: var(--red-deep);
+}

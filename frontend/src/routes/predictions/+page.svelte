@@ -38,7 +38,7 @@
 		phase1Countdown,
 		phase2Countdown
 	} from '$stores/phase';
-	import { computeGroupStandingsMap } from '$lib/utils/standings';
+	import { applyFifaTiebreakers, computeGroupStandingsMapWithWarnings } from '$lib/utils/standings';
 	import { teamCode } from '$lib/utils/teamCodes';
 	import type { Fixture, MatchPrediction, BracketPrediction, TeamAdvancementPrediction } from '$types';
 
@@ -118,7 +118,9 @@
 		}
 		return map;
 	})();
-	$: standingsMap = computeGroupStandingsMap($groupFixtures, livePredictionMap);
+	$: standingsResult = computeGroupStandingsMapWithWarnings($groupFixtures, livePredictionMap);
+	$: standingsMap = standingsResult.standingsMap;
+	$: groupStandingsWarnings = standingsResult.warnings;
 
 	// Per-group progress: count of fixtures that have a saved or unsaved pick
 	function groupProgress(g: { group: string; fixtures: Fixture[] }): { done: number; total: number } {
@@ -157,18 +159,19 @@
 			: null;
 
 	// ---- Third-place qualifying standings (top 8 of 12 advance to R32) ----
-	$: thirdPlaceStandings = (() => {
+	// Uses applyFifaTiebreakers so any tie that survives points→GD→GF and
+	// can't be resolved cross-group (H2H is N/A across groups) emits a
+	// TieWarning. We surface the warnings in a banner so the user can
+	// adjust scores if they want a specific team to advance.
+	$: thirdPlaceResult = (() => {
 		const thirds = [];
-		for (const std of Object.values(standingsMap)) {
-			if (std[2]) thirds.push(std[2]);
+		for (const [group, std] of Object.entries(standingsMap)) {
+			if (std[2]) thirds.push({ ...std[2], group });
 		}
-		return thirds.sort((a, b) => {
-			if (b.points !== a.points) return b.points - a.points;
-			if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
-			if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
-			return a.team.localeCompare(b.team);
-		});
+		return applyFifaTiebreakers(thirds, [], new Map(), 'third_place_qualifying');
 	})();
+	$: thirdPlaceStandings = thirdPlaceResult.sorted;
+	$: thirdPlaceWarnings = thirdPlaceResult.warnings;
 
 	// Maximum goals allowed in a single match's score input. Enforced both in
 	// the handler and via clampScoreInput on every keystroke so the user
@@ -482,6 +485,20 @@
 			<!-- Group view -->
 			{#if activeSection === 'groups' && activeGroupPill === 'thirdplace'}
 				<section class="pn-wiz-group">
+					{#if thirdPlaceWarnings.length > 0}
+						<div class="pn-tie-warn">
+							<h4>⚠ Tied teams · alphabetical fallback in effect</h4>
+							{#each thirdPlaceWarnings as w (w.tiedTeams.join('-'))}
+								<p>
+									<span class="teams">{w.tiedTeams.join(', ')}</span>
+									are tied on points, goal difference and goals-for. Third-place teams
+									come from different groups so head-to-head isn't applicable — they're
+									currently ranked alphabetically. Adjust your predicted scores if you want
+									a different team to qualify.
+								</p>
+							{/each}
+						</div>
+					{/if}
 					<div class="pn-stnd">
 						<div class="h">
 							<span>Third-place standings · top 8 advance to R32</span>
@@ -536,7 +553,21 @@
 			{:else if activeSection === 'groups' && selectedGroup}
 				{@const group = selectedGroup}
 				{@const standings = standingsMap[group.group] ?? []}
+				{@const groupWarnings = groupStandingsWarnings.filter((w) => w.group === group.group)}
 				<section class="pn-wiz-group">
+					{#if groupWarnings.length > 0}
+						<div class="pn-tie-warn">
+							<h4>⚠ Tied teams in Group {group.group} · alphabetical fallback in effect</h4>
+							{#each groupWarnings as w (w.tiedTeams.join('-'))}
+								<p>
+									<span class="teams">{w.tiedTeams.join(', ')}</span>
+									are tied on points, goal difference, goals-for, and head-to-head — they're
+									currently ranked alphabetically. Adjust your predicted scores if you want
+									a different ordering.
+								</p>
+							{/each}
+						</div>
+					{/if}
 					<div class="pn-stnd">
 						<div class="h">
 							<span>Group {group.group} · Predicted Standings</span>

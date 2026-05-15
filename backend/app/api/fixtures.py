@@ -36,9 +36,11 @@ def fixture_to_read(fixture: Fixture) -> FixtureRead:
     """Convert Fixture model to FixtureRead schema."""
     time_until = fixture.time_until_lock(LOCK_MINUTES)
 
-    # Populate score if fixture is finished and has a score
+    # Emit score whenever a row exists — covers LIVE / HALFTIME / FINISHED.
+    # The score_scheduler writes Score rows for in-play matches too, so the
+    # Dashboard can read live numbers from the same field used for finals.
     score_data = None
-    if fixture.status == MatchStatus.FINISHED and fixture.score:
+    if fixture.score:
         score_data = FixtureScore(
             home_score=fixture.score.home_score,
             away_score=fixture.score.away_score,

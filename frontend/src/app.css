@@ -10,6 +10,7 @@
 @import './lib/styles/panini-auth.css';
 @import './lib/styles/panini-profile.css';
 @import './lib/styles/panini-admin.css';
+@import './lib/styles/panini-rules.css';
 
 @tailwind base;
 @tailwind components;
