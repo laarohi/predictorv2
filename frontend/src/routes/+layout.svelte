@@ -39,6 +39,7 @@
 		'/login',
 		'/register',
 		'/auth',
+		'/rules',
 		'/panini-sandbox'
 	];
 	$: usesPanini = PANINI_ROUTES.some(
