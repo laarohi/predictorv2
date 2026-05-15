@@ -713,6 +713,7 @@
 							{/each}
 						</div>
 					{/if}
+					<div class="pn-stnd-col">
 					<div class="pn-stnd">
 						<div class="h">
 							<span>Group {group.group} · Predicted Standings</span>
@@ -765,6 +766,7 @@
 						<span><span class="pip gold"></span>Best 3rd match</span>
 						<span><span class="pip grey"></span>Out</span>
 					</div>
+					</div><!-- /pn-stnd-col -->
 
 					<!-- Matches -->
 					<div class="pn-wiz-matches">

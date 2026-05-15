@@ -216,10 +216,11 @@
 		grid-template-columns: minmax(440px, 1.1fr) 2fr;
 		gap: 22px;
 	}
-	/* Sticky standings on the left so users can see the table while
-	 * scrolling through matches in the right column. top: 16px gives a
-	 * small breathing room from the top of the viewport. */
-	.pn .pn-wiz-group:has(.pn-wiz-matches) .pn-stnd {
+	/* Sticky standings column (wraps the table + the legend strip so they
+	 * stick together) so users can see them while scrolling through
+	 * matches in the right column. top: 16px gives a small breathing room
+	 * from the top of the viewport. */
+	.pn .pn-wiz-group:has(.pn-wiz-matches) .pn-stnd-col {
 		position: sticky;
 		top: 16px;
 	}
