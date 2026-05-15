@@ -170,9 +170,23 @@
 		});
 	})();
 
+	// Maximum goals allowed in a single match's score input. Enforced both in
+	// the handler and via clampScoreInput on every keystroke so the user
+	// sees the cap immediately — typing "16" instantly becomes "15".
+	const MAX_GOALS = 15;
+
+	function clampScoreInput(el: HTMLInputElement): void {
+		const n = parseInt(el.value || '0', 10);
+		if (Number.isNaN(n) || n < 0) {
+			el.value = '0';
+		} else if (n > MAX_GOALS) {
+			el.value = String(MAX_GOALS);
+		}
+	}
+
 	// ---- Score input handlers --------------------------------------------
 	function handleScoreInput(fixtureId: string, side: 'home' | 'away', raw: string) {
-		const value = Math.max(0, Math.min(20, parseInt(raw || '0', 10) || 0));
+		const value = Math.max(0, Math.min(MAX_GOALS, parseInt(raw || '0', 10) || 0));
 		const current =
 			$unsavedChanges[fixtureId] ??
 			(() => {
@@ -501,10 +515,14 @@
 											class="pn-score-cell"
 											class:empty={state === 'empty'}
 											min="0"
-											max="20"
+											max={MAX_GOALS}
+											inputmode="numeric"
 											disabled={f.is_locked}
 											value={scoreValue(f.id, 'home')}
-											on:input={(e) => handleScoreInput(f.id, 'home', e.currentTarget.value)}
+											on:input={(e) => {
+												clampScoreInput(e.currentTarget);
+												handleScoreInput(f.id, 'home', e.currentTarget.value);
+											}}
 											aria-label="{f.home_team} score"
 										/>
 										<span class="dash">–</span>
@@ -513,10 +531,14 @@
 											class="pn-score-cell"
 											class:empty={state === 'empty'}
 											min="0"
-											max="20"
+											max={MAX_GOALS}
+											inputmode="numeric"
 											disabled={f.is_locked}
 											value={scoreValue(f.id, 'away')}
-											on:input={(e) => handleScoreInput(f.id, 'away', e.currentTarget.value)}
+											on:input={(e) => {
+												clampScoreInput(e.currentTarget);
+												handleScoreInput(f.id, 'away', e.currentTarget.value);
+											}}
 											aria-label="{f.away_team} score"
 										/>
 									</div>
@@ -667,10 +689,14 @@
 											class="pn-score-cell"
 											class:empty={state === 'empty'}
 											min="0"
-											max="20"
+											max={MAX_GOALS}
+											inputmode="numeric"
 											disabled={f.is_locked}
 											value={scoreValue(f.id, 'home')}
-											on:input={(e) => handleScoreInput(f.id, 'home', e.currentTarget.value)}
+											on:input={(e) => {
+												clampScoreInput(e.currentTarget);
+												handleScoreInput(f.id, 'home', e.currentTarget.value);
+											}}
 											aria-label="{f.home_team} score"
 										/>
 										<span class="dash">–</span>
@@ -679,10 +705,14 @@
 											class="pn-score-cell"
 											class:empty={state === 'empty'}
 											min="0"
-											max="20"
+											max={MAX_GOALS}
+											inputmode="numeric"
 											disabled={f.is_locked}
 											value={scoreValue(f.id, 'away')}
-											on:input={(e) => handleScoreInput(f.id, 'away', e.currentTarget.value)}
+											on:input={(e) => {
+												clampScoreInput(e.currentTarget);
+												handleScoreInput(f.id, 'away', e.currentTarget.value);
+											}}
 											aria-label="{f.away_team} score"
 										/>
 									</div>
