@@ -629,6 +629,8 @@
 									<th class="c">W</th>
 									<th class="c">D</th>
 									<th class="c">L</th>
+									<th class="c">GF</th>
+									<th class="c">GA</th>
 									<th class="c">GD</th>
 									<th>Pts</th>
 								</tr>
@@ -650,13 +652,15 @@
 										<td class="stat">{t.won}</td>
 										<td class="stat">{t.drawn}</td>
 										<td class="stat">{t.lost}</td>
+										<td class="stat">{t.goalsFor}</td>
+										<td class="stat">{t.goalsAgainst}</td>
 										<td class="stat gd" class:pos={t.goalDifference >= 0} class:neg={t.goalDifference < 0}>
 											{t.goalDifference > 0 ? '+' : ''}{t.goalDifference}
 										</td>
 										<td>{t.points}</td>
 									</tr>
 								{:else}
-									<tr><td colspan="9" style="padding: 24px; text-align: center; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No third-place standings yet — fill in some group predictions</td></tr>
+									<tr><td colspan="11" style="padding: 24px; text-align: center; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No third-place standings yet — fill in some group predictions</td></tr>
 								{/each}
 							</tbody>
 						</table>
@@ -697,6 +701,8 @@
 									<th class="c">W</th>
 									<th class="c">D</th>
 									<th class="c">L</th>
+									<th class="c">GF</th>
+									<th class="c">GA</th>
 									<th class="c">GD</th>
 									<th>Pts</th>
 								</tr>
@@ -717,6 +723,8 @@
 										<td class="stat">{t.won}</td>
 										<td class="stat">{t.drawn}</td>
 										<td class="stat">{t.lost}</td>
+										<td class="stat">{t.goalsFor}</td>
+										<td class="stat">{t.goalsAgainst}</td>
 										<td class="stat gd" class:pos={t.goalDifference >= 0} class:neg={t.goalDifference < 0}>
 											{t.goalDifference > 0 ? '+' : ''}{t.goalDifference}
 										</td>
