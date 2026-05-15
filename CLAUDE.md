@@ -20,8 +20,10 @@ Current focus: **World Cup 2026**
 
 **Frontend:**
 - SvelteKit with TypeScript
-- Tailwind CSS + DaisyUI
+- Tailwind CSS + DaisyUI (DaisyUI's tokens still drive auth-gated layouts; the user-facing surface uses the **Panini** design system — see "UI Guidelines" below)
+- Panini design system: cream-paper sticker-album theme, fonts Archivo Black + Archivo + IBM Plex Sans/Mono, CSS-variable-scoped under `.pn`
 - Svelte stores for state management
+- Vitest for unit tests (pure utilities + stub generators)
 - svelte-motion for animations (planned)
 
 **Infrastructure:**
@@ -44,10 +46,22 @@ Current focus: **World Cup 2026**
 │   ├── /src
 │   │   ├── /lib
 │   │   │   ├── /api         # API client functions
-│   │   │   ├── /components  # Svelte components
+│   │   │   ├── /components
+│   │   │   │   ├── /panini  # Panini design components (PnPageShell, PnMast,
+│   │   │   │   │            #   PnBottomNav, PnFlag, PnIcon, PnKnockoutBracket,
+│   │   │   │   │            #   PnBracketMatch, PnSparkline, PnStrip)
+│   │   │   │   └── /bracket # Legacy interactive bracket (still imported by
+│   │   │   │                #   PnKnockoutBracket for its state machine)
 │   │   │   ├── /stores      # Svelte stores
-│   │   │   ├── /types       # TypeScript interfaces
-│   │   │   └── /utils       # Helper functions
+│   │   │   ├── /styles      # Panini CSS modules (panini-base.css, panini-
+│   │   │   │                #   dashboard.css, panini-leaderboard.css,
+│   │   │   │                #   panini-wizard.css, panini-bracket.css,
+│   │   │   │                #   panini-results.css, panini-profile.css,
+│   │   │   │                #   panini-admin.css, panini-auth.css)
+│   │   │   ├── /stubs       # Deterministic stubs for backend-pending widgets
+│   │   │   ├── /types       # TypeScript interfaces (incl. types/panini.ts)
+│   │   │   └── /utils       # Helper functions (incl. teamCodes.ts,
+│   │   │                    #   bracketResolver.ts, standings.ts)
 │   │   └── /routes          # SvelteKit pages
 ├── /config                  # Tournament YAML configuration
 ├── /docs                    # Documentation
@@ -111,8 +125,18 @@ The rule was established in commit `c6089cc`. The original conversion migration 
 | `backend/app/services/scoring.py` | Scoring strategies and point calculation |
 | `backend/app/services/locking.py` | Prediction locking logic |
 | `backend/app/services/standings.py` | Group standings calculation |
+| `backend/app/api/admin.py` | Admin endpoints (users, paid status, phase ops, score sync) |
+| `frontend/src/app.css` | Top-level stylesheet — order-sensitive `@import`s for Panini CSS modules go **before** `@tailwind` directives |
+| `frontend/src/routes/+layout.svelte` | Root layout — `PANINI_ROUTES` list controls which routes render their own Panini chrome vs the legacy DaisyUI navbar |
+| `frontend/src/lib/components/panini/PnPageShell.svelte` | Wraps every Panini page (masthead + bottom nav + paper grain) |
+| `frontend/src/lib/components/panini/PnKnockoutBracket.svelte` | Final-in-the-middle bracket (wall chart desktop / swipeable mobile) |
+| `frontend/src/lib/components/panini/PnBracketMatch.svelte` | Single match card inside the bracket |
+| `frontend/src/lib/styles/panini-base.css` | Panini tokens, masthead, mobile chrome, primitive classes (`pn-card`, `pn-sticker`, `pn-tag`, `pn-btn`, `pn-banner`) |
 | `frontend/src/lib/stores/predictions.ts` | Prediction state management |
+| `frontend/src/lib/stubs/panini.ts` | Deterministic stub data generators for backend-pending widgets (sparklines, social signals, hot pick, etc.) |
 | `frontend/src/lib/utils/bracketResolver.ts` | FIFA 2026 knockout bracket logic |
+| `frontend/src/lib/utils/teamCodes.ts` | Team name → FIFA 3-letter code mapping for `PnFlag` |
+| `docs/superpowers/panini-redesign-decisions.md` | Decisions log for the Panini redesign + every deferred follow-up |
 
 ## Development
 
@@ -148,6 +172,41 @@ docker-compose logs -f backend
    - Frontend: No `any` types - define interfaces in `/lib/types`
 4. **Phase Separation**: Phase 1 and Phase 2 data must be kept separate (different stores, filtered queries)
 
+## Database migrations
+
+**Alembic is the single source of truth for schema.** Every backend startup
+runs `alembic upgrade head` automatically (`backend/app/database.py:init_db`,
+called from the FastAPI lifespan). There is no `SQLModel.metadata.create_all`
+fallback — tables only ever exist because a migration created them.
+
+Workflow for adding a new table or column:
+
+```bash
+# 1. Add/modify the SQLModel class under backend/app/models/ and
+#    import it in backend/app/models/__init__.py
+# 2. Generate the migration:
+docker-compose exec backend alembic revision --autogenerate -m "describe change"
+# 3. Review the file under backend/alembic/versions/ — autogenerate is good
+#    but not perfect (data migrations, default values, server_default
+#    semantics, enum changes all need a human pass)
+# 4. Restart the backend. init_db() picks up the new revision and applies it.
+docker-compose restart backend
+```
+
+The migration is applied on every environment the backend boots in — dev,
+staging, prod. A failing migration takes the app down at startup, which is
+the safe default for a schema-versioned system. Logs surface the underlying
+error.
+
+If you ever need to manually stamp / downgrade / inspect:
+
+```bash
+docker-compose exec backend alembic current
+docker-compose exec backend alembic history
+docker-compose exec backend alembic downgrade -1
+docker-compose exec backend alembic stamp <revision>   # rarely needed now
+```
+
 ## Testing
 
 ```bash
@@ -155,11 +214,17 @@ docker-compose logs -f backend
 docker-compose exec backend pytest tests/test_scoring.py -v
 
 # Frontend type checking
-cd frontend && npm run check
+cd frontend && npm run check                           # or via container:
+docker-compose exec frontend-dev npm run check
+
+# Frontend unit tests (Panini stubs + sparkline path generator, vitest)
+docker-compose exec frontend-dev npx vitest run
 
 # Manual testing with test data
 docker-compose exec backend python scripts/seed_phase2_test.py
 ```
+
+**Pre-existing svelte-check baseline:** ~59 warnings (mostly `@apply` and a11y), 0 errors. New code should keep the error count at zero; a couple of new warnings is acceptable.
 
 ## UI Guidelines
 

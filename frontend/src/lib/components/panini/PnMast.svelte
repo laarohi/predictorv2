@@ -13,7 +13,8 @@
 		{ href: '/', label: 'Dashboard', key: 'dash' },
 		{ href: '/predictions', label: 'Predictions', key: 'pred' },
 		{ href: '/results', label: 'Results', key: 'res' },
-		{ href: '/leaderboard', label: 'Leaderboard', key: 'ldb' }
+		{ href: '/leaderboard', label: 'Leaderboard', key: 'ldb' },
+		{ href: '/rules', label: 'Rules', key: 'rules' }
 	];
 
 	$: currentPath = $page.url.pathname;

@@ -514,12 +514,19 @@ async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> Po
             points,
         )
 
+    # Bonus-question points (cross-phase). Imported here to avoid a circular
+    # import at module load: services.bonus depends on the config layer
+    # already loaded by this file.
+    from app.services.bonus import calculate_bonus_points
+    bonus_points = await calculate_bonus_points(session, user_id)
+
     return PointBreakdown(
         phase1=phase1,
         phase2=phase2,
         correct_outcomes=correct_outcomes,
         exact_scores=exact_scores,
         total_predictions=total_predictions,
+        bonus_question_points=bonus_points,
     )
 
 

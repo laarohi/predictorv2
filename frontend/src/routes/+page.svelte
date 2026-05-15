@@ -28,6 +28,19 @@
 		stubHotPick,
 		stubSteepestClimb
 	} from '$lib/stubs/panini';
+	import {
+		getMyRankTrajectory,
+		getSteepestClimbers,
+		type RankTrajectoryResponse,
+		type SteepestClimbersResponse
+	} from '$api/leaderboard';
+	import {
+		getAgreements,
+		getBracketExposure,
+		type BracketExposureResponse,
+		type FixtureAgreement
+	} from '$api/predictions';
+	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
 	import type { Fixture, LeaderboardEntry } from '$types';
 
 	// Live-ticker projection over a Fixture row. The score_scheduler writes
@@ -48,10 +61,34 @@
 		goto('/login');
 	}
 
-	onMount(() => {
+	// Real backend-driven widget data (replaces stubRankTrajectory +
+	// stubSteepestClimb + stubSocialSignal + stubHotPick). All start null
+	// and the stubs cover for them while the API call is in flight or if
+	// the endpoint is unavailable. Each value gates its widget independently.
+	let realTrajectory: RankTrajectoryResponse | null = null;
+	let realClimbers: SteepestClimbersResponse | null = null;
+	let realAgreements: FixtureAgreement[] | null = null;
+	let realExposure: BracketExposureResponse | null = null;
+
+	onMount(async () => {
 		if ($isAuthenticated) {
 			fetchAllFixtures();
 			fetchLeaderboard();
+			fetchMatchPredictions();
+			try {
+				[realTrajectory, realClimbers, realAgreements, realExposure] = await Promise.all([
+					getMyRankTrajectory(7),
+					getSteepestClimbers(7, 32),
+					getAgreements(),
+					getBracketExposure('phase_1')
+				]);
+			} catch (_e) {
+				// Backend not reachable / endpoint missing — stubs take over below
+				realTrajectory = null;
+				realClimbers = null;
+				realAgreements = null;
+				realExposure = null;
+			}
 		}
 	});
 
@@ -83,21 +120,111 @@
 	})();
 
 	// ---- Stubbed widgets ---------------------------------------------------
-	$: trajectory = stubRankTrajectory(userId, rank || 1, totalPlayers);
-	$: bracketExposure = stubBracketExposure(userId);
-	$: bonusHaul = stubBonusHaul(userId, exactCount);
-	$: climb = stubSteepestClimb(userId, movement, totalPlayers);
+	// Rank trajectory: real backend data once we have >= 2 days of snapshots;
+	// stub fallback while history accumulates (newly-installed deployment).
+	$: trajectory = (() => {
+		if (realTrajectory && realTrajectory.points.length >= 2) {
+			return {
+				ranks: realTrajectory.points.map((p) => p.position),
+				maxRank: realTrajectory.total_participants
+			};
+		}
+		return stubRankTrajectory(userId, rank || 1, totalPlayers);
+	})();
+	// Bracket exposure: real backend computation when available; stub otherwise.
+	$: bracketExposure = (() => {
+		if (realExposure) {
+			return {
+				pointsAvailable: realExposure.points_available,
+				picksLocked: realExposure.picks_locked,
+				picksTotal: realExposure.picks_total,
+				finalPick:
+					realExposure.final_winner && realExposure.final_opponent
+						? {
+							winnerCode: teamCode(realExposure.final_winner),
+							opponentCode: teamCode(realExposure.final_opponent)
+						}
+						: null
+			};
+		}
+		return stubBracketExposure(userId);
+	})();
+	// Bonus haul: real breakdown of points earned BEYOND the base 5-per-correct-
+	// outcome. `fromExact` is the exact-score-bonus column, `fromUnderdogs`
+	// maps to the hybrid_bonus_points column (the rarity bonus — "underdog"
+	// in product language). Both are real values from the cached
+	// PointBreakdown that ships with the user's leaderboard row, so no
+	// extra fetch is needed.
+	$: bonusHaul = (() => {
+		const b = $currentUserPosition?.breakdown;
+		if (b) {
+			return {
+				fromExact: b.exact_score_points,
+				fromUnderdogs: b.hybrid_bonus_points,
+				total: b.exact_score_points + b.hybrid_bonus_points
+			};
+		}
+		// Fallback while the leaderboard is loading — keep the stub so the
+		// KPI strip doesn't flash zeros.
+		return stubBonusHaul(userId, exactCount);
+	})();
+	// Steepest climb: real climbers if available, stub fallback otherwise.
+	$: climb = (() => {
+		if (realClimbers && realClimbers.entries.length > 0) {
+			const me = realClimbers.entries.find((e) => e.user_id === userId);
+			const myRank = me
+				? realClimbers.entries.findIndex((e) => e.user_id === userId) + 1
+				: realClimbers.entries.length + 1;
+			return {
+				yourPlaces: me?.places ?? movement,
+				rankAmongClimbers: myRank,
+				totalPlayers
+			};
+		}
+		return stubSteepestClimb(userId, movement, totalPlayers);
+	})();
 
-	// Hot pick: take up to the first 5 upcoming open fixtures and stub a
-	// "your pick" of 2-1 home for each. Real prediction integration is a
-	// follow-up task — for now this exercises the design.
-	$: hotPickCandidates = $upcomingFixtures.slice(0, 5).map((f) => ({
-		fixtureId: f.id,
-		homeCode: teamCode(f.home_team),
-		awayCode: teamCode(f.away_team),
-		yourScore: [2, 1] as [number, number]
-	}));
-	$: hotPick = stubHotPick(hotPickCandidates);
+	// Hot pick: the user's predicted-but-not-yet-locked fixture with the
+	// lowest exact-agreement count. Lowest = rarest = highest expected value
+	// if it lands. Uses real agreement counts + the user's real picks; falls
+	// back to the stub when either is unavailable.
+	$: hotPick = (() => {
+		if (realAgreements && realAgreements.length > 0) {
+			// Intersect agreements with upcoming-open fixtures + the user's actual picks.
+			const openIds = new Set($upcomingFixtures.map((f) => f.id));
+			const openAgreements = realAgreements.filter((a) => openIds.has(a.fixture_id));
+			if (openAgreements.length > 0) {
+				const rarest = openAgreements.reduce(
+					(best, a) => (a.agrees_exact < best.agrees_exact ? a : best),
+					openAgreements[0]
+				);
+				const fixture = $upcomingFixtures.find((f) => f.id === rarest.fixture_id);
+				const pred = $predictionsByFixture.get(rarest.fixture_id);
+				if (fixture && pred) {
+					const rarity = rarest.total > 0 ? 1 - rarest.agrees_exact / rarest.total : 0;
+					return {
+						fixtureId: rarest.fixture_id,
+						homeCode: teamCode(fixture.home_team),
+						awayCode: teamCode(fixture.away_team),
+						yourScore: [pred.home_score, pred.away_score] as [number, number],
+						agreesExact: rarest.agrees_exact,
+						total: rarest.total,
+						potentialPoints: 15,
+						multiplier: +(1 + rarity * 1.5).toFixed(1)
+					};
+				}
+			}
+		}
+		// Stub fallback while predictions / agreements load or for users
+		// who haven't predicted any open fixtures yet.
+		const stubCandidates = $upcomingFixtures.slice(0, 5).map((f) => ({
+			fixtureId: f.id,
+			homeCode: teamCode(f.home_team),
+			awayCode: teamCode(f.away_team),
+			yourScore: [2, 1] as [number, number]
+		}));
+		return stubHotPick(stubCandidates);
+	})();
 
 	// ---- Countdown digits --------------------------------------------------
 	// Use the closest upcoming fixture as the "next lock"; fall back to

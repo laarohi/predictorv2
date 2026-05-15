@@ -73,6 +73,20 @@ async def get_current_phase(session: AsyncSession) -> PredictionPhase:
     return PredictionPhase.PHASE_1
 
 
+async def is_phase1_locked(session: AsyncSession) -> bool:
+    """Whether Phase 1 predictions (group matches, bracket, bonus questions)
+    are locked for the active competition.
+
+    Returns True iff the active competition has a `phase1_deadline` and the
+    current time is at or past it. Returns False when no competition is
+    active or no deadline has been set.
+    """
+    competition = await get_active_competition(session)
+    if not competition or not competition.phase1_deadline:
+        return False
+    return utc_now() >= competition.phase1_deadline
+
+
 async def is_phase2_bracket_locked(session: AsyncSession) -> bool:
     """Check if the Phase 2 bracket prediction deadline has passed.
 

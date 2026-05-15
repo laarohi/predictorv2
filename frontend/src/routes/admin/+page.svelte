@@ -27,6 +27,7 @@
 		type UserAdminView,
 		type SyncScoresResponse
 	} from '$lib/api/admin';
+	import { listBonusAnswers, setBonusAnswer, type BonusAnswerView } from '$api/bonus';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 
 	$: if ($isAuthenticated && !$user?.is_admin) goto('/');
@@ -59,8 +60,79 @@
 	let togglingUserId: string | null = null;
 	let userActionError: string | null = null;
 
+	// Bonus question answers admin state
+	let bonusAnswerViews: BonusAnswerView[] = [];
+	let bonusDrafts: Map<string, string> = new Map(); // question_id → draft input
+	let savingQId: string | null = null;
+	let bonusError: string | null = null;
+
+	async function loadBonusAnswers() {
+		try {
+			bonusAnswerViews = await listBonusAnswers();
+		} catch (e) {
+			bonusError = e instanceof Error ? e.message : 'Failed to load bonus answers';
+		}
+	}
+
+	function draftFor(view: BonusAnswerView): string {
+		return bonusDrafts.get(view.question_id) ?? view.correct_answer ?? '';
+	}
+
+	function setDraft(qid: string, value: string) {
+		const next = new Map(bonusDrafts);
+		next.set(qid, value);
+		bonusDrafts = next;
+	}
+
+	async function handleSaveBonusAnswer(view: BonusAnswerView) {
+		const value = draftFor(view).trim();
+		savingQId = view.question_id;
+		bonusError = null;
+		try {
+			const updated = await setBonusAnswer(view.question_id, value);
+			bonusAnswerViews = bonusAnswerViews.map((v) =>
+				v.question_id === view.question_id ? updated : v
+			);
+			// Clear the draft so the input now reflects the saved value.
+			const next = new Map(bonusDrafts);
+			next.delete(view.question_id);
+			bonusDrafts = next;
+		} catch (e) {
+			bonusError = e instanceof Error ? e.message : 'Failed to save bonus answer';
+		} finally {
+			savingQId = null;
+		}
+	}
+
+	$: bonusByCategory = (() => {
+		const groups: Record<string, BonusAnswerView[]> = {
+			group_stage: [],
+			top_flop: [],
+			awards: []
+		};
+		for (const v of bonusAnswerViews) {
+			(groups[v.category] ?? (groups[v.category] = [])).push(v);
+		}
+		return groups;
+	})();
+
+	const BONUS_CATEGORY_LABEL: Record<string, string> = {
+		group_stage: 'Group stage',
+		top_flop: 'Top / Flop',
+		awards: 'Awards'
+	};
+
+	function fmtResolved(iso: string | null): string {
+		if (!iso) return 'Not resolved';
+		const d = new Date(iso);
+		return `Resolved ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
+	}
+
 	onMount(async () => {
-		if ($user?.is_admin) await loadData();
+		if ($user?.is_admin) {
+			await loadData();
+			await loadBonusAnswers();
+		}
 	});
 
 	async function loadData() {
@@ -373,6 +445,61 @@
 							{/if}
 						</div>
 					</div>
+				</div>
+			</section>
+
+			<!-- Bonus question answers -->
+			<section class="pn-pf-section">
+				<div class="h">
+					<span>Bonus Question Answers</span>
+					<span class="right">{bonusAnswerViews.filter((v) => v.correct_answer).length} of {bonusAnswerViews.length} resolved</span>
+				</div>
+				<div class="body">
+					{#if bonusError}<div class="pn-pf-alert error" style="margin-bottom: 12px;">{bonusError}</div>{/if}
+					{#each ['group_stage', 'top_flop', 'awards'] as cat}
+						{@const items = bonusByCategory[cat] ?? []}
+						{#if items.length > 0}
+							<h3 style="font-family: var(--display); font-size: 14px; text-transform: uppercase; letter-spacing: 0.04em; margin: 14px 0 8px;">
+								{BONUS_CATEGORY_LABEL[cat]}
+							</h3>
+							{#each items as v (v.question_id)}
+								<div class="pn-ad-user" style="grid-template-columns: 1fr 1fr auto auto;">
+									<div class="who">
+										<div class="nm" style="font-size: 13px; text-transform: none; letter-spacing: 0;">{v.label}</div>
+										<div class="em">{v.points} pts · {v.input_type} · {fmtResolved(v.resolved_at)}</div>
+									</div>
+									<input
+										type="text"
+										class="pn-ad-search"
+										style="margin: 0; max-width: 100%;"
+										placeholder={v.correct_answer ? '' : 'Enter correct answer…'}
+										value={draftFor(v)}
+										on:input={(e) => setDraft(v.question_id, e.currentTarget.value)}
+									/>
+									<div class="badges">
+										{#if v.correct_answer}
+											<span class="pn-tag got" title="Currently saved: {v.correct_answer}">✓ {v.correct_answer}</span>
+										{:else}
+											<span class="pn-tag" style="opacity: 0.6;">— Unset</span>
+										{/if}
+									</div>
+									<div class="actions">
+										<button
+											class="pn-btn ghost"
+											type="button"
+											on:click={() => handleSaveBonusAnswer(v)}
+											disabled={savingQId === v.question_id}
+										>
+											{savingQId === v.question_id ? 'Saving…' : 'Save'}
+										</button>
+									</div>
+								</div>
+							{/each}
+						{/if}
+					{/each}
+					<p style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 14px;">
+						★ Saving a correct answer awards bonus points to every player whose pick matches (case- and accent-insensitive). Leave blank to un-resolve a question.
+					</p>
 				</div>
 			</section>
 
