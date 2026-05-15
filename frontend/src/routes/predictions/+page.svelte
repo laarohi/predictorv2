@@ -84,6 +84,27 @@
 		bracketPhase2Restored: boolean;
 	} | null = null;
 
+	// Editing state — set when the user's cursor is inside one of the two
+	// score inputs of a match card. Drives the "EDITING" chip on the card
+	// and the gold-with-red-shadow styling on the focused input cell.
+	// We use focusin/focusout (which bubble) on the parent .pn-mcard so
+	// tabbing between the home and away inputs doesn't briefly clear the
+	// state — focusout's relatedTarget check confirms whether focus left
+	// the card entirely.
+	let editingFixtureId: string | null = null;
+
+	function handleMatchCardFocusIn(fixtureId: string, isLocked: boolean): void {
+		if (!isLocked) editingFixtureId = fixtureId;
+	}
+
+	function handleMatchCardFocusOut(e: FocusEvent): void {
+		const card = e.currentTarget as HTMLElement;
+		const next = e.relatedTarget as Node | null;
+		// Only clear when focus moved entirely outside this card. Tabbing
+		// between the home and away inputs keeps the state intact.
+		if (!next || !card.contains(next)) editingFixtureId = null;
+	}
+
 	onMount(async () => {
 		if ($isAuthenticated) {
 			await Promise.all([
@@ -744,7 +765,17 @@
 					<div class="pn-wiz-matches">
 						{#each group.fixtures as f (f.id)}
 							{@const state = predictionState(f)}
-							<div class="pn-mcard" class:locked={state === 'locked'} class:empty={state === 'empty'}>
+							<div
+								class="pn-mcard"
+								class:locked={state === 'locked'}
+								class:empty={state === 'empty'}
+								class:editing={editingFixtureId === f.id}
+								on:focusin={() => handleMatchCardFocusIn(f.id, f.is_locked)}
+								on:focusout={handleMatchCardFocusOut}
+							>
+								{#if editingFixtureId === f.id}
+									<span class="editing-tag">Editing</span>
+								{/if}
 								<div class="meta">
 									<span><b>{teamCode(f.home_team)} vs {teamCode(f.away_team)}</b></span>
 									<span>{new Date(f.kickoff).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · {new Date(f.kickoff).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -981,7 +1012,17 @@
 					<div class="pn-wiz-matches">
 						{#each $actualKnockoutFixtures as f (f.id)}
 							{@const state = predictionState(f)}
-							<div class="pn-mcard" class:locked={state === 'locked'} class:empty={state === 'empty'}>
+							<div
+								class="pn-mcard"
+								class:locked={state === 'locked'}
+								class:empty={state === 'empty'}
+								class:editing={editingFixtureId === f.id}
+								on:focusin={() => handleMatchCardFocusIn(f.id, f.is_locked)}
+								on:focusout={handleMatchCardFocusOut}
+							>
+								{#if editingFixtureId === f.id}
+									<span class="editing-tag">Editing</span>
+								{/if}
 								<div class="meta">
 									<span><b>{teamCode(f.home_team)} vs {teamCode(f.away_team)}</b></span>
 									<span>{new Date(f.kickoff).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · {new Date(f.kickoff).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>

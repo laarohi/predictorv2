@@ -387,6 +387,27 @@
 }
 .pn .pn-mcard.locked { opacity: 0.6; }
 .pn .pn-mcard.empty { border-style: dashed; }
+/* While a user has the cursor inside a score input of this card, hoist
+ * the card slightly so it visually pops above its neighbours. The
+ * .editing-tag inside the card surfaces a red "Editing" chip in the
+ * top-right corner, mirroring the original Panini mock. */
+.pn .pn-mcard.editing {
+	border-color: var(--red);
+	box-shadow: 5px 5px 0 var(--red);
+}
+.pn .pn-mcard .editing-tag {
+	position: absolute;
+	top: -1px;
+	right: -1px;
+	background: var(--red);
+	color: var(--paper);
+	font-family: var(--display);
+	font-size: 10px;
+	letter-spacing: 0.10em;
+	text-transform: uppercase;
+	padding: 3px 8px 4px;
+	z-index: 2;
+}
 .pn .pn-mcard .meta {
 	display: flex;
 	justify-content: space-between;
@@ -440,9 +461,20 @@
 	appearance: textfield;
 }
 .pn .pn-score-cell:disabled { cursor: not-allowed; }
-.pn .pn-score-cell:focus {
-	outline: 2px solid var(--red);
-	outline-offset: 2px;
+/* Focused score cell: gold sticker fill + red Panini-style offset hard
+ * shadow, no browser outline. The shadow mirrors the rest of the design
+ * system's 4-5px offset-shadow vocabulary (ink shadows on cards, red
+ * shadows for emphasis/warnings). The cell's existing 2.5px ink border
+ * stays put, so the gold reads as a fill change rather than a swap. */
+.pn .pn-score-cell:focus,
+.pn .pn-score-cell:focus-visible {
+	outline: none;
+	background: var(--gold);
+	color: var(--ink);
+	box-shadow: 4px 4px 0 var(--red);
+	/* Lift the cell slightly so the shadow's offset reads correctly even
+	 * when neighbouring cells are flush against it in the score row. */
+	transform: translate(-1px, -1px);
 }
 .pn .pn-score-cell.empty {
 	background: var(--paper);
