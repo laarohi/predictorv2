@@ -571,3 +571,29 @@
 	width: 20px;
 	height: 20px;
 }
+
+/* =========================================================================
+ * DaisyUI class-name collision overrides
+ *
+ * DaisyUI ships .stat and .stats as Tailwind component classes for its
+ * "stats block" UI primitive (display:inline-grid + width:100% + 1.5rem
+ * padding + background-color etc.). We use those names as plain semantic
+ * class names in several places:
+ *   .stat  — table cell modifier in standings tables (.pn-stnd-table .stat)
+ *           also used in bracket header (.pn-brkt-h .stat) and
+ *           leaderboard self-row (.pn-lb-self .stat)
+ *   .stats — wizard save-bar status div (.pn-wiz-foot .stats)
+ *
+ * daisyUI's rule has lower specificity than our scoped rules, but it sets
+ * `display` / `width` / `padding` which we never set — so its properties
+ * leak through and break our table layout (cells stack vertically) and
+ * save-bar layout (status text becomes a grid).
+ *
+ * `all: revert` resets every property on these elements to user-agent
+ * defaults (display:table-cell for <td>, display:block for <div>),
+ * then our specific scoped rules re-apply what they need.
+ * ========================================================================= */
+.pn .stat,
+.pn .stats {
+	all: revert;
+}
