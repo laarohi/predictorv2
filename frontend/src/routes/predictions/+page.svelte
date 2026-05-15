@@ -203,20 +203,68 @@
 		updateLocalPrediction(fixtureId, next.home_score, next.away_score);
 	}
 
-	function scoreValue(fixtureId: string, side: 'home' | 'away'): string {
-		const u = $unsavedChanges[fixtureId];
-		if (u) return String(side === 'home' ? u.home_score : u.away_score);
-		const p = $predictionsByFixture.get(fixtureId);
-		if (p) return String(side === 'home' ? p.home_score : p.away_score);
-		return '';
-	}
+	// Per-fixture state + score values, computed reactively so the UI updates
+	// without a page refresh when stores change.
+	//
+	// Note: the previous implementation was non-reactive function calls
+	// (`scoreValue(f.id, side)`, `predictionState(f)`). Svelte doesn't follow
+	// store reads INSIDE a function body, so those expressions in the template
+	// never re-evaluated when $unsavedChanges or $predictionsByFixture changed.
+	// Result: saving did update the stores, but the per-card input value, the
+	// .empty class on the cell, and the per-group progress counter all stayed
+	// stale until a full page refresh. Migrating to reactive Maps fixes all
+	// three symptoms at once.
+	type FixtureState = 'locked' | 'saved' | 'draft' | 'empty';
 
-	function predictionState(f: Fixture): 'locked' | 'saved' | 'draft' | 'empty' {
-		if (f.is_locked) return 'locked';
-		if ($unsavedChanges[f.id]) return 'draft';
-		if ($predictionsByFixture.get(f.id)) return 'saved';
-		return 'empty';
-	}
+	$: predictionStateMap = (() => {
+		const map = new Map<string, FixtureState>();
+		for (const g of $groupFixtures) {
+			for (const f of g.fixtures) {
+				let s: FixtureState;
+				if (f.is_locked) s = 'locked';
+				else if ($unsavedChanges[f.id]) s = 'draft';
+				else if ($predictionsByFixture.get(f.id)) s = 'saved';
+				else s = 'empty';
+				map.set(f.id, s);
+			}
+		}
+		return map;
+	})();
+
+	$: scoreValueMap = (() => {
+		const map = new Map<string, { home: string; away: string }>();
+		for (const g of $groupFixtures) {
+			for (const f of g.fixtures) {
+				const u = $unsavedChanges[f.id];
+				if (u) {
+					map.set(f.id, { home: String(u.home_score), away: String(u.away_score) });
+					continue;
+				}
+				const p = $predictionsByFixture.get(f.id);
+				if (p) {
+					map.set(f.id, { home: String(p.home_score), away: String(p.away_score) });
+					continue;
+				}
+				map.set(f.id, { home: '', away: '' });
+			}
+		}
+		return map;
+	})();
+
+	// Reactive lambdas (not plain `function` declarations) so the call-site
+	// expression `{@const state = predictionState(f)}` is reactive: when
+	// predictionStateMap updates, the `$:` block here reassigns
+	// predictionState to a new function reference, which Svelte's compiler
+	// tracks as a dependency of the call site. Plain function declarations
+	// would be referentially stable and the compiler would never re-evaluate
+	// the call.
+	$: predictionState = (f: Fixture): FixtureState =>
+		predictionStateMap.get(f.id) ?? (f.is_locked ? 'locked' : 'empty');
+
+	$: scoreValue = (fixtureId: string, side: 'home' | 'away'): string => {
+		const entry = scoreValueMap.get(fixtureId);
+		return entry ? entry[side] : '';
+	};
 
 	// ---- Bracket (Phase 1) ------------------------------------------------
 	let bracketComponent: PnKnockoutBracket;
@@ -791,7 +839,19 @@
 			<!-- Sticky save bar -->
 			<section class="pn-wiz-foot">
 				<div class="stats">
-					<b>{$unsavedChangesCount}</b> match · <b>{$hasUnsavedBracketChanges ? 'YES' : 'no'}</b> bracket unsaved
+					{#if $unsavedChangesCount === 0 && !$hasUnsavedBracketChanges}
+						All changes saved
+					{:else}
+						{#if $unsavedChangesCount > 0}
+							<b>{$unsavedChangesCount}</b> match {$unsavedChangesCount === 1 ? 'pick' : 'picks'} unsaved
+						{/if}
+						{#if $unsavedChangesCount > 0 && $hasUnsavedBracketChanges}
+							<span class="sep">·</span>
+						{/if}
+						{#if $hasUnsavedBracketChanges}
+							bracket has unsaved changes
+						{/if}
+					{/if}
 				</div>
 				<button
 					class="submit-btn"
@@ -914,7 +974,11 @@
 			<!-- Sticky save bar for phase 2 match score picks -->
 			<section class="pn-wiz-foot">
 				<div class="stats">
-					<b>{$unsavedChangesCount}</b> match unsaved
+					{#if $unsavedChangesCount === 0}
+						All changes saved
+					{:else}
+						<b>{$unsavedChangesCount}</b> match {$unsavedChangesCount === 1 ? 'pick' : 'picks'} unsaved
+					{/if}
 				</div>
 				<button
 					class="submit-btn"

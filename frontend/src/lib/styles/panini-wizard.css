@@ -52,6 +52,7 @@
 	border: 2px solid var(--ink);
 }
 .pn .pn-wiz-hero .phase-toggle button {
+	flex: 1; /* equal-width buttons regardless of label length */
 	background: var(--paper);
 	border: 0;
 	border-right: 2px solid var(--ink);
@@ -60,6 +61,7 @@
 	font-size: 13px;
 	text-transform: uppercase;
 	cursor: pointer;
+	text-align: center;
 	color: var(--ink);
 	letter-spacing: 0.04em;
 }
@@ -69,11 +71,12 @@
 	color: var(--paper);
 }
 .pn .pn-wiz-hero .progress-stack {
-	align-self: center;
+	align-self: stretch;
 	display: flex;
 	flex-direction: column;
-	gap: 6px;
-	min-width: 200px;
+	justify-content: center;
+	gap: 8px;
+	min-width: 220px;
 }
 .pn .pn-wiz-hero .progress-stack .l {
 	display: flex;
@@ -86,9 +89,9 @@
 }
 .pn .pn-wiz-hero .progress-stack .l b { color: var(--ink); font-weight: 600; }
 .pn .pn-wiz-hero .progress-stack .bar {
-	height: 10px;
+	height: 22px;
 	background: var(--paper-2);
-	border: 2px solid var(--ink);
+	border: 2.5px solid var(--ink);
 	position: relative;
 	overflow: hidden;
 }
@@ -486,6 +489,7 @@
 	color: var(--paper-3);
 }
 .pn .pn-wiz-foot .stats b { color: var(--gold); font-family: var(--display); font-size: 14px; }
+.pn .pn-wiz-foot .stats .sep { margin: 0 6px; color: var(--paper-3); }
 .pn .pn-wiz-foot .submit-btn {
 	background: var(--gold);
 	color: var(--ink);
