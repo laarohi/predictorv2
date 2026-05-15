@@ -13,7 +13,8 @@
 		{ href: '/', label: 'Home', icon: 'home', key: 'dash' },
 		{ href: '/predictions', label: 'Predict', icon: 'predict', key: 'pred' },
 		{ href: '/results', label: 'Results', icon: 'whistle', key: 'res' },
-		{ href: '/leaderboard', label: 'Standings', icon: 'trophy', key: 'ldb' }
+		{ href: '/leaderboard', label: 'Standings', icon: 'trophy', key: 'ldb' },
+		{ href: '/rules', label: 'Rules', icon: 'list', key: 'rules' }
 	];
 
 	$: currentPath = $page.url.pathname;

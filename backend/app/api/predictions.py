@@ -428,13 +428,17 @@ async def get_community_predictions(
 
 @router.get("/bonus/questions", response_model=list[BonusQuestionResponse])
 async def get_bonus_questions_route(
-    _user: CurrentUser,
+    _user: OptionalUser,
 ) -> list[BonusQuestionResponse]:
     """Return the list of bonus questions (loaded from worldcup2026.yml).
 
     Labels have {top_n} already substituted with the configured value.
     Points are per-category. Frontend renders these as the wizard's Bonus
     tab; question IDs are stable strings used as upsert keys for picks.
+
+    Public — the /rules page lists these for prospective joiners. Question
+    definitions are config, not user data, so making this optionally-authed
+    leaks nothing.
     """
     qs = get_bonus_questions()
     return [
