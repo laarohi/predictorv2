@@ -209,6 +209,17 @@
 	color: var(--paper);
 	border-color: var(--ink);
 }
+/* Group is fully predicted but the final standings have a tie that
+ * fell to alphabetical fallback (FIFA chain exhausted past H2H goals).
+ * Red signals "filled in but not cleanly resolved — consider adjusting
+ * predictions". Listed AFTER .done so this rule wins on the rare race
+ * where both classes could apply (the template enforces mutual
+ * exclusivity, but the CSS is defensive in case that invariant breaks). */
+.pn .pn-wiz-gp.tied {
+	background: var(--red);
+	color: var(--paper);
+	border-color: var(--ink);
+}
 .pn .pn-wiz-gp.special {
 	background: var(--gold);
 	color: var(--ink);

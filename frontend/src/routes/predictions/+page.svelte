@@ -213,6 +213,15 @@
 		return { done, total, pct };
 	})();
 
+	// True only when every fixture in every group has a saved or draft pick.
+	// Used to gate the third-place tie-warning banner — ties between
+	// third-placed teams are only meaningful once all 12 third-place stats
+	// are final, since the ranking depends on cross-group comparison.
+	$: allGroupsComplete = $groupFixtures.length > 0 && $groupFixtures.every((g) => {
+		const p = groupProgress(g);
+		return p.total > 0 && p.done === p.total;
+	});
+
 	// ---- Selected group's fixtures ---------------------------------------
 	$: selectedGroup =
 		activeGroupPill && activeGroupPill !== 'thirdplace'
@@ -603,10 +612,13 @@
 				<section class="pn-wiz-nav">
 					{#each $groupFixtures as g (g.group)}
 						{@const gp = groupProgress(g)}
+						{@const isComplete = gp.total > 0 && gp.done === gp.total}
+						{@const hasTie = groupStandingsWarnings.some((w) => w.group === g.group)}
 						<button
 							class="pn-wiz-gp"
 							class:active={activeGroupPill === g.group}
-							class:done={gp.done === gp.total && gp.total > 0}
+							class:done={isComplete && !hasTie}
+							class:tied={isComplete && hasTie}
 							on:click={() => (activeGroupPill = g.group)}
 						>
 							Group {g.group}
@@ -626,7 +638,7 @@
 			<!-- Group view -->
 			{#if activeSection === 'groups' && activeGroupPill === 'thirdplace'}
 				<section class="pn-wiz-group">
-					{#if thirdPlaceWarnings.length > 0}
+					{#if allGroupsComplete && thirdPlaceWarnings.length > 0}
 						<div class="pn-tie-warn">
 							<h4>⚠ Tied teams · alphabetical fallback in effect</h4>
 							{#each thirdPlaceWarnings as w (w.tiedTeams.join('-'))}
@@ -699,8 +711,10 @@
 				{@const group = selectedGroup}
 				{@const standings = standingsMap[group.group] ?? []}
 				{@const groupWarnings = groupStandingsWarnings.filter((w) => w.group === group.group)}
+				{@const groupGp = groupProgress(group)}
+				{@const groupComplete = groupGp.total > 0 && groupGp.done === groupGp.total}
 				<section class="pn-wiz-group">
-					{#if groupWarnings.length > 0}
+					{#if groupComplete && groupWarnings.length > 0}
 						<div class="pn-tie-warn">
 							<h4>⚠ Tied teams in Group {group.group} · alphabetical fallback in effect</h4>
 							{#each groupWarnings as w (w.tiedTeams.join('-'))}
