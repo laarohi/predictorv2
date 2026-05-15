@@ -30,26 +30,71 @@
 	border-bottom: 2.5px solid var(--ink);
 	margin-bottom: 20px;
 }
+/* ==== Hero responsive layout modes ====
+ *
+ * The hero has THREE sections (title, progress, toggles) that can be
+ * arranged differently at different widths:
+ *
+ *   >= 1100px (wide desktop):
+ *     [title]  |  [progress STRETCHES]  |  [toggles]
+ *     Single row, vertical ink pipes between sections, big 60px number.
+ *
+ *   700-1099px (narrow desktop / tablet):
+ *     [title]  |  [progress STRETCHES]
+ *     [toggles spanning both columns]
+ *     Two rows. Top: title + progress (still side-by-side, ink pipe between).
+ *     Bottom: toggles full-width with a horizontal ink border above.
+ *     Smaller 48px big number.
+ *
+ *   < 700px (mobile):
+ *     [title]
+ *     [progress (stacked)]
+ *     [toggles (stacked)]
+ *     All stacked, no pipes, smaller 40px big number, 10px bar.
+ *
+ * The big-num sizes step down (60 → 48 → 40) and the bar height steps
+ * down (14 → 12 → 10) so the visual hierarchy stays proportional across
+ * the three layout modes. */
+
+@media (max-width: 1099px) and (min-width: 700px) {
+	.pn .pn-wiz-hero {
+		grid-template-columns: auto 1fr;
+		grid-template-rows: auto auto;
+		row-gap: 14px;
+	}
+	/* Toggles drop to a new row, spanning both columns. Border-left
+	 * (vertical pipe between sections) becomes border-top (horizontal
+	 * pipe above the toggle row). */
+	.pn .pn-wiz-hero .toggle-stack {
+		grid-column: 1 / -1;
+		border-left: 0;
+		padding-left: 0;
+		border-top: 2px solid var(--ink);
+		padding-top: 14px;
+		flex-direction: row;
+		flex-wrap: wrap;
+		gap: 10px;
+	}
+	/* Slightly smaller big-num so the progress block doesn't dominate
+	 * the narrower row. */
+	.pn .pn-wiz-hero .progress-stack .big-num b { font-size: 48px; }
+	.pn .pn-wiz-hero .progress-stack .big-num .slash { font-size: 22px; }
+	.pn .pn-wiz-hero .progress-stack .bar { height: 12px; }
+}
+
 @media (max-width: 699px) {
 	.pn .pn-wiz-hero {
 		grid-template-columns: 1fr;
 		gap: 14px;
 	}
-	/* The vertical ink-pipe separators between hero sections only make
-	 * sense when the sections sit SIDE-BY-SIDE. Once the grid collapses
-	 * to a single column on mobile, the pipes hang off the left of each
-	 * stacked section like vestigial tabs — strip them. */
+	/* Vertical ink pipes don't make sense once sections are stacked. */
 	.pn .pn-wiz-hero .progress-stack,
 	.pn .pn-wiz-hero .toggle-stack {
 		border-left: 0;
 		padding-left: 0;
 	}
-	/* The 60px big-num is too dominant on a narrow viewport. The mock's
-	 * mobile band uses 32px; we go 40px so the number stays the visual
-	 * anchor without overwhelming the rest of the hero. */
 	.pn .pn-wiz-hero .progress-stack .big-num b { font-size: 40px; }
 	.pn .pn-wiz-hero .progress-stack .big-num .slash { font-size: 18px; }
-	/* Slimmer bar on mobile to match the reduced surrounding sizes. */
 	.pn .pn-wiz-hero .progress-stack .bar { height: 10px; }
 }
 .pn .pn-wiz-hero .toggle-stack {
@@ -465,13 +510,35 @@
 .pn .pn-stnd-table .gd.pos { color: var(--green); }
 .pn .pn-stnd-table .gd.neg { color: var(--ink-3); }
 
-/* ==== Matches grid (2x3 on desktop, 1 col on mobile) ==== */
+/* ==== Matches grid ====
+ *
+ * Three layout modes, intentionally chosen so the match card never has
+ * to render in a column narrower than ~340px (where the team-codes +
+ * score boxes start clipping):
+ *
+ *   < 700px (mobile): single column, full width.
+ *   700-1199px (tablet / narrow desktop): two columns, page is
+ *     single-column so the matches grid gets the full viewport width.
+ *   >= 1200px (desktop): two columns inside the right column of the
+ *     2-col page layout — by then the right column is wide enough
+ *     (~2/3 of viewport) to comfortably fit two match cards.
+ *
+ * Within the 1000-1199px range the page layout is 2-col but the match
+ * grid drops back to 1 column so each card has its full intrinsic
+ * width to render. See .pn-wiz-group:has(.pn-wiz-matches) media query
+ * below for the page-layout half of this pair. */
 .pn .pn-wiz-matches {
 	display: grid;
 	grid-template-columns: 1fr;
 	gap: 14px;
 }
-@media (min-width: 700px) {
+@media (min-width: 700px) and (max-width: 999px) {
+	.pn .pn-wiz-matches {
+		grid-template-columns: 1fr 1fr;
+		gap: 16px;
+	}
+}
+@media (min-width: 1200px) {
 	.pn .pn-wiz-matches {
 		grid-template-columns: 1fr 1fr;
 		gap: 16px;
