@@ -202,7 +202,10 @@ async def get_climbers(
     session: DbSession,
     _user: CurrentUser,
     days: int = Query(7, ge=2, le=90),
-    limit: int = Query(5, ge=1, le=20),
+    # Cap raised from 20 → 100 so the Dashboard can request the full field
+    # (it asks for 32 to cover any plausible competition size). 422'd
+    # previously when the dashboard called /climbers?days=7&limit=32.
+    limit: int = Query(5, ge=1, le=100),
 ) -> SteepestClimbersResponse:
     """Top-N users by rank improvement over the last `days`.
 
