@@ -10,11 +10,13 @@ from sqlmodel import select
 
 from app.dependencies import AdminUser, DbSession
 from app.models._datetime import utc_now
+from app.models.bonus import BonusAnswer
 from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction
 from app.models.score import Score, ScoreSource
 from app.models.user import User
+from app.services.bonus import get_questions as get_bonus_questions
 from app.services.external_scores import get_score_provider, ExternalScore
 from app.services.leaderboard import invalidate_cache
 from app.services.score_sync import sync_scores_once
@@ -440,4 +442,157 @@ async def sync_scores_from_api(
         synced=result.synced,
         updated=result.updated,
         errors=result.errors,
+    )
+
+
+# ============================================================================
+# Bonus question answers (admin sets the correct answer per question)
+# ============================================================================
+
+
+class BonusAnswerView(BaseModel):
+    """One question + its current correct answer (if any), for the admin UI."""
+
+    question_id: str
+    label: str
+    category: str
+    points: int
+    input_type: str
+    correct_answer: str | None
+    resolved_at: datetime | None
+
+
+class BonusAnswerUpdate(BaseModel):
+    """Payload for admin setting / updating a correct answer."""
+
+    question_id: str
+    correct_answer: str
+
+
+@router.get("/bonus/answers", response_model=list[BonusAnswerView])
+async def list_bonus_answers(
+    session: DbSession,
+    _admin: AdminUser,
+) -> list[BonusAnswerView]:
+    """List every bonus question with its current correct answer (if set).
+
+    Used by the admin "Bonus question answers" section. Joins the YAML
+    question list with the per-competition `bonus_answers` rows.
+    """
+    qs = get_bonus_questions()
+    # Pull active competition's existing answers in one query.
+    comp_result = await session.execute(
+        select(Competition).where(Competition.is_active == True)  # noqa: E712
+    )
+    competition = comp_result.scalar_one_or_none()
+    if not competition:
+        # No active competition → no resolved answers possible.
+        return [
+            BonusAnswerView(
+                question_id=q.id,
+                label=q.label,
+                category=q.category,
+                points=q.points,
+                input_type=q.input_type,
+                correct_answer=None,
+                resolved_at=None,
+            )
+            for q in qs
+        ]
+
+    ans_result = await session.execute(
+        select(BonusAnswer).where(BonusAnswer.competition_id == competition.id)
+    )
+    by_qid = {a.question_id: a for a in ans_result.scalars().all()}
+
+    return [
+        BonusAnswerView(
+            question_id=q.id,
+            label=q.label,
+            category=q.category,
+            points=q.points,
+            input_type=q.input_type,
+            correct_answer=by_qid[q.id].correct_answer if q.id in by_qid else None,
+            resolved_at=by_qid[q.id].resolved_at if q.id in by_qid else None,
+        )
+        for q in qs
+    ]
+
+
+@router.post("/bonus/answers", response_model=BonusAnswerView)
+async def set_bonus_answer(
+    payload: BonusAnswerUpdate,
+    session: DbSession,
+    _admin: AdminUser,
+) -> BonusAnswerView:
+    """Set / update the correct answer for a bonus question. Invalidates the
+    leaderboard cache so bonus points show up in the next leaderboard fetch.
+
+    Empty `correct_answer` deletes the answer (un-resolves the question).
+    """
+    valid_questions = {q.id: q for q in get_bonus_questions()}
+    if payload.question_id not in valid_questions:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown question_id: {payload.question_id}",
+        )
+
+    comp_result = await session.execute(
+        select(Competition).where(Competition.is_active == True)  # noqa: E712
+    )
+    competition = comp_result.scalar_one_or_none()
+    if not competition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active competition",
+        )
+
+    existing = (
+        await session.execute(
+            select(BonusAnswer)
+            .where(BonusAnswer.competition_id == competition.id)
+            .where(BonusAnswer.question_id == payload.question_id)
+        )
+    ).scalar_one_or_none()
+
+    clean = payload.correct_answer.strip()
+    q = valid_questions[payload.question_id]
+
+    if not clean:
+        if existing is not None:
+            await session.delete(existing)
+            await session.commit()
+        invalidate_cache()
+        return BonusAnswerView(
+            question_id=q.id,
+            label=q.label,
+            category=q.category,
+            points=q.points,
+            input_type=q.input_type,
+            correct_answer=None,
+            resolved_at=None,
+        )
+
+    if existing is not None:
+        existing.correct_answer = clean
+        existing.resolved_at = utc_now()
+    else:
+        existing = BonusAnswer(
+            competition_id=competition.id,
+            question_id=payload.question_id,
+            correct_answer=clean,
+        )
+        session.add(existing)
+    await session.commit()
+    await session.refresh(existing)
+    invalidate_cache()
+
+    return BonusAnswerView(
+        question_id=q.id,
+        label=q.label,
+        category=q.category,
+        points=q.points,
+        input_type=q.input_type,
+        correct_answer=existing.correct_answer,
+        resolved_at=existing.resolved_at,
     )

@@ -303,16 +303,102 @@
 		if (ok) setTimeout(() => (saveStatus = 'idle'), 2000);
 	}
 
-	// ---- Bonus questions: 6 stub questions, UI only -----------------------
-	// Documented in panini-redesign-decisions.md: no backend persistence yet.
-	const BONUS_QUESTIONS = [
-		{ id: 'b1', label: 'Tournament winner', points: 50, options: ['ARG', 'BRA', 'FRA', 'ENG', 'ESP', 'GER'] },
-		{ id: 'b2', label: 'Top scorer (Golden Boot)', points: 30, options: ['—'] },
-		{ id: 'b3', label: 'Surprise team to reach SF', points: 20, options: ['—'] },
-		{ id: 'b4', label: 'First red card', points: 15, options: ['—'] },
-		{ id: 'b5', label: 'Most goals in a single match', points: 15, options: ['—'] },
-		{ id: 'b6', label: 'Player of the Tournament', points: 25, options: ['—'] }
-	];
+	// ---- Bonus questions (real backend) ----------------------------------
+
+	let bonusQuestions: import('$api/bonus').BonusQuestion[] = [];
+	let bonusAnswers: Map<string, string> = new Map(); // question_id → answer
+	let bonusInitial: Map<string, string> = new Map(); // for change tracking
+	let bonusSaveStatus: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
+
+	$: hasUnsavedBonus = (() => {
+		if (bonusQuestions.length === 0) return false;
+		if (bonusAnswers.size !== bonusInitial.size) return true;
+		for (const [k, v] of bonusAnswers) {
+			if (bonusInitial.get(k) !== v) return true;
+		}
+		return false;
+	})();
+
+	async function loadBonus() {
+		const [qs, preds] = await Promise.all([
+			(await import('$api/bonus')).getBonusQuestions(),
+			(await import('$api/bonus')).getMyBonusPredictions()
+		]);
+		bonusQuestions = qs;
+		const map = new Map<string, string>();
+		for (const p of preds) map.set(p.question_id, p.answer);
+		bonusAnswers = map;
+		bonusInitial = new Map(map);
+	}
+
+	async function handleSaveBonus() {
+		bonusSaveStatus = 'saving';
+		try {
+			const { saveBonusPredictions } = await import('$api/bonus');
+			const preds = Array.from(bonusAnswers.entries()).map(([question_id, answer]) => ({
+				question_id,
+				answer
+			}));
+			const saved = await saveBonusPredictions(preds);
+			// Reset baseline to whatever the backend returned.
+			const fresh = new Map<string, string>();
+			for (const p of saved) fresh.set(p.question_id, p.answer);
+			bonusAnswers = fresh;
+			bonusInitial = new Map(fresh);
+			bonusSaveStatus = 'saved';
+			setTimeout(() => (bonusSaveStatus = 'idle'), 2000);
+		} catch (_e) {
+			bonusSaveStatus = 'error';
+		}
+	}
+
+	function bonusAnswer(qid: string): string {
+		return bonusAnswers.get(qid) ?? '';
+	}
+
+	function setBonusAnswer(qid: string, value: string) {
+		const next = new Map(bonusAnswers);
+		if (value) next.set(qid, value);
+		else next.delete(qid);
+		bonusAnswers = next;
+	}
+
+	// All 48 teams for the team-input dropdown, derived from group fixtures.
+	$: allTeams = (() => {
+		const set = new Set<string>();
+		for (const g of $groupFixtures) {
+			for (const f of g.fixtures) {
+				if (f.home_team && f.home_team !== 'TBD') set.add(f.home_team);
+				if (f.away_team && f.away_team !== 'TBD') set.add(f.away_team);
+			}
+		}
+		return Array.from(set).sort();
+	})();
+
+	// Group questions by category for layout
+	$: bonusByCategory = (() => {
+		const groups: Record<string, typeof bonusQuestions> = {
+			group_stage: [],
+			top_flop: [],
+			awards: []
+		};
+		for (const q of bonusQuestions) {
+			(groups[q.category] ?? (groups[q.category] = [])).push(q);
+		}
+		return groups;
+	})();
+
+	const CATEGORY_LABEL: Record<string, string> = {
+		group_stage: 'Group stage',
+		top_flop: 'Top / Flop',
+		awards: 'Awards'
+	};
+
+	// Load bonus questions + saved picks on mount (gated on auth via the
+	// reactive $isAuthenticated check below).
+	$: if ($isAuthenticated && bonusQuestions.length === 0) {
+		loadBonus().catch(() => {});
+	}
 </script>
 
 <svelte:head>
@@ -605,21 +691,69 @@
 					</div>
 				{/if}
 			{:else if activeSection === 'bonus'}
-				<section class="pn-bonus-row">
-					{#each BONUS_QUESTIONS as bq (bq.id)}
-						<div class="pn-bonus">
-							<div class="l"><span class="pip"></span>Phase I bonus</div>
-							<div class="q">{bq.label}</div>
-							<div class="answer empty">
-								<span>SELECT</span>
-								<span style="font-family: var(--mono); color: var(--ink-3);">▼</span>
-							</div>
-							<div class="pts-pill">+{bq.points} pts</div>
+				{#each Object.entries(bonusByCategory) as [cat, qs] (cat)}
+					{#if qs.length > 0}
+						<div class="pn-banner" style="margin-top: 18px;">
+							<span class="n">{cat === 'group_stage' ? '06' : cat === 'top_flop' ? '07' : '08'}</span>
+							<h2>{CATEGORY_LABEL[cat]}</h2>
+							<span class="end">{qs.length} question{qs.length === 1 ? '' : 's'}</span>
 						</div>
-					{/each}
-				</section>
+						<section class="pn-bonus-row">
+							{#each qs as bq (bq.id)}
+								{@const answer = bonusAnswer(bq.id)}
+								<div class="pn-bonus">
+									<div class="l"><span class="pip"></span>{CATEGORY_LABEL[cat]}</div>
+									<div class="q">{bq.label}</div>
+									{#if bq.input_type === 'team'}
+										<select
+											class="answer"
+											class:empty={!answer}
+											value={answer}
+											on:change={(e) => setBonusAnswer(bq.id, e.currentTarget.value)}
+											style="cursor: pointer;"
+										>
+											<option value="">— Select a team —</option>
+											{#each allTeams as t (t)}
+												<option value={t}>{t}</option>
+											{/each}
+										</select>
+									{:else}
+										<input
+											type="text"
+											class="answer"
+											class:empty={!answer}
+											value={answer}
+											on:input={(e) => setBonusAnswer(bq.id, e.currentTarget.value)}
+											placeholder="Type a player name…"
+										/>
+									{/if}
+									<div class="pts-pill">+{bq.points} pts</div>
+								</div>
+							{/each}
+						</section>
+					{/if}
+				{/each}
+
+				<div style="display: flex; justify-content: flex-end; gap: 10px; margin: 14px 0 22px; align-items: center;">
+					<span style="font-family: var(--mono); font-size: 10px; letter-spacing: 0.10em; text-transform: uppercase; color: var(--ink-3);">
+						{bonusAnswers.size} of {bonusQuestions.length} answered
+					</span>
+					<button
+						class="pn-btn gold"
+						on:click={handleSaveBonus}
+						disabled={!hasUnsavedBonus || bonusSaveStatus === 'saving'}
+					>
+						{bonusSaveStatus === 'saving'
+							? 'Saving…'
+							: bonusSaveStatus === 'saved'
+								? '✓ Saved'
+								: bonusSaveStatus === 'error'
+									? '× Error — retry'
+									: 'Save bonus picks'}
+					</button>
+				</div>
 				<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase;">
-					★ Bonus questions are UI-only for now · backend persistence coming soon
+					★ Bonus picks lock with Phase I · admin will reveal correct answers as the tournament resolves
 				</p>
 			{/if}
 

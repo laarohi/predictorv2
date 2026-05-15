@@ -23,10 +23,42 @@ from app.schemas.prediction import (
     MatchPredictionRead,
     MatchPredictionUpdate,
 )
+from app.models.bonus import BonusPrediction
+from app.services.bonus import BonusQuestion, get_questions as get_bonus_questions
 from app.services.bracket_exposure import compute_bracket_exposure
-from app.services.locking import check_fixture_locked, get_current_phase
+from app.services.locking import check_fixture_locked, get_current_phase, is_phase1_locked
 
 router = APIRouter()
+
+
+class BonusQuestionResponse(BaseModel):
+    """A bonus question as rendered for the wizard/admin UI."""
+
+    id: str
+    category: str  # 'group_stage' | 'top_flop' | 'awards'
+    label: str
+    input_type: str  # 'team' | 'player'
+    points: int
+
+
+class BonusPredictionResponse(BaseModel):
+    """One user's answer to one bonus question."""
+
+    question_id: str
+    answer: str
+
+
+class BonusPredictionUpdate(BaseModel):
+    """Payload for upserting a single bonus pick."""
+
+    question_id: str
+    answer: str
+
+
+class BonusPredictionBatch(BaseModel):
+    """Payload for upserting multiple bonus picks at once."""
+
+    predictions: list[BonusPredictionUpdate]
 
 
 class BracketExposureResponse(BaseModel):
@@ -392,6 +424,108 @@ async def get_community_predictions(
         predictions=predictions,
         actual=actual,
     )
+
+
+@router.get("/bonus/questions", response_model=list[BonusQuestionResponse])
+async def get_bonus_questions_route(
+    _user: CurrentUser,
+) -> list[BonusQuestionResponse]:
+    """Return the list of bonus questions (loaded from worldcup2026.yml).
+
+    Labels have {top_n} already substituted with the configured value.
+    Points are per-category. Frontend renders these as the wizard's Bonus
+    tab; question IDs are stable strings used as upsert keys for picks.
+    """
+    qs = get_bonus_questions()
+    return [
+        BonusQuestionResponse(
+            id=q.id,
+            category=q.category,
+            label=q.label,
+            input_type=q.input_type,
+            points=q.points,
+        )
+        for q in qs
+    ]
+
+
+@router.get("/bonus", response_model=list[BonusPredictionResponse])
+async def get_my_bonus_predictions(
+    session: DbSession,
+    current_user: CurrentUser,
+) -> list[BonusPredictionResponse]:
+    """The calling user's current bonus picks. Empty list if none saved yet."""
+    result = await session.execute(
+        select(BonusPrediction).where(BonusPrediction.user_id == current_user.id)
+    )
+    return [
+        BonusPredictionResponse(question_id=p.question_id, answer=p.answer)
+        for p in result.scalars().all()
+    ]
+
+
+@router.post("/bonus", response_model=list[BonusPredictionResponse])
+async def save_bonus_predictions(
+    payload: BonusPredictionBatch,
+    session: DbSession,
+    current_user: CurrentUser,
+) -> list[BonusPredictionResponse]:
+    """Upsert the calling user's bonus picks. Locks with Phase 1 — once the
+    phase1_deadline passes, this endpoint returns 403.
+
+    Unknown question_ids are silently ignored (defends against YAML edits
+    that remove or rename a question). Empty `answer` strings delete the
+    prediction so users can clear an unwanted pick.
+    """
+    if await is_phase1_locked(session):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Bonus predictions are locked",
+        )
+
+    valid_ids = {q.id for q in get_bonus_questions()}
+
+    # Load existing predictions in one query for upsert.
+    existing_rows = (
+        await session.execute(
+            select(BonusPrediction).where(BonusPrediction.user_id == current_user.id)
+        )
+    ).scalars().all()
+    by_qid: dict[str, BonusPrediction] = {p.question_id: p for p in existing_rows}
+
+    for update in payload.predictions:
+        if update.question_id not in valid_ids:
+            continue
+        existing = by_qid.get(update.question_id)
+        clean_answer = update.answer.strip()
+        if not clean_answer:
+            # Empty string → delete the prediction.
+            if existing is not None:
+                await session.delete(existing)
+            continue
+        if existing is not None:
+            existing.answer = clean_answer
+            existing.updated_at = utc_now()
+        else:
+            session.add(
+                BonusPrediction(
+                    user_id=current_user.id,
+                    question_id=update.question_id,
+                    answer=clean_answer,
+                )
+            )
+    await session.commit()
+
+    # Re-read for return
+    refreshed = (
+        await session.execute(
+            select(BonusPrediction).where(BonusPrediction.user_id == current_user.id)
+        )
+    ).scalars().all()
+    return [
+        BonusPredictionResponse(question_id=p.question_id, answer=p.answer)
+        for p in refreshed
+    ]
 
 
 @router.get("/bracket-exposure", response_model=BracketExposureResponse)

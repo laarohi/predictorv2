@@ -52,6 +52,73 @@ scoring:
     phase_1: 1.0
     phase_2: 0.7
 
+# Bonus questions
+# These are pre-tournament predictions that lock with Phase 1 and are scored
+# when the admin enters the correct answer in /admin. Three categories.
+#
+# Each question has a stable `id` used as the foreign key in bonus_predictions
+# and bonus_answers. Labels support {top_n} substitution so changing top_n
+# below updates the wording everywhere automatically.
+bonus:
+  # Configurable: which FIFA rank cutoff defines "dark horse" / "flop". Users
+  # see this number substituted into the question labels; the admin enters
+  # the correct answer based on this same cutoff.
+  top_n: 10
+
+  # Point values per category. Flat within a category, so all 4 group-stage
+  # questions are worth the same. Tweak here without code changes.
+  points:
+    group_stage: 15
+    top_flop: 20
+    awards: 20
+
+  # Question definitions. `input_type` drives the wizard UI:
+  #   - 'team'   → 48-team dropdown sourced from the groups: section above
+  #   - 'player' → free-text input until the squads table ships, at which
+  #                point answers get normalized against player_id lookups.
+  questions:
+    # ── Group stage ──────────────────────────────────────────────────
+    - id: most_goals_scored_group
+      category: group_stage
+      label: "Team to score the most goals in the group stage"
+      input_type: team
+    - id: least_goals_scored_group
+      category: group_stage
+      label: "Team to score the fewest goals in the group stage"
+      input_type: team
+    - id: most_goals_conceded_group
+      category: group_stage
+      label: "Team to concede the most goals in the group stage"
+      input_type: team
+    - id: least_goals_conceded_group
+      category: group_stage
+      label: "Team to concede the fewest goals in the group stage"
+      input_type: team
+
+    # ── Top / Flop (FIFA top_n cutoff) ───────────────────────────────
+    - id: dark_horse
+      category: top_flop
+      label: "Dark horse — team outside FIFA top {top_n} that progresses furthest"
+      input_type: team
+    - id: flop
+      category: top_flop
+      label: "Flop — team inside FIFA top {top_n} eliminated earliest"
+      input_type: team
+
+    # ── Awards (FIFA awards ceremony) ────────────────────────────────
+    - id: best_player
+      category: awards
+      label: "Best player (Golden Ball)"
+      input_type: player
+    - id: top_scorer
+      category: awards
+      label: "Top scorer (Golden Boot)"
+      input_type: player
+    - id: best_young_player
+      category: awards
+      label: "Best young player"
+      input_type: player
+
 # Group stage configuration
 groups:
   A: ["United States", "Morocco", "Jamaica", "TBD"]
