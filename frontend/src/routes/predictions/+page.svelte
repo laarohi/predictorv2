@@ -27,6 +27,7 @@
 		groupFixtures,
 		fetchActualKnockoutFixtures,
 		fetchActualStandings,
+		actualKnockoutFixtures,
 		actualGroupStandingsMap,
 		actualStandingsLoading
 	} from '$stores/fixtures';
@@ -43,8 +44,7 @@
 
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import PnFlag from '$components/panini/PnFlag.svelte';
-	import { KnockoutBracket } from '$components/bracket';
-	import Phase2Content from '$components/predictions/Phase2Content.svelte';
+	import PnKnockoutBracket from '$components/panini/PnKnockoutBracket.svelte';
 
 	$: if (!$isAuthenticated) {
 		goto('/login');
@@ -175,7 +175,7 @@
 	}
 
 	// ---- Bracket (Phase 1) ------------------------------------------------
-	let bracketComponent: KnockoutBracket;
+	let bracketComponent: PnKnockoutBracket;
 	$: displayBracket = $unsavedBracketPrediction || $bracketPrediction;
 
 	function bracketToPredictions(b: BracketPrediction): TeamAdvancementPrediction[] {
@@ -210,7 +210,7 @@
 	}
 
 	// ---- Phase 2 wiring ---------------------------------------------------
-	let phase2BracketComponent: KnockoutBracket;
+	let phase2BracketComponent: PnKnockoutBracket;
 	let phase2BracketSaveStatus: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
 	$: phase2DisplayBracket = $unsavedPhase2BracketPrediction || $phase2BracketPrediction;
 	$: hasPhase2BracketSelections = !!(
@@ -458,27 +458,21 @@
 					</div>
 				</section>
 			{:else if activePill === 'knockout'}
-				<section class="pn-wiz-bracket-wrap">
-					<div class="h">
-						<span><em>Knockout</em> bracket · Phase 1</span>
-						<span class="note">Interactive · pick winners through to the final</span>
-					</div>
-					<KnockoutBracket
-						bind:this={bracketComponent}
-						prediction={displayBracket}
-						groupStandings={standingsMap}
-						locked={$isPhase1Locked}
-						phase="phase_1"
-						on:update={handleBracketUpdate}
-					/>
-					<div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px;">
-						{#if $hasUnsavedBracketChanges}
-							<button class="pn-btn gold" on:click={handleSaveBracket} disabled={bracketSaveStatus === 'saving'}>
-								{bracketSaveStatus === 'saving' ? 'Saving…' : bracketSaveStatus === 'saved' ? '✓ Saved' : 'Save bracket'}
-							</button>
-						{/if}
-					</div>
-				</section>
+				<PnKnockoutBracket
+					bind:this={bracketComponent}
+					prediction={displayBracket}
+					groupStandings={standingsMap}
+					locked={$isPhase1Locked}
+					phase="phase_1"
+					on:update={handleBracketUpdate}
+				/>
+				<div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; margin-bottom: 22px;">
+					{#if $hasUnsavedBracketChanges}
+						<button class="pn-btn gold" on:click={handleSaveBracket} disabled={bracketSaveStatus === 'saving'}>
+							{bracketSaveStatus === 'saving' ? 'Saving…' : bracketSaveStatus === 'saved' ? '✓ Saved' : 'Save bracket'}
+						</button>
+					{/if}
+				</div>
 			{:else if activePill === 'bonus'}
 				<section class="pn-bonus-row">
 					{#each BONUS_QUESTIONS as bq (bq.id)}
@@ -518,33 +512,119 @@
 			</section>
 		{/if}
 
-		<!-- Phase 2 — reuse existing component, wrapped in Panini chrome -->
+		<!-- Phase 2 — Panini bracket + knockout match score cards -->
 		{#if activePhase === 'phase2'}
-			<section style="margin-bottom: 22px;">
-				<Phase2Content
-					isPhase2BracketLocked={$isPhase2BracketLocked}
-					actualStandingsLoading={$actualStandingsLoading}
-					actualGroupStandingsMap={$actualGroupStandingsMap}
-					{phase2DisplayBracket}
-					hasPhase2BracketChanges={$hasUnsavedPhase2BracketChanges}
-					{hasPhase2BracketSelections}
-					{phase2BracketSaveStatus}
-					bind:phase2BracketComponent
-					knockoutRounds={[]}
-					predictionMap={$predictionsByFixture}
-					hasUnsavedChanges={$hasUnsavedChanges}
-					{saveStatus}
-					unsavedChangesCount={$unsavedChangesCount}
-					lastLocalSave={null}
-					onClearBracket={handleClearPhase2Bracket}
-					onSaveBracket={handleSavePhase2Bracket}
-					onSaveAll={handleSaveAll}
-					onBracketUpdate={handlePhase2BracketUpdate}
+			{#if $actualStandingsLoading}
+				<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.08em; text-transform: uppercase; padding: 16px;">Loading Phase II data…</p>
+			{:else}
+				<PnKnockoutBracket
+					bind:this={phase2BracketComponent}
+					prediction={phase2DisplayBracket}
+					groupStandings={$actualGroupStandingsMap}
+					locked={$isPhase2BracketLocked}
+					phase="phase_2"
+					hideR32
+					on:update={handlePhase2BracketUpdate}
 				/>
+				<div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; margin-bottom: 22px;">
+					{#if $hasUnsavedPhase2BracketChanges}
+						<button class="pn-btn gold" on:click={handleSavePhase2Bracket} disabled={phase2BracketSaveStatus === 'saving'}>
+							{phase2BracketSaveStatus === 'saving' ? 'Saving…' : phase2BracketSaveStatus === 'saved' ? '✓ Saved' : 'Save bracket'}
+						</button>
+					{/if}
+				</div>
+
+				<!-- Knockout fixture score predictions (Phase 2 only) -->
+				<section class="pn-wiz-group">
+					<h2 style="font-family: var(--display); font-size: 22px; text-transform: uppercase; margin: 0 0 12px;">
+						Knockout <em style="color: var(--red); font-style: normal;">scores</em>
+					</h2>
+					<div class="pn-wiz-matches">
+						{#each $actualKnockoutFixtures as f (f.id)}
+							{@const state = predictionState(f)}
+							<div class="pn-mcard" class:locked={state === 'locked'} class:empty={state === 'empty'}>
+								<div class="meta">
+									<span><b>{teamCode(f.home_team)} vs {teamCode(f.away_team)}</b></span>
+									<span>{new Date(f.kickoff).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · {new Date(f.kickoff).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+								</div>
+								<div class="row">
+									<div class="team">
+										<PnFlag code={teamCode(f.home_team)} w={28} h={20} />
+										<span class="nm">{f.home_team}</span>
+									</div>
+									<div class="pn-score">
+										<input
+											type="number"
+											class="pn-score-cell"
+											class:empty={state === 'empty'}
+											min="0"
+											max="20"
+											disabled={f.is_locked}
+											value={scoreValue(f.id, 'home')}
+											on:input={(e) => handleScoreInput(f.id, 'home', e.currentTarget.value)}
+											aria-label="{f.home_team} score"
+										/>
+										<span class="dash">–</span>
+										<input
+											type="number"
+											class="pn-score-cell"
+											class:empty={state === 'empty'}
+											min="0"
+											max="20"
+											disabled={f.is_locked}
+											value={scoreValue(f.id, 'away')}
+											on:input={(e) => handleScoreInput(f.id, 'away', e.currentTarget.value)}
+											aria-label="{f.away_team} score"
+										/>
+									</div>
+									<div class="team r">
+										<PnFlag code={teamCode(f.away_team)} w={28} h={20} />
+										<span class="nm">{f.away_team}</span>
+									</div>
+								</div>
+								<div class="save-row">
+									{#if state === 'locked'}
+										<span class="save-tag locked">Locked</span>
+										<span>No edits</span>
+									{:else if state === 'draft'}
+										<span class="save-tag draft">Draft</span>
+										<span>Save below to commit</span>
+									{:else if state === 'saved'}
+										<span class="save-tag saved">✓ Saved</span>
+										<span>Submitted</span>
+									{:else}
+										<span class="save-tag empty">— Empty</span>
+										<span>Enter a score to predict</span>
+									{/if}
+								</div>
+							</div>
+						{:else}
+							<div style="padding: 16px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">
+								No knockout fixtures yet — Phase II starts once groups conclude.
+							</div>
+						{/each}
+					</div>
+				</section>
+			{/if}
+
+			<!-- Sticky save bar for phase 2 match score picks -->
+			<section class="pn-wiz-foot">
+				<div class="stats">
+					<b>{$unsavedChangesCount}</b> match unsaved
+				</div>
+				<button
+					class="submit-btn"
+					class:success={saveStatus === 'saved'}
+					class:error={saveStatus === 'error'}
+					on:click={handleSaveAll}
+					disabled={!$hasUnsavedChanges || saveStatus === 'saving' || $matchPredictionsLoading}
+				>
+					{#if saveStatus === 'saving'}Saving…
+					{:else if saveStatus === 'saved'}✓ Saved
+					{:else if saveStatus === 'error'}× Error — retry
+					{:else}Save Phase II ({$unsavedChangesCount}){/if}
+				</button>
 			</section>
-			<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase;">
-				★ Phase II uses the legacy dark-theme widgets pending a Panini restyle of bracket + match cards
-			</p>
 		{/if}
 	</PnPageShell>
 {/if}

@@ -125,6 +125,8 @@ The current Leaderboard supports clicking any row to expand and see a per-phase 
 
 **Why A:** the Panini table is the design we signed off on; expandable rows would change its skim-ability. `/profile/[userId]` already exposes the breakdown so no data is lost. Easy to revert by re-adding the row click + a state machine.
 
+Luke: Keep the expander, match the style of the panini design
+
 ### 2026-05-15 — Profile pages deferred (kept in legacy dark theme)
 
 `/profile` and `/profile/[userId]` are 366 lines + ~similar containing user stats, prediction history, password-change form, and a public-profile view with breakdown. Like the Admin port, a careful Panini rewrite would take hours, and the user-facing version is reachable only by clicking a player name on the Leaderboard.
@@ -133,6 +135,8 @@ The current Leaderboard supports clicking any row to expand and see a per-phase 
 
 **Push back if you want** Profile in Panini too — separate follow-up plan, estimate 3-4 hours.
 
+Luke: I want the Profile page in Panini too
+
 ### 2026-05-15 — Admin page deferred (kept in legacy dark theme)
 
 `/admin` is 626 lines of admin-only form management (phase deadlines, phase 2 activation, score sync, user toggles). A faithful Panini rewrite would take hours, and the page is used by exactly one person (you). Half-porting it would look worse than not porting it.
@@ -140,6 +144,8 @@ The current Leaderboard supports clicking any row to expand and see a per-phase 
 **Decision:** leave `/admin` in the legacy dark `predictor` theme. It is **not** in `PANINI_ROUTES`, so the layout's dark navbar is still shown on this route. Functionally unchanged.
 
 **Push back if you want** a full Admin Panini design — I'll write a dedicated plan for it. Estimated 4-6 hours of careful work.
+
+Luke: I want a full admin page
 
 ### 2026-05-15 — Wizard reuses KnockoutBracket and Phase2Content unchanged
 
@@ -151,6 +157,8 @@ The new Panini wizard rewrites the **outer** chrome and per-group view in Panini
 **Why:** these components contain hundreds of lines of interaction logic (drag-drop / click-select, persistence, derived bracket state). Rewriting them in Panini would be a multi-day project on its own and risks breaking the prediction save flow. Visually they will look "off-brand" inside the cream Panini chrome — they still use the dark-theme Tailwind utilities (`bg-base-300/50` etc.) that point to DaisyUI tokens — but they remain fully functional.
 
 **Follow-up:** write a separate plan to restyle these components to match Panini, OR rebuild them on top of Panini primitives. Until then, the wizard is fully usable.
+
+Luke: i want the to use the new knockout bracket designed in the panini, we need to redesign.  
 
 ### 2026-05-15 — Bonus questions are UI stubs with no persistence
 
