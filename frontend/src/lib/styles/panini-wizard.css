@@ -235,27 +235,207 @@
 	pointer-events: none;
 }
 
-/* ==== Pill navigator (group pills only) ====
+/* ==== Pill navigator (group pills) ====
  *
- * Grid with auto-fit + minmax instead of flex-wrap. Each pill is at
- * least 140px wide; the grid fills the row with as many pills as that
- * minimum allows, then stretches each pill to fill the leftover space
- * evenly. Result: no awkward right-side gap, partial last row
- * distributes pills uniformly across the available width, Group A
- * stays top-left so alphabetical scanning still works.
+ * Two distinct layouts depending on viewport width:
  *
- * Why this is better than flex-wrap: flex-wrap leaves leftover space on
- * the trailing edge of every row (because flex doesn't redistribute
- * across siblings without explicit `flex: 1 0 auto` on every child,
- * which would still leave the last partial row unbalanced). Grid's
- * fr unit handles row-balanced sizing for free. */
+ *   >= 800px (desktop): 12 group pills sit in a divisor-of-12 grid
+ *     (6 cols at >= 1100px, 4 cols at 800-1099px). 3rd Place is a
+ *     separate button on the right that vertically spans the full
+ *     group-grid height. No right-side gap on any row, no awkward
+ *     partial row anywhere.
+ *
+ *   < 800px (mobile): grid is replaced by a single dropdown picker
+ *     flanked by prev/next arrow buttons; 3rd Place becomes a
+ *     standalone full-width button below the picker row.
+ *
+ * The .pn-wiz-nav-desktop and .pn-wiz-nav-mobile siblings are toggled
+ * via display:none at the breakpoint.
+ *
+ * Why 12 deserves explicit divisor logic instead of auto-fit: with
+ * auto-fit + minmax you can't control the row count, so 5-col rows
+ * (leaving a 7-pill orphan row) or other unbalanced configurations
+ * are possible. Explicit `repeat(6, 1fr)` / `repeat(4, 1fr)` keeps
+ * each row evenly populated. */
 .pn .pn-wiz-nav {
-	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-	gap: 8px;
 	margin-bottom: 22px;
 	padding: 4px 0 12px;
 	border-bottom: 1.5px dashed var(--paper-3);
+}
+
+/* --- Desktop layout --- */
+.pn .pn-wiz-nav-desktop {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 8px;
+}
+.pn .pn-wiz-nav-desktop .groups-grid {
+	display: grid;
+	gap: 8px;
+}
+@media (min-width: 1100px) {
+	.pn .pn-wiz-nav-desktop .groups-grid {
+		grid-template-columns: repeat(6, 1fr);
+	}
+}
+@media (min-width: 800px) and (max-width: 1099px) {
+	.pn .pn-wiz-nav-desktop .groups-grid {
+		grid-template-columns: repeat(4, 1fr);
+	}
+}
+/* 3rd Place sits in the right column, stretches to the full height of
+ * the groups grid. Text wraps to two lines via the explicit <br> in
+ * the template. */
+.pn .pn-wiz-nav-desktop .pn-wiz-gp.special {
+	align-self: stretch;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	min-width: 100px;
+	padding: 8px 16px;
+	line-height: 1.1;
+	font-size: 14px;
+}
+
+/* --- Mobile layout --- */
+.pn .pn-wiz-nav-mobile {
+	display: none; /* shown only at < 800px (see media query below) */
+	flex-direction: column;
+	gap: 10px;
+}
+@media (max-width: 799px) {
+	.pn .pn-wiz-nav-desktop {
+		display: none;
+	}
+	.pn .pn-wiz-nav-mobile {
+		display: flex;
+	}
+}
+.pn .pn-wiz-nav-mobile .picker-row {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	gap: 8px;
+}
+.pn .pn-wiz-nav-mobile .arrow {
+	background: var(--paper);
+	border: 2px solid var(--ink);
+	font-family: var(--display);
+	font-size: 14px;
+	color: var(--ink);
+	cursor: pointer;
+	padding: 0 14px;
+	transition: background 80ms, color 80ms;
+}
+.pn .pn-wiz-nav-mobile .arrow:hover,
+.pn .pn-wiz-nav-mobile .arrow:active {
+	background: var(--ink);
+	color: var(--paper);
+}
+.pn .pn-wiz-nav-mobile .dropdown {
+	position: relative;
+}
+.pn .pn-wiz-nav-mobile .trigger {
+	width: 100%;
+	background: var(--paper);
+	border: 2px solid var(--ink);
+	padding: 10px 14px;
+	font-family: var(--display);
+	font-size: 14px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	cursor: pointer;
+	display: grid;
+	grid-template-columns: 1fr auto auto;
+	align-items: center;
+	gap: 8px;
+	color: var(--ink);
+}
+.pn .pn-wiz-nav-mobile .trigger .prog {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-3);
+	letter-spacing: 0.06em;
+}
+.pn .pn-wiz-nav-mobile .trigger .chev {
+	font-size: 12px;
+	transition: transform 120ms;
+}
+.pn .pn-wiz-nav-mobile .trigger.open .chev {
+	transform: rotate(180deg);
+}
+.pn .pn-wiz-nav-mobile .trigger.done {
+	background: var(--green);
+	color: var(--paper);
+}
+.pn .pn-wiz-nav-mobile .trigger.done .prog { color: var(--paper-3); }
+.pn .pn-wiz-nav-mobile .trigger.tied {
+	background: var(--red);
+	color: var(--paper);
+}
+.pn .pn-wiz-nav-mobile .trigger.tied .prog { color: var(--paper-3); }
+.pn .pn-wiz-nav-mobile .trigger.special {
+	background: var(--gold);
+	color: var(--ink);
+}
+.pn .pn-wiz-nav-mobile .menu {
+	position: absolute;
+	top: calc(100% + 6px);
+	left: 0;
+	right: 0;
+	z-index: 20;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 4px 4px 0 var(--ink);
+	max-height: 60vh;
+	overflow-y: auto;
+}
+.pn .pn-wiz-nav-mobile .menu li button {
+	width: 100%;
+	background: transparent;
+	border: 0;
+	border-bottom: 1px dashed var(--paper-3);
+	padding: 10px 14px;
+	font-family: var(--display);
+	font-size: 14px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	cursor: pointer;
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 12px;
+	align-items: center;
+	color: var(--ink);
+	text-align: left;
+}
+.pn .pn-wiz-nav-mobile .menu li:last-child button { border-bottom: 0; }
+.pn .pn-wiz-nav-mobile .menu li button:hover {
+	background: var(--paper-2);
+}
+.pn .pn-wiz-nav-mobile .menu li button .prog {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-3);
+	letter-spacing: 0.06em;
+}
+.pn .pn-wiz-nav-mobile .menu li button.active {
+	background: var(--ink);
+	color: var(--paper);
+}
+.pn .pn-wiz-nav-mobile .menu li button.active .prog { color: var(--paper-3); }
+.pn .pn-wiz-nav-mobile .menu li button.done {
+	background: rgba(46, 110, 64, 0.18); /* faint green tint */
+}
+.pn .pn-wiz-nav-mobile .menu li button.tied {
+	background: rgba(200, 40, 31, 0.18); /* faint red tint */
+}
+.pn .pn-wiz-nav-mobile .pn-wiz-gp.special.wide {
+	width: 100%;
+	padding: 10px 14px;
+	min-width: 0;
 }
 .pn .pn-wiz-gp {
 	flex: 0 0 auto;

@@ -106,6 +106,62 @@
 		if (!next || !card.contains(next)) editingFixtureId = null;
 	}
 
+	// Mobile-only dropdown state for the group picker. On desktop the
+	// pill grid is shown directly; on mobile (< 800px) we collapse to
+	// a single dropdown with prev/next arrows on either side.
+	let groupDropdownOpen = false;
+
+	// Reactive details about whichever group is currently active. Used by
+	// the mobile dropdown trigger so it can show the right label, progress
+	// counter, and done/tied/special styling without per-render @const blocks.
+	$: currentGroupObj = $groupFixtures.find((g) => g.group === activeGroupPill);
+	$: currentGp = currentGroupObj ? groupProgress(currentGroupObj) : null;
+	$: currentIsComplete = !!(currentGp && currentGp.total > 0 && currentGp.done === currentGp.total);
+	$: currentHasTie = groupStandingsWarnings.some((w) => w.group === activeGroupPill);
+
+	function selectGroup(g: string) {
+		activeGroupPill = g;
+		groupDropdownOpen = false;
+	}
+
+	function prevGroup() {
+		const list = $groupFixtures.map((g) => g.group);
+		if (list.length === 0) return;
+		if (activeGroupPill === 'thirdplace') {
+			activeGroupPill = list[list.length - 1];
+			return;
+		}
+		const idx = list.indexOf(activeGroupPill);
+		// Wrap: leftmost group → 3rd Place
+		activeGroupPill = idx <= 0 ? 'thirdplace' : list[idx - 1];
+	}
+
+	function nextGroup() {
+		const list = $groupFixtures.map((g) => g.group);
+		if (list.length === 0) return;
+		if (activeGroupPill === 'thirdplace') {
+			activeGroupPill = list[0];
+			return;
+		}
+		const idx = list.indexOf(activeGroupPill);
+		// Wrap: rightmost group → 3rd Place
+		activeGroupPill = idx >= list.length - 1 ? 'thirdplace' : list[idx + 1];
+	}
+
+	// Svelte action: invoke `callback` when a mousedown lands outside `node`.
+	// Used to close the mobile group dropdown when the user taps elsewhere.
+	function clickOutside(node: HTMLElement, callback: () => void) {
+		function handle(e: MouseEvent) {
+			if (!node.contains(e.target as Node)) callback();
+		}
+		document.addEventListener('mousedown', handle);
+		return {
+			destroy() {
+				document.removeEventListener('mousedown', handle);
+			}
+		};
+	}
+
 	onMount(async () => {
 		if ($isAuthenticated) {
 			await Promise.all([
@@ -619,28 +675,98 @@
 			<!-- Group pills (only when the Groups section is selected) -->
 			{#if activeSection === 'groups'}
 				<section class="pn-wiz-nav">
-					{#each $groupFixtures as g (g.group)}
-						{@const gp = groupProgress(g)}
-						{@const isComplete = gp.total > 0 && gp.done === gp.total}
-						{@const hasTie = groupStandingsWarnings.some((w) => w.group === g.group)}
+					<!-- Desktop layout: 12 groups in a divisor-of-12 grid +
+					     3rd Place spanning the full height on the right.
+					     Hidden on mobile via CSS media query. -->
+					<div class="pn-wiz-nav-desktop">
+						<div class="groups-grid">
+							{#each $groupFixtures as g (g.group)}
+								{@const gp = groupProgress(g)}
+								{@const isComplete = gp.total > 0 && gp.done === gp.total}
+								{@const hasTie = groupStandingsWarnings.some((w) => w.group === g.group)}
+								<button
+									class="pn-wiz-gp"
+									class:active={activeGroupPill === g.group}
+									class:done={isComplete && !hasTie}
+									class:tied={isComplete && hasTie}
+									on:click={() => (activeGroupPill = g.group)}
+								>
+									Group {g.group}
+									<span class="gp-prog">{gp.done}/{gp.total}</span>
+								</button>
+							{/each}
+						</div>
 						<button
-							class="pn-wiz-gp"
-							class:active={activeGroupPill === g.group}
-							class:done={isComplete && !hasTie}
-							class:tied={isComplete && hasTie}
-							on:click={() => (activeGroupPill = g.group)}
+							class="pn-wiz-gp special"
+							class:active={activeGroupPill === 'thirdplace'}
+							on:click={() => (activeGroupPill = 'thirdplace')}
 						>
-							Group {g.group}
-							<span class="gp-prog">{gp.done}/{gp.total}</span>
+							3rd<br />Place
 						</button>
-					{/each}
-					<button
-						class="pn-wiz-gp special"
-						class:active={activeGroupPill === 'thirdplace'}
-						on:click={() => (activeGroupPill = 'thirdplace')}
-					>
-						3rd Place
-					</button>
+					</div>
+
+					<!-- Mobile layout: prev/next arrows wrap a Panini-styled
+					     dropdown picker. 3rd Place is a separate full-width
+					     button below. Hidden on desktop via CSS media query. -->
+					<div class="pn-wiz-nav-mobile">
+						<div class="picker-row">
+							<button
+								class="arrow"
+								on:click={prevGroup}
+								aria-label="Previous group"
+							>◀</button>
+							<div class="dropdown" use:clickOutside={() => (groupDropdownOpen = false)}>
+								<button
+									class="trigger"
+									class:done={currentIsComplete && !currentHasTie}
+									class:tied={currentIsComplete && currentHasTie}
+									class:open={groupDropdownOpen}
+									class:special={activeGroupPill === 'thirdplace'}
+									on:click={() => (groupDropdownOpen = !groupDropdownOpen)}
+								>
+									<span class="lbl">
+										{activeGroupPill === 'thirdplace' ? '3rd Place' : `Group ${activeGroupPill || 'A'}`}
+									</span>
+									{#if currentGp}
+										<span class="prog">{currentGp.done}/{currentGp.total}</span>
+									{/if}
+									<span class="chev">▾</span>
+								</button>
+								{#if groupDropdownOpen}
+									<ul class="menu" transition:fade={{ duration: 120 }}>
+										{#each $groupFixtures as g (g.group)}
+											{@const gp = groupProgress(g)}
+											{@const isComplete = gp.total > 0 && gp.done === gp.total}
+											{@const hasTie = groupStandingsWarnings.some((w) => w.group === g.group)}
+											<li>
+												<button
+													class:active={activeGroupPill === g.group}
+													class:done={isComplete && !hasTie}
+													class:tied={isComplete && hasTie}
+													on:click={() => selectGroup(g.group)}
+												>
+													<span class="lbl">Group {g.group}</span>
+													<span class="prog">{gp.done}/{gp.total}</span>
+												</button>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+							</div>
+							<button
+								class="arrow"
+								on:click={nextGroup}
+								aria-label="Next group"
+							>▶</button>
+						</div>
+						<button
+							class="pn-wiz-gp special wide"
+							class:active={activeGroupPill === 'thirdplace'}
+							on:click={() => (activeGroupPill = 'thirdplace')}
+						>
+							3rd Place
+						</button>
+					</div>
 				</section>
 			{/if}
 
