@@ -35,6 +35,24 @@ export async function getAgreements(fixtureIds?: string[]): Promise<FixtureAgree
 	return api.get<FixtureAgreement[]>(url);
 }
 
+// ---- Bracket exposure (replaces stubBracketExposure) ----
+
+export interface BracketExposureResponse {
+	points_available: number;
+	picks_locked: number;
+	picks_total: number;
+	/** Team name (not code) of the user's predicted tournament winner; null if not picked yet. */
+	final_winner: string | null;
+	/** The other finalist; null if not predicted or only the winner is set. */
+	final_opponent: string | null;
+}
+
+export async function getBracketExposure(
+	phase: 'phase_1' | 'phase_2' = 'phase_1'
+): Promise<BracketExposureResponse> {
+	return api.get<BracketExposureResponse>(`/predictions/bracket-exposure?phase=${phase}`);
+}
+
 export async function updateMatchPrediction(
 	fixtureId: string,
 	data: MatchPredictionUpdate

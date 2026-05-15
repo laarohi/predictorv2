@@ -35,7 +35,12 @@
 		type RankTrajectoryResponse,
 		type SteepestClimbersResponse
 	} from '$api/leaderboard';
-	import { getAgreements, type FixtureAgreement } from '$api/predictions';
+	import {
+		getAgreements,
+		getBracketExposure,
+		type BracketExposureResponse,
+		type FixtureAgreement
+	} from '$api/predictions';
 	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
 	import type { Fixture, LeaderboardEntry } from '$types';
 
@@ -50,6 +55,7 @@
 	let realTrajectory: RankTrajectoryResponse | null = null;
 	let realClimbers: SteepestClimbersResponse | null = null;
 	let realAgreements: FixtureAgreement[] | null = null;
+	let realExposure: BracketExposureResponse | null = null;
 
 	onMount(async () => {
 		if ($isAuthenticated) {
@@ -57,16 +63,18 @@
 			fetchLeaderboard();
 			fetchMatchPredictions();
 			try {
-				[realTrajectory, realClimbers, realAgreements] = await Promise.all([
+				[realTrajectory, realClimbers, realAgreements, realExposure] = await Promise.all([
 					getMyRankTrajectory(7),
 					getSteepestClimbers(7, 32),
-					getAgreements()
+					getAgreements(),
+					getBracketExposure('phase_1')
 				]);
 			} catch (_e) {
 				// Backend not reachable / endpoint missing — stubs take over below
 				realTrajectory = null;
 				realClimbers = null;
 				realAgreements = null;
+				realExposure = null;
 			}
 		}
 	});
@@ -110,8 +118,43 @@
 		}
 		return stubRankTrajectory(userId, rank || 1, totalPlayers);
 	})();
-	$: bracketExposure = stubBracketExposure(userId);
-	$: bonusHaul = stubBonusHaul(userId, exactCount);
+	// Bracket exposure: real backend computation when available; stub otherwise.
+	$: bracketExposure = (() => {
+		if (realExposure) {
+			return {
+				pointsAvailable: realExposure.points_available,
+				picksLocked: realExposure.picks_locked,
+				picksTotal: realExposure.picks_total,
+				finalPick:
+					realExposure.final_winner && realExposure.final_opponent
+						? {
+							winnerCode: teamCode(realExposure.final_winner),
+							opponentCode: teamCode(realExposure.final_opponent)
+						}
+						: null
+			};
+		}
+		return stubBracketExposure(userId);
+	})();
+	// Bonus haul: real breakdown of points earned BEYOND the base 5-per-correct-
+	// outcome. `fromExact` is the exact-score-bonus column, `fromUnderdogs`
+	// maps to the hybrid_bonus_points column (the rarity bonus — "underdog"
+	// in product language). Both are real values from the cached
+	// PointBreakdown that ships with the user's leaderboard row, so no
+	// extra fetch is needed.
+	$: bonusHaul = (() => {
+		const b = $currentUserPosition?.breakdown;
+		if (b) {
+			return {
+				fromExact: b.exact_score_points,
+				fromUnderdogs: b.hybrid_bonus_points,
+				total: b.exact_score_points + b.hybrid_bonus_points
+			};
+		}
+		// Fallback while the leaderboard is loading — keep the stub so the
+		// KPI strip doesn't flash zeros.
+		return stubBonusHaul(userId, exactCount);
+	})();
 	// Steepest climb: real climbers if available, stub fallback otherwise.
 	$: climb = (() => {
 		if (realClimbers && realClimbers.entries.length > 0) {

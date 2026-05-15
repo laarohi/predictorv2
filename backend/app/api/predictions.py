@@ -23,9 +23,22 @@ from app.schemas.prediction import (
     MatchPredictionRead,
     MatchPredictionUpdate,
 )
+from app.services.bracket_exposure import compute_bracket_exposure
 from app.services.locking import check_fixture_locked, get_current_phase
 
 router = APIRouter()
+
+
+class BracketExposureResponse(BaseModel):
+    """How many bracket points the calling user still has on the line."""
+
+    points_available: int
+    picks_locked: int
+    picks_total: int
+    # The user's predicted finalists (FIFA 3-letter codes are produced
+    # client-side from team names via teamCodes.ts).
+    final_winner: str | None
+    final_opponent: str | None
 
 
 class FixtureAgreement(BaseModel):
@@ -378,6 +391,31 @@ async def get_community_predictions(
         away_team=fixture.away_team,
         predictions=predictions,
         actual=actual,
+    )
+
+
+@router.get("/bracket-exposure", response_model=BracketExposureResponse)
+async def get_bracket_exposure(
+    session: DbSession,
+    current_user: CurrentUser,
+    phase: str = "phase_1",
+) -> BracketExposureResponse:
+    """How many bracket points the calling user still has on the line.
+
+    Replaces stubBracketExposure on the dashboard. Currently returns the
+    MAXIMUM exposure (sum of stage points for all picks, assuming none of
+    the teams have been eliminated). When match results start coming in,
+    this can subtract picks whose team was knocked out — that's a deferred
+    follow-up tied to live-scores wiring.
+    """
+    phase_enum = PredictionPhase.PHASE_2 if phase == "phase_2" else PredictionPhase.PHASE_1
+    result = await compute_bracket_exposure(session, current_user.id, phase_enum)
+    return BracketExposureResponse(
+        points_available=result.points_available,
+        picks_locked=result.picks_locked,
+        picks_total=result.picks_total,
+        final_winner=result.final_winner,
+        final_opponent=result.final_opponent,
     )
 
 
