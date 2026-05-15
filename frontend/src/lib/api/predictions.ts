@@ -16,6 +16,25 @@ export async function getMatchPredictions(): Promise<MatchPrediction[]> {
 	return api.get<MatchPrediction[]>('/predictions/matches');
 }
 
+// ---- Social signals (replaces stubSocialSignal / building block for stubHotPick) ----
+
+export interface FixtureAgreement {
+	fixture_id: string;
+	agrees_exact: number;
+	agrees_outcome: number;
+	total: number;
+}
+
+export async function getAgreements(fixtureIds?: string[]): Promise<FixtureAgreement[]> {
+	const params = new URLSearchParams();
+	if (fixtureIds && fixtureIds.length > 0) {
+		for (const id of fixtureIds) params.append('fixture_ids', id);
+	}
+	const qs = params.toString();
+	const url = qs ? `/predictions/agreements?${qs}` : '/predictions/agreements';
+	return api.get<FixtureAgreement[]>(url);
+}
+
 export async function updateMatchPrediction(
 	fixtureId: string,
 	data: MatchPredictionUpdate

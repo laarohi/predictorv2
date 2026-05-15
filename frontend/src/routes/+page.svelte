@@ -35,32 +35,38 @@
 		type RankTrajectoryResponse,
 		type SteepestClimbersResponse
 	} from '$api/leaderboard';
+	import { getAgreements, type FixtureAgreement } from '$api/predictions';
+	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
 	import type { Fixture, LeaderboardEntry } from '$types';
 
 	$: if (!$isAuthenticated) {
 		goto('/login');
 	}
 
-	// Real trajectory + climbers data (replaces stubRankTrajectory + stubSteepestClimb).
-	// Null while loading; arrays remain empty until the daily snapshot task has
-	// run for at least two days. We keep the stub as a fallback for the first
-	// ~7 days so the chart isn't broken-looking before history accumulates.
+	// Real backend-driven widget data (replaces stubRankTrajectory +
+	// stubSteepestClimb + stubSocialSignal + stubHotPick). All start null
+	// and the stubs cover for them while the API call is in flight or if
+	// the endpoint is unavailable. Each value gates its widget independently.
 	let realTrajectory: RankTrajectoryResponse | null = null;
 	let realClimbers: SteepestClimbersResponse | null = null;
+	let realAgreements: FixtureAgreement[] | null = null;
 
 	onMount(async () => {
 		if ($isAuthenticated) {
 			fetchAllFixtures();
 			fetchLeaderboard();
+			fetchMatchPredictions();
 			try {
-				[realTrajectory, realClimbers] = await Promise.all([
+				[realTrajectory, realClimbers, realAgreements] = await Promise.all([
 					getMyRankTrajectory(7),
-					getSteepestClimbers(7, 32)
+					getSteepestClimbers(7, 32),
+					getAgreements()
 				]);
 			} catch (_e) {
-				// Backend not reachable / endpoint missing — keep stubs as fallback
+				// Backend not reachable / endpoint missing — stubs take over below
 				realTrajectory = null;
 				realClimbers = null;
+				realAgreements = null;
 			}
 		}
 	});
@@ -122,16 +128,47 @@
 		return stubSteepestClimb(userId, movement, totalPlayers);
 	})();
 
-	// Hot pick: take up to the first 5 upcoming open fixtures and stub a
-	// "your pick" of 2-1 home for each. Real prediction integration is a
-	// follow-up task — for now this exercises the design.
-	$: hotPickCandidates = $upcomingFixtures.slice(0, 5).map((f) => ({
-		fixtureId: f.id,
-		homeCode: teamCode(f.home_team),
-		awayCode: teamCode(f.away_team),
-		yourScore: [2, 1] as [number, number]
-	}));
-	$: hotPick = stubHotPick(hotPickCandidates);
+	// Hot pick: the user's predicted-but-not-yet-locked fixture with the
+	// lowest exact-agreement count. Lowest = rarest = highest expected value
+	// if it lands. Uses real agreement counts + the user's real picks; falls
+	// back to the stub when either is unavailable.
+	$: hotPick = (() => {
+		if (realAgreements && realAgreements.length > 0) {
+			// Intersect agreements with upcoming-open fixtures + the user's actual picks.
+			const openIds = new Set($upcomingFixtures.map((f) => f.id));
+			const openAgreements = realAgreements.filter((a) => openIds.has(a.fixture_id));
+			if (openAgreements.length > 0) {
+				const rarest = openAgreements.reduce(
+					(best, a) => (a.agrees_exact < best.agrees_exact ? a : best),
+					openAgreements[0]
+				);
+				const fixture = $upcomingFixtures.find((f) => f.id === rarest.fixture_id);
+				const pred = $predictionsByFixture.get(rarest.fixture_id);
+				if (fixture && pred) {
+					const rarity = rarest.total > 0 ? 1 - rarest.agrees_exact / rarest.total : 0;
+					return {
+						fixtureId: rarest.fixture_id,
+						homeCode: teamCode(fixture.home_team),
+						awayCode: teamCode(fixture.away_team),
+						yourScore: [pred.home_score, pred.away_score] as [number, number],
+						agreesExact: rarest.agrees_exact,
+						total: rarest.total,
+						potentialPoints: 15,
+						multiplier: +(1 + rarity * 1.5).toFixed(1)
+					};
+				}
+			}
+		}
+		// Stub fallback while predictions / agreements load or for users
+		// who haven't predicted any open fixtures yet.
+		const stubCandidates = $upcomingFixtures.slice(0, 5).map((f) => ({
+			fixtureId: f.id,
+			homeCode: teamCode(f.home_team),
+			awayCode: teamCode(f.away_team),
+			yourScore: [2, 1] as [number, number]
+		}));
+		return stubHotPick(stubCandidates);
+	})();
 
 	// ---- Countdown digits --------------------------------------------------
 	// Use the closest upcoming fixture as the "next lock"; fall back to

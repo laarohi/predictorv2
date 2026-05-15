@@ -1,8 +1,10 @@
 """Predictions API routes."""
 
 import uuid
+from collections import defaultdict
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, delete
 
@@ -24,6 +26,30 @@ from app.schemas.prediction import (
 from app.services.locking import check_fixture_locked, get_current_phase
 
 router = APIRouter()
+
+
+class FixtureAgreement(BaseModel):
+    """Per-fixture agreement counts vs the calling user's pick.
+
+    All three counts include the calling user themselves where applicable.
+    """
+
+    fixture_id: uuid.UUID
+    # How many users (including caller) made the exact same score prediction.
+    agrees_exact: int
+    # How many picked the same outcome (1 / X / 2).
+    agrees_outcome: int
+    # Total users who made any prediction on this fixture.
+    total: int
+
+
+def _outcome_sign(home: int, away: int) -> int:
+    """Returns 1 (home win), 0 (draw), or -1 (away win)."""
+    if home > away:
+        return 1
+    if home < away:
+        return -1
+    return 0
 
 
 @router.get("/matches", response_model=list[MatchPredictionRead])
@@ -353,3 +379,61 @@ async def get_community_predictions(
         predictions=predictions,
         actual=actual,
     )
+
+
+@router.get("/agreements", response_model=list[FixtureAgreement])
+async def get_agreements(
+    session: DbSession,
+    current_user: CurrentUser,
+    fixture_ids: list[uuid.UUID] | None = Query(default=None),
+) -> list[FixtureAgreement]:
+    """Per-fixture agreement counts vs the calling user's pick.
+
+    For each requested fixture (or all the user has predicted, if no ids
+    supplied), return how many other users made the same exact score and
+    how many made the same outcome (1/X/2).
+
+    Privacy: only counts are returned, never individual picks. Counts are
+    computed *relative to the caller's own pick*, so revealing them pre-lock
+    cannot leak any other user's prediction. The caller's own pick is
+    already known to them.
+
+    Empty list if the caller hasn't predicted any of the requested fixtures.
+    """
+    # 1. Caller's predictions for the requested fixtures (or all if none specified).
+    user_preds_q = select(MatchPrediction).where(MatchPrediction.user_id == current_user.id)
+    if fixture_ids:
+        user_preds_q = user_preds_q.where(MatchPrediction.fixture_id.in_(fixture_ids))
+    user_preds_result = await session.execute(user_preds_q)
+    user_preds: dict[uuid.UUID, MatchPrediction] = {
+        p.fixture_id: p for p in user_preds_result.scalars().all()
+    }
+    if not user_preds:
+        return []
+
+    # 2. All predictions for those fixtures, in one query.
+    relevant_ids = list(user_preds.keys())
+    all_preds_result = await session.execute(
+        select(MatchPrediction).where(MatchPrediction.fixture_id.in_(relevant_ids))
+    )
+    by_fixture: dict[uuid.UUID, list[MatchPrediction]] = defaultdict(list)
+    for p in all_preds_result.scalars().all():
+        by_fixture[p.fixture_id].append(p)
+
+    # 3. Aggregate per-fixture in Python.
+    out: list[FixtureAgreement] = []
+    for fixture_id, my_pred in user_preds.items():
+        my_h, my_a = my_pred.home_score, my_pred.away_score
+        my_sign = _outcome_sign(my_h, my_a)
+        preds = by_fixture[fixture_id]
+        exact = sum(1 for p in preds if p.home_score == my_h and p.away_score == my_a)
+        outcome = sum(1 for p in preds if _outcome_sign(p.home_score, p.away_score) == my_sign)
+        out.append(
+            FixtureAgreement(
+                fixture_id=fixture_id,
+                agrees_exact=exact,
+                agrees_outcome=outcome,
+                total=len(preds),
+            )
+        )
+    return out
