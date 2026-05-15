@@ -35,6 +35,7 @@
 		'/predictions',
 		'/results',
 		'/profile',
+		'/admin',
 		'/login',
 		'/register',
 		'/auth',
