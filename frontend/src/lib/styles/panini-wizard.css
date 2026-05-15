@@ -4,11 +4,27 @@
  * Bonus questions and Knockout get their own tabs inside the same pill bar.
  * ========================================================================= */
 
-/* ==== Hero / progress strip ==== */
+/* ==== Hero / progress strip ====
+ *
+ * Three columns:
+ *   1. title-block   — "PHASE I · GROUP STAGE" + "PREDICT" (content-width)
+ *   2. progress-stack — big number + bar + labels (1fr, STRETCHES)
+ *   3. toggle-stack  — Phase I/II + section toggles (content-width)
+ *
+ * Previously had `1fr auto auto` which made the title-block stretch and
+ * pushed everything else to the right, leaving an awkward dead zone
+ * between PREDICT and the 19/72 number. With `auto 1fr auto` the
+ * middle progress section is the one that absorbs extra space, so the
+ * bar grows out to fill the available width — no gap, matches the
+ * original mock layout.
+ *
+ * The progress-stack and toggle-stack also get left-border separators
+ * (mirroring the mock's deadline-block) to visually delineate the three
+ * regions. */
 .pn .pn-wiz-hero {
 	display: grid;
-	grid-template-columns: 1fr auto auto;
-	gap: 24px;
+	grid-template-columns: auto 1fr auto;
+	gap: 28px;
 	align-items: center;
 	padding: 18px 0 16px;
 	border-bottom: 2.5px solid var(--ink);
@@ -25,6 +41,10 @@
 	flex-direction: column;
 	gap: 8px;
 	align-items: stretch;
+	padding-left: 28px;
+	border-left: 2px solid var(--ink);
+	align-self: stretch;
+	justify-content: center;
 }
 .pn .pn-wiz-hero .title-block {
 	display: flex;
@@ -78,13 +98,18 @@
  *   .bar-and-labels  — the bar plus the two label rows (was the whole stack)
  * The big number gives the hero visual weight on the left, matching the
  * original mockup where the progress section was led by a large
- * Done/Total counter rather than a small label. */
+ * Done/Total counter rather than a small label.
+ *
+ * `min-width: 0` lets the bar-and-labels block actually shrink/grow with
+ * the 1fr column rather than being forced to its intrinsic content width. */
 .pn .pn-wiz-hero .progress-stack {
 	align-self: stretch;
 	display: flex;
 	align-items: center;
 	gap: 18px;
-	min-width: 280px;
+	min-width: 0;
+	padding-left: 28px;
+	border-left: 2px solid var(--ink);
 }
 .pn .pn-wiz-hero .progress-stack .big-num {
 	font-family: var(--display);
