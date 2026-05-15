@@ -784,7 +784,6 @@
 									<span class="editing-tag">Editing</span>
 								{/if}
 								<div class="meta">
-									<span><b>{teamCode(f.home_team)} vs {teamCode(f.away_team)}</b></span>
 									<span>{new Date(f.kickoff).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · {new Date(f.kickoff).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
 								</div>
 								<div class="row">
@@ -1031,7 +1030,6 @@
 									<span class="editing-tag">Editing</span>
 								{/if}
 								<div class="meta">
-									<span><b>{teamCode(f.home_team)} vs {teamCode(f.away_team)}</b></span>
 									<span>{new Date(f.kickoff).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · {new Date(f.kickoff).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
 								</div>
 								<div class="row">

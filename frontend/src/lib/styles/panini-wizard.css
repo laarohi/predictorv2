@@ -426,7 +426,7 @@
 }
 .pn .pn-mcard .editing-tag {
 	position: absolute;
-	top: -9px;
+	top: -10px;
 	left: 14px;
 	background: var(--red);
 	color: var(--paper);
@@ -437,11 +437,15 @@
 	padding: 3px 9px 4px;
 	border: 1.5px solid var(--paper);
 	box-shadow: 2px 2px 0 var(--ink);
+	/* Tiny sticker-style tilt — the "no tilts" rule only applies to the
+	 * card itself; small decorative labels can lean for personality. */
+	transform: rotate(-3deg);
+	transform-origin: left center;
 	z-index: 2;
 }
 .pn .pn-mcard .meta {
 	display: flex;
-	justify-content: space-between;
+	justify-content: flex-end;
 	font-family: var(--mono);
 	font-size: 10px;
 	letter-spacing: 0.10em;
