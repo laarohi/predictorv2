@@ -129,6 +129,15 @@
 		return { done, total: g.fixtures.length };
 	}
 
+	// Phase 1 knockout bracket is gated on completing every group prediction.
+	// Phase 2 uses real standings so doesn't need the gate.
+	$: phase1BracketGated =
+		activePhase === 'phase1' &&
+		!(
+			phaseProgress.total > 0 &&
+			phaseProgress.done === phaseProgress.total
+		);
+
 	$: phaseProgress = (() => {
 		let done = 0;
 		let total = 0;
@@ -332,7 +341,12 @@
 				{/if}
 				<div class="phase-toggle">
 					<button class:on={activeSection === 'groups'} on:click={() => (activeSection = 'groups')}>Groups</button>
-					<button class:on={activeSection === 'knockout'} on:click={() => (activeSection = 'knockout')}>Knockout</button>
+					<button
+						class:on={activeSection === 'knockout'}
+						class:gated={phase1BracketGated}
+						on:click={() => (activeSection = 'knockout')}
+						title={phase1BracketGated ? 'Complete all group predictions to unlock' : ''}
+					>Knockout</button>
 					<button class:on={activeSection === 'bonus'} on:click={() => (activeSection = 'bonus')}>Bonus</button>
 				</div>
 			</div>
@@ -531,21 +545,43 @@
 					</div>
 				</section>
 			{:else if activeSection === 'knockout'}
-				<PnKnockoutBracket
-					bind:this={bracketComponent}
-					prediction={displayBracket}
-					groupStandings={standingsMap}
-					locked={$isPhase1Locked}
-					phase="phase_1"
-					on:update={handleBracketUpdate}
-				/>
-				<div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; margin-bottom: 22px;">
-					{#if $hasUnsavedBracketChanges}
-						<button class="pn-btn gold" on:click={handleSaveBracket} disabled={bracketSaveStatus === 'saving'}>
-							{bracketSaveStatus === 'saving' ? 'Saving…' : bracketSaveStatus === 'saved' ? '✓ Saved' : 'Save bracket'}
-						</button>
-					{/if}
-				</div>
+				{#if phase1BracketGated}
+					{@const pct = phaseProgress.total > 0 ? Math.round((phaseProgress.done / phaseProgress.total) * 100) : 0}
+					<section class="pn-locked">
+						<div class="lock-icon">
+							<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+								<rect x="5" y="11" width="14" height="10" rx="1" fill="currentColor" />
+								<path d="M8 11V7a4 4 0 018 0v4" fill="none" />
+							</svg>
+						</div>
+						<h2>Knockout bracket <em>locked</em></h2>
+						<p class="l">
+							Predict every group-stage match before opening the bracket. The bracket uses your predicted group standings to seed the Round of 32 — it can't be filled in until those are settled.
+						</p>
+						<div class="lock-progress">
+							<div class="v">{phaseProgress.done}<span class="of">/{phaseProgress.total}</span></div>
+							<div class="label">matches predicted · {pct}%</div>
+							<div class="bar"><div class="bar-fill" style="width: {pct}%;"></div></div>
+						</div>
+						<button class="pn-btn gold" type="button" on:click={() => (activeSection = 'groups')}>← Back to Groups</button>
+					</section>
+				{:else}
+					<PnKnockoutBracket
+						bind:this={bracketComponent}
+						prediction={displayBracket}
+						groupStandings={standingsMap}
+						locked={$isPhase1Locked}
+						phase="phase_1"
+						on:update={handleBracketUpdate}
+					/>
+					<div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; margin-bottom: 22px;">
+						{#if $hasUnsavedBracketChanges}
+							<button class="pn-btn gold" on:click={handleSaveBracket} disabled={bracketSaveStatus === 'saving'}>
+								{bracketSaveStatus === 'saving' ? 'Saving…' : bracketSaveStatus === 'saved' ? '✓ Saved' : 'Save bracket'}
+							</button>
+						{/if}
+					</div>
+				{/if}
 			{:else if activeSection === 'bonus'}
 				<section class="pn-bonus-row">
 					{#each BONUS_QUESTIONS as bq (bq.id)}

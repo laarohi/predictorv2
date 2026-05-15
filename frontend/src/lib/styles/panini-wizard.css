@@ -505,6 +505,107 @@
 .pn .pn-wiz-foot .submit-btn.success { background: var(--green); color: var(--paper); }
 .pn .pn-wiz-foot .submit-btn.error { background: var(--red); color: var(--paper); }
 
+/* ==== Locked-section screen (gating Phase 1 knockout) ==== */
+.pn .pn-locked {
+	background: var(--paper);
+	border: 3px dashed var(--ink);
+	padding: 40px 30px;
+	text-align: center;
+	margin-bottom: 22px;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 14px;
+}
+.pn .pn-locked .lock-icon {
+	width: 56px;
+	height: 56px;
+	background: var(--gold);
+	color: var(--ink);
+	display: grid;
+	place-items: center;
+	border: 3px solid var(--ink);
+	box-shadow: 4px 4px 0 var(--ink);
+	transform: rotate(-3deg);
+}
+.pn .pn-locked h2 {
+	font-family: var(--display);
+	font-size: 28px;
+	text-transform: uppercase;
+	letter-spacing: -0.01em;
+	margin: 0;
+	line-height: 1;
+}
+.pn .pn-locked h2 em { color: var(--red); font-style: normal; }
+.pn .pn-locked .l {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.10em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	max-width: 460px;
+	line-height: 1.5;
+}
+.pn .pn-locked .lock-progress {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 10px 14px;
+	align-items: center;
+	background: var(--paper-2);
+	border: 2px solid var(--ink);
+	padding: 12px 18px;
+	min-width: 280px;
+}
+.pn .pn-locked .lock-progress .v {
+	font-family: var(--display);
+	font-size: 28px;
+	line-height: 1;
+	color: var(--red);
+}
+.pn .pn-locked .lock-progress .v .of {
+	color: var(--ink-3);
+	font-size: 18px;
+}
+.pn .pn-locked .lock-progress .label {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.10em;
+	color: var(--ink-3);
+	text-transform: uppercase;
+	text-align: left;
+}
+.pn .pn-locked .lock-progress .bar {
+	grid-column: 1 / -1;
+	height: 8px;
+	background: var(--paper);
+	border: 1.5px solid var(--ink);
+	position: relative;
+	overflow: hidden;
+}
+.pn .pn-locked .lock-progress .bar-fill {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	background: var(--gold);
+}
+
+/* Small lock indicator on the section toggle button when gated */
+.pn .pn-wiz-hero .phase-toggle button.gated {
+	color: var(--ink-3);
+	cursor: pointer;
+}
+.pn .pn-wiz-hero .phase-toggle button.gated::after {
+	content: ' ●';
+	color: var(--gold);
+	margin-left: 2px;
+	font-size: 12px;
+}
+.pn .pn-wiz-hero .phase-toggle button.gated.on {
+	background: var(--ink);
+	color: var(--gold);
+}
+
 /* ==== Bracket placeholder area ==== */
 .pn .pn-wiz-bracket-wrap {
 	background: var(--paper);
