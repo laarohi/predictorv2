@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import { goto, beforeNavigate } from '$app/navigation';
 	import { isAuthenticated, user } from '$stores/auth';
 	import {
@@ -542,7 +543,7 @@
 {#if $isAuthenticated}
 	<PnPageShell>
 		{#if restorationBanner}
-			<div class="pn-restore-banner">
+			<div class="pn-restore-banner" transition:fade={{ duration: 400 }}>
 				<div class="content">
 					<span class="icon">✦</span>
 					<div class="text">

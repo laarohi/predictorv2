@@ -235,10 +235,23 @@
 	pointer-events: none;
 }
 
-/* ==== Pill navigator (group pills only) ==== */
+/* ==== Pill navigator (group pills only) ====
+ *
+ * Grid with auto-fit + minmax instead of flex-wrap. Each pill is at
+ * least 140px wide; the grid fills the row with as many pills as that
+ * minimum allows, then stretches each pill to fill the leftover space
+ * evenly. Result: no awkward right-side gap, partial last row
+ * distributes pills uniformly across the available width, Group A
+ * stays top-left so alphabetical scanning still works.
+ *
+ * Why this is better than flex-wrap: flex-wrap leaves leftover space on
+ * the trailing edge of every row (because flex doesn't redistribute
+ * across siblings without explicit `flex: 1 0 auto` on every child,
+ * which would still leave the last partial row unbalanced). Grid's
+ * fr unit handles row-balanced sizing for free. */
 .pn .pn-wiz-nav {
-	display: flex;
-	flex-wrap: wrap;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 	gap: 8px;
 	margin-bottom: 22px;
 	padding: 4px 0 12px;
