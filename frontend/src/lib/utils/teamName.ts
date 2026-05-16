@@ -18,12 +18,25 @@ export function isPlaceholderTeam(name: string | null | undefined): boolean {
 	return typeof name === 'string' && name.startsWith(SLOT_PREFIX);
 }
 
+// Shorter display strings for countries whose canonical names overflow
+// tight UI surfaces (the target is ≤11 chars). Names not in this map
+// render unchanged, so adding/removing entries is safe.
+const SHORT_NAMES: Record<string, string> = {
+	'Bosnia-Herzegovina': 'Bosnia',
+	'Cape Verde Islands': 'Cape Verde',
+	'United States': 'USA',
+	'Saudi Arabia': 'S. Arabia',
+	'South Africa': 'S. Africa',
+	'South Korea': 'S. Korea'
+};
+
 /**
  * Format a team name for display. Placeholder slot strings render as "TBD";
- * real names pass through unchanged.
+ * real names pass through, with a small set of long names shortened to fit
+ * the Panini layouts (≤11 chars).
  */
 export function displayTeamName(name: string | null | undefined): string {
 	if (!name) return 'TBD';
 	if (isPlaceholderTeam(name)) return 'TBD';
-	return name;
+	return SHORT_NAMES[name] ?? name;
 }

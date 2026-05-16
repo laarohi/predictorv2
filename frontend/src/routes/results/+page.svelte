@@ -6,6 +6,7 @@
 	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
 	import { getPredictionResult, type PredictionResult } from '$lib/utils/predictionResult';
 	import { teamCode } from '$lib/utils/teamCodes';
+	import { displayTeamName } from '$lib/utils/teamName';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import PnFlag from '$components/panini/PnFlag.svelte';
 	import type { Fixture } from '$types';
@@ -188,7 +189,7 @@
 								<div class="body">
 									<div class="team">
 										<PnFlag code={teamCode(f.home_team)} w={28} h={20} />
-										<span class="nm">{f.home_team}</span>
+										<span class="nm">{displayTeamName(f.home_team)}</span>
 									</div>
 									<div class="scores">
 										<div class="actual">
@@ -204,7 +205,7 @@
 									</div>
 									<div class="team r">
 										<PnFlag code={teamCode(f.away_team)} w={28} h={20} />
-										<span class="nm">{f.away_team}</span>
+										<span class="nm">{displayTeamName(f.away_team)}</span>
 									</div>
 								</div>
 							</div>

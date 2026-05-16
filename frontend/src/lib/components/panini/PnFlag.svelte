@@ -1,59 +1,71 @@
 <script lang="ts">
-	// Two- or three-stripe horizontal flag swatch. Not a real flag — a stylised
-	// sticker-album substitute that reads as a colour-coded country chip.
-	// Codes are FIFA three-letter; unknown codes fall back to a neutral grey.
+	// Real flag artwork (vector SVG via flag-icons), force-stretched to a
+	// uniform 3:2 aspect so Switzerland (1:1) and Qatar (11:28) don't
+	// disrupt layout. flag-icons SVGs are authored at viewBox 640x480 (4:3)
+	// with the document's default preserveAspectRatio="xMidYMid meet" —
+	// which letterboxes 4:3 content inside a 3:2 box. Neither <img> with
+	// object-fit:fill NOR background-image with background-size:100% 100%
+	// reliably overrides that document-level attribute; the only robust
+	// fix is to inline the SVG content and inject preserveAspectRatio="none"
+	// on the root <svg> tag before rendering. Trade-off: all 271 SVGs land
+	// in the JS bundle as strings rather than as separate hashed assets,
+	// which is fine for this app's ~30-user audience.
+	//
+	// Unknown codes render a neutral grey rectangle in the same chrome so
+	// the layout stays stable.
+
+	import { flagIsoCode } from '$lib/utils/teamCodes';
 
 	export let code: string;
 	export let w: number = 18;
 	export let h: number = 12;
 	export let border: boolean = true;
 
-	const FLAGS: Record<string, string[]> = {
-		ARG: ['#74acdf', '#ffffff', '#74acdf'],
-		BRA: ['#009c3b', '#fedf00'],
-		FRA: ['#012169', '#ed2939'],
-		ESP: ['#aa151b', '#f1bf00'],
-		GER: ['#000000', '#dd0000', '#ffce00'],
-		ITA: ['#009246', '#ffffff', '#ce2b37'],
-		POR: ['#005826', '#ed2939'],
-		NED: ['#ae1c28', '#ffffff', '#21468b'],
-		CRO: ['#ed1c24', '#ffffff', '#171796'],
-		ENG: ['#ffffff', '#cf142b'],
-		URU: ['#75aadb', '#ffffff'],
-		MAR: ['#c1272d', '#006233'],
-		JPN: ['#bc002d', '#ffffff'],
-		MEX: ['#006847', '#ffffff', '#ce1126'],
-		KOR: ['#cd2e3a', '#ffffff', '#0047a0'],
-		USA: ['#bf0a30', '#ffffff', '#002868'],
-		POL: ['#ffffff', '#dc143c'],
-		BEL: ['#000000', '#fae042', '#ed2939'],
-		SUI: ['#dc143c', '#ffffff'],
-		SEN: ['#00853f', '#fdef42', '#e31b23'],
-		GHA: ['#ce1126', '#fcd116', '#006b3f'],
-		TUN: ['#e70013', '#ffffff'],
-		EGY: ['#ce1126', '#ffffff', '#000000'],
-		IRN: ['#239f40', '#ffffff', '#da0000'],
-		AUS: ['#00008b', '#ffffff'],
-		CAN: ['#ff0000', '#ffffff'],
-		KSA: ['#006c35', '#ffffff'],
-		DEN: ['#c60c30', '#ffffff'],
-		COL: ['#fcd116', '#003893', '#ce1126'],
-		NGA: ['#008751', '#ffffff', '#008751'],
-		ECU: ['#ffdd00', '#003893', '#ce1126'],
-		SRB: ['#c6363c', '#0c4076', '#ffffff']
-	};
+	// Eager raw-string glob — Vite inlines each SVG's text content into the
+	// bundle at build time.
+	const flagSvgs = import.meta.glob<string>(
+		'/node_modules/flag-icons/flags/4x3/*.svg',
+		{ eager: true, query: '?raw', import: 'default' }
+	);
 
-	$: colors = FLAGS[code] ?? ['#888', '#444'];
-	$: bg =
-		colors.length === 3
-			? `linear-gradient(180deg, ${colors[0]} 33%, ${colors[1]} 33% 66%, ${colors[2]} 66%)`
-			: `linear-gradient(180deg, ${colors[0]} 50%, ${colors[1]} 50%)`;
+	$: iso = flagIsoCode(code);
+	$: rawSvg = iso ? flagSvgs[`/node_modules/flag-icons/flags/4x3/${iso}.svg`] : undefined;
+	// Inject preserveAspectRatio="none" on the root <svg> tag so the
+	// browser stretches the artwork to fill our viewport instead of
+	// letterboxing it. The regex inserts the attribute right after `<svg`
+	// (word-boundary) so it lands before existing attrs like xmlns.
+	$: svg = rawSvg ? rawSvg.replace(/<svg\b/, '<svg preserveAspectRatio="none"') : undefined;
 </script>
 
 <span
-	style="background: {bg}; width: {w}px; height: {h}px; display: inline-block; border: {border
-		? '1.5px solid #161513'
-		: '0'}; flex-shrink: 0;"
+	class="pn-flag"
+	class:has-border={border}
+	style="width: {w}px; height: {h}px;"
 	aria-label={code}
 	role="img"
-></span>
+>
+	{#if svg}
+		{@html svg}
+	{/if}
+</span>
+
+<style>
+	.pn-flag {
+		display: inline-block;
+		flex-shrink: 0;
+		box-sizing: border-box;
+		border-radius: 2px;
+		background-color: #888;
+		overflow: hidden;
+		line-height: 0;
+	}
+	.pn-flag.has-border {
+		border: 1.5px solid #161513;
+	}
+	.pn-flag :global(svg) {
+		display: block;
+		width: 100%;
+		height: 100%;
+		filter: saturate(0.94) contrast(1.04);
+	}
+</style>

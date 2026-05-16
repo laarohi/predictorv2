@@ -21,6 +21,7 @@
 	import PnFlag from '$components/panini/PnFlag.svelte';
 	import PnSparkline from '$components/panini/PnSparkline.svelte';
 	import { teamCode } from '$lib/utils/teamCodes';
+	import { displayTeamName } from '$lib/utils/teamName';
 	import {
 		stubRankTrajectory,
 		stubBracketExposure,
@@ -380,12 +381,12 @@
 								<div class="pn-bcast">
 									<PnFlag code={teamCode(f.home_team)} w={56} h={36} />
 									<div class="team">
-										<span class="nm">{f.home_team}</span>
+										<span class="nm">{displayTeamName(f.home_team)}</span>
 										<span class="sub">{f.group ? `Group ${f.group}` : f.stage}</span>
 									</div>
 									<div class="sb">{live.homeScore}–{live.awayScore}<span class="min">{live.minute}′ · {live.half === 1 ? '1H' : '2H'}</span></div>
 									<div class="team r">
-										<span class="nm r">{f.away_team}</span>
+										<span class="nm r">{displayTeamName(f.away_team)}</span>
 										<span class="sub">{f.group ? `Group ${f.group}` : f.stage}</span>
 									</div>
 									<PnFlag code={teamCode(f.away_team)} w={56} h={36} />
@@ -661,12 +662,12 @@
 					<div class="body">
 						<div class="team">
 							<PnFlag code={teamCode(f.home_team)} w={42} h={28} />
-							<div class="nm">{f.home_team}</div>
+							<div class="nm">{displayTeamName(f.home_team)}</div>
 						</div>
 						<div class="sb">{live.homeScore}–{live.awayScore}<span class="min">{live.minute}′</span></div>
 						<div class="team">
 							<PnFlag code={teamCode(f.away_team)} w={42} h={28} />
-							<div class="nm">{f.away_team}</div>
+							<div class="nm">{displayTeamName(f.away_team)}</div>
 						</div>
 						<div class="pick">
 							<span>YOUR PICK · <b>—</b></span>
