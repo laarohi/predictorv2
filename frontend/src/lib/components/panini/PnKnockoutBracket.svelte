@@ -19,6 +19,8 @@
 	} from '$lib/utils/bracketResolver';
 	import type { BracketPrediction } from '$types';
 	import PnBracketMatch from './PnBracketMatch.svelte';
+	import PnFlag from './PnFlag.svelte';
+	import { teamCode } from '$lib/utils/teamCodes';
 
 	export let prediction: BracketPrediction | null = null;
 	export let groupStandings: GroupStandingsMap = {};
@@ -66,6 +68,15 @@
 		dispatch('update', bracketStateToPrediction(emptyState));
 	}
 
+	function handleClearClick() {
+		if (locked) return;
+		if (locksCount === 0) return;
+		const confirmed = window.confirm(
+			`Clear all ${locksCount} bracket pick${locksCount === 1 ? '' : 's'}?\n\nThis only resets your draft — nothing is sent to the server until you press Save bracket.`
+		);
+		if (confirmed) clearAllSelections();
+	}
+
 	$: leftR32 = r32.slice(0, 8);
 	$: rightR32 = r32.slice(8);
 	$: leftR16 = r16.slice(0, 4);
@@ -83,11 +94,36 @@
 	$: totalPicks = hideR32 ? 15 : 31; // R16(8)+QF(4)+SF(2)+F(1) = 15; +R32(16) = 31
 
 	// ===== Mobile swipeable pagination =====
+	// Slot heights: each "expanded" (next-up) round is 2× the "normal"
+	// (current) round so each next-round card aligns vertically with the
+	// pair of preceding-round cards it consumes.
 	const SLOT_NORMAL = 56;
 	const SLOT_EXPANDED = 112;
-	const COL_W = 168;
+	// Column width is reactive — we measure the bracket panel and split
+	// the available space across exactly 2 visible columns. Min keeps
+	// codes legible on phones, max stops the cards becoming silly on
+	// large screens that fall under the mobile breakpoint.
+	const MIN_COL_W = 130;
+	const MAX_COL_W = 230;
 	const GAP = 12;
-	const STEP = COL_W + GAP;
+	const STAGE_PAD = 24; // .pn-mb-stage has padding: 12px each side
+	const COL_HEAD_H = 32; // col-head visual height + margin-bottom
+	const FALLBACK_COL_W = 168;
+
+	let mobPanelWidth = 0;
+	// Stage spans full panel width (navy bleeds to the screen edges). The
+	// viewport — a centred block INSIDE the stage — is sized exactly to
+	// fit 2 cols + gap + padding, with overflow:hidden clipping anything
+	// outside. So off-screen cols (R32 when you're on R16/QF, etc.) are
+	// clipped, never peek through, regardless of how wide the screen is.
+	$: viewportW = Math.max(0, mobPanelWidth - STAGE_PAD);
+	$: colW = mobPanelWidth > 0
+		? Math.max(MIN_COL_W, Math.min(MAX_COL_W, Math.floor((viewportW - GAP) / 2)))
+		: FALLBACK_COL_W;
+	$: step = colW + GAP;
+	// Viewport (clipping window) width: exactly 2 cols + gap + horizontal
+	// padding. Anything wider becomes navy gutter outside the viewport.
+	$: viewportWidth = 2 * colW + GAP + STAGE_PAD;
 
 	$: rounds = hideR32
 		? [
@@ -112,9 +148,21 @@
 	let touchStartX = 0;
 	let touchStartY = 0;
 
-	$: trackWidth = rounds.length * COL_W + (rounds.length - 1) * GAP;
+	$: trackWidth = rounds.length * colW + (rounds.length - 1) * GAP;
 	$: ease =
 		'transform 500ms cubic-bezier(0.65, 0, 0.35, 1), height 500ms cubic-bezier(0.65, 0, 0.35, 1)';
+
+	// Stage height = tallest of the two currently-visible columns (current
+	// page is normal slots, next page is expanded slots). Cols off the
+	// visible window don't contribute, so swiping to a shorter round-pair
+	// makes the navy stage literally shrink — no inner scrollbar, no
+	// dead navy space below.
+	$: currentRound = rounds[page] ?? null;
+	$: nextRound = rounds[page + 1] ?? null;
+	$: currentColH = (currentRound?.matches.length ?? 0) * SLOT_NORMAL + COL_HEAD_H;
+	$: nextColH = (nextRound?.matches.length ?? 0) * SLOT_EXPANDED + COL_HEAD_H;
+	$: stageContentH = Math.max(currentColH, nextColH);
+	$: stageHeight = stageContentH + STAGE_PAD;
 
 	function touchStart(e: TouchEvent) {
 		touchStartX = e.touches[0].clientX;
@@ -137,7 +185,7 @@
 	}
 	function touchEnd() {
 		dragging = false;
-		if (Math.abs(dragX) > STEP / 3) {
+		if (Math.abs(dragX) > step / 3) {
 			if (dragX < 0 && page < numPages - 1) page += 1;
 			else if (dragX > 0 && page > 0) page -= 1;
 		}
@@ -229,7 +277,20 @@
 					{/each}
 				</div>
 
-				<div class="pn-brkt-col" style="justify-content: center;">
+				<div class="pn-brkt-col pn-brkt-col-final" style="justify-content: center;">
+					{#if finalWinner}
+						<div class="pn-champ-sticker-pos">
+							{#key finalWinner}
+								<div class="pn-champ-sticker" aria-live="polite">
+									<div class="badge">★ MY CHAMPION</div>
+									<div class="body">
+										<PnFlag code={teamCode(finalWinner)} w={44} h={30} />
+										<span class="name">{finalWinner.toUpperCase()}</span>
+									</div>
+								</div>
+							{/key}
+						</div>
+					{/if}
 					<div class="head final">FINAL</div>
 					{#if finalMatch}
 						<PnBracketMatch
@@ -309,14 +370,21 @@
 					Click any team to pick them as winner of their match
 				{/if}
 			</span>
-			<span>
-				<b>{locksCount}</b> / {totalPicks} PICKS LOCKED IN
+			<span class="actions">
+				{#if !locked && locksCount > 0}
+					<button type="button" class="pn-brkt-clear" on:click={handleClearClick}>
+						↺ Clear bracket
+					</button>
+				{/if}
+				<span class="count">
+					<b>{locksCount}</b> / {totalPicks} PICKS LOCKED IN
+				</span>
 			</span>
 		</div>
 	</div>
 
 	<!-- ===== Mobile swipeable pages ===== -->
-	<div class="pn-brkt-mob">
+	<div class="pn-brkt-mob" bind:clientWidth={mobPanelWidth}>
 		<div class="pn-mb">
 			<div class="pn-mb-h">
 				<div class="ttl">YOUR <em>BRACKET</em></div>
@@ -328,6 +396,11 @@
 				<div class="end">
 					<b>{locksCount} / {totalPicks}</b>
 					<span>{locked ? 'LOCKED' : 'PICKED'}</span>
+					{#if !locked && locksCount > 0}
+						<button type="button" class="pn-mb-clear" on:click={handleClearClick} aria-label="Clear bracket">
+							↺ Clear
+						</button>
+					{/if}
 				</div>
 			</div>
 
@@ -337,16 +410,39 @@
 				<span class="next">{rounds[page + 1]?.label ?? ''}</span>
 			</div>
 
-			<div class="pn-mb-stage" on:touchstart={touchStart} on:touchmove={touchMove} on:touchend={touchEnd}>
-				<div class="pn-mb-scroll">
-					<div
-						class="pn-mb-track"
-						style="width: {trackWidth}px; transform: translateX({-page * STEP + dragX}px); transition: {dragging ? 'none' : ease};"
-					>
+			<div
+				class="pn-mb-stage"
+				style="height: {stageHeight}px; --viewport-w: {viewportWidth}px; transition: {dragging ? 'none' : 'height 500ms cubic-bezier(0.65, 0, 0.35, 1)'};"
+				on:touchstart={touchStart}
+				on:touchmove={touchMove}
+				on:touchend={touchEnd}
+			>
+				{#if page > 0}
+					<button
+						type="button"
+						class="pn-mb-arrow prev"
+						on:click={goPrev}
+						aria-label="Previous round pair"
+					>◂</button>
+				{/if}
+				{#if page < numPages - 1}
+					<button
+						type="button"
+						class="pn-mb-arrow next"
+						on:click={goNext}
+						aria-label="Next round pair"
+					>▸</button>
+				{/if}
+				<div class="pn-mb-viewport" style="width: {viewportWidth}px;">
+					<div class="pn-mb-scroll">
+						<div
+							class="pn-mb-track"
+							style="width: {trackWidth}px; transform: translateX({-page * step + dragX}px); transition: {dragging ? 'none' : ease};"
+						>
 						{#each rounds as round, r (round.label)}
 							{@const expanded = r === page + 1}
 							{@const slotH = expanded ? SLOT_EXPANDED : SLOT_NORMAL}
-							<div class="pn-mb-col" style="width: {COL_W}px;">
+							<div class="pn-mb-col" style="width: {colW}px;">
 								<div class="pn-mb-col-head" class:final={round.isFinal}>{round.label}</div>
 								{#each round.matches as m (m.match.matchNumber)}
 									<div
@@ -378,6 +474,7 @@
 						{/each}
 					</div>
 				</div>
+			</div>
 			</div>
 
 			{#if finalWinner}

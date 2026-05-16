@@ -60,7 +60,13 @@
 
 .pn .pn-brkt-grid {
 	display: grid;
-	grid-template-columns: 1.1fr 1.1fr 1.1fr 1.1fr 1.5fr 1.1fr 1.1fr 1.1fr 1.1fr;
+	/* minmax(0, …) so columns size from the grid ratio, never from content.
+	   With 3-letter codes the cells stay uniform width regardless of which
+	   teams advance. */
+	grid-template-columns:
+		minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1.1fr)
+		minmax(0, 1.5fr)
+		minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1.1fr) minmax(0, 1.1fr);
 	gap: 12px;
 	position: relative;
 }
@@ -147,6 +153,19 @@
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
+
+/* Compact variant — used by the mobile bracket. Smaller padding/type so
+   the card stays well inside the 56px slot (~12px breathing top + bottom). */
+.pn .pn-bm.compact {
+	border-width: 1.5px;
+	box-shadow: 2px 2px 0 var(--ink);
+}
+.pn .pn-bm.compact .row {
+	padding: 3px 8px;
+	font-size: 11px;
+	min-height: 20px;
+	gap: 4px;
+}
 .pn .pn-bm.tbd {
 	background: rgba(255, 255, 255, 0.05);
 	border: 2px dashed var(--paper-3);
@@ -167,63 +186,111 @@
 }
 .pn .pn-bm.tbd .row { display: none; }
 
-/* Final card (centre of wall chart) */
+/* Final card (centre of wall chart) — Option B + spruce.
+   Two clickable rows like the other cells. Body stays paper so the
+   winner row's gold treatment matches every other bracket cell (winner
+   = gold, loser = paper, no inversion). The "centerpiece" treatment
+   comes from the thicker ink border + red offset shadow + larger rows.
+   The gold celebration lives in the champion sticker above. */
 .pn .pn-bm.final {
-	background: var(--gold);
+	background: var(--paper);
 	border: 3px solid var(--ink);
-	padding: 14px 12px;
-	box-shadow: 5px 5px 0 var(--red);
+	padding: 0;
+	box-shadow: 6px 6px 0 var(--red);
+	overflow: hidden;
 }
-.pn .pn-bm.final .l {
+.pn .pn-bm.final .row {
+	padding: 10px 12px;
+	font-size: 15px;
+	min-height: 36px;
+	gap: 10px;
+	letter-spacing: 0.04em;
+}
+.pn .pn-bm.final .row.pred {
+	font-weight: 800;
+}
+.pn .pn-bm.final.empty {
+	display: grid;
+	place-items: center;
+	min-height: 72px;
+	padding: 14px;
+}
+.pn .pn-bm.final .empty-l {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-2);
+	text-align: center;
+}
+
+/* ===== Champion sticker =====
+   Lives inside the FINAL column but absolute-positioned at the column's
+   top, where the centered FINAL chip + final card already leave ~80px
+   of empty vertical space. Because it's out of flow, appearing doesn't
+   shift the bracket grid down. It overflows the FINAL column's narrow
+   1.5fr width horizontally so full names (SWITZERLAND, NETHERLANDS)
+   render in one line — the navy panel has no clip so the overflow is
+   safe. Pops in with an overshoot bounce on first appearance; re-runs
+   every time the champion changes via {#key winner} in the parent. */
+.pn .pn-brkt-col-final { position: relative; }
+.pn .pn-champ-sticker-pos {
+	position: absolute;
+	top: 0;
+	left: 50%;
+	transform: translateX(-50%);
+	z-index: 5;
+	pointer-events: none; /* purely decorative — picks happen on the card */
+}
+.pn .pn-champ-sticker {
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 6px 6px 0 var(--red);
+	padding: 10px 22px 12px;
+	text-align: center;
+	transform-origin: 50% 80%;
+	animation: pn-sticker-pop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.pn .pn-champ-sticker .badge {
 	font-family: var(--mono);
 	font-size: 10px;
-	letter-spacing: 0.16em;
+	letter-spacing: 0.18em;
 	text-transform: uppercase;
-	color: var(--red-deep);
+	color: var(--red);
 	margin-bottom: 6px;
 }
-.pn .pn-bm.final .winner-row {
-	font-family: var(--display);
-	font-size: 24px;
-	line-height: 1;
-	text-transform: uppercase;
+.pn .pn-champ-sticker .body {
 	display: flex;
 	align-items: center;
-	gap: 10px;
-	cursor: pointer;
-	padding: 4px 0;
-	border: 0;
-	background: none;
-	color: inherit;
-	width: 100%;
-	text-align: left;
+	justify-content: center;
+	gap: 14px;
 }
-.pn .pn-bm.final .alt-row {
+.pn .pn-champ-sticker .name {
 	font-family: var(--display);
-	font-size: 14px;
+	font-size: 26px;
 	line-height: 1;
 	text-transform: uppercase;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	color: var(--ink-3);
-	margin-top: 6px;
-	padding: 2px 0;
-	cursor: pointer;
-	border: 0;
-	background: none;
-	width: 100%;
-	text-align: left;
-}
-.pn .pn-bm.final .sub {
-	font-family: var(--mono);
-	font-size: 10px;
-	letter-spacing: 0.10em;
 	color: var(--ink);
-	margin-top: 8px;
-	padding-top: 6px;
-	border-top: 1px solid rgba(0, 0, 0, 0.2);
-	text-transform: uppercase;
+	letter-spacing: -0.01em;
+	white-space: nowrap;
+}
+@keyframes pn-sticker-pop {
+	/* Pure scale + fade — no rotation per the Panini "no tilts on cards"
+	   rule. The cubic-bezier overshoot on the .animation property creates
+	   the snap-on feel without needing tilt. */
+	0% {
+		transform: scale(0.2);
+		opacity: 0;
+	}
+	100% {
+		transform: scale(1);
+		opacity: 1;
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.pn .pn-champ-sticker {
+		animation: none;
+	}
 }
 
 /* Wall chart footer */
@@ -239,19 +306,73 @@
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
+	gap: 14px;
 	margin-bottom: 22px;
 }
 .pn .pn-brkt-foot b { color: var(--red); }
+.pn .pn-brkt-foot .actions {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+.pn .pn-brkt-foot .count { white-space: nowrap; }
+.pn .pn-brkt-clear {
+	background: var(--paper);
+	border: 1.5px solid var(--ink);
+	box-shadow: 2px 2px 0 var(--ink);
+	padding: 5px 12px;
+	font-family: var(--display);
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--ink);
+	cursor: pointer;
+	white-space: nowrap;
+	transition: transform 80ms ease, box-shadow 80ms ease;
+}
+.pn .pn-brkt-clear:hover {
+	background: var(--red);
+	color: var(--paper);
+	border-color: var(--ink);
+}
+.pn .pn-brkt-clear:active {
+	transform: translate(1px, 1px);
+	box-shadow: 1px 1px 0 var(--ink);
+}
 
-/* ===== Mobile swipeable ===== */
+.pn .pn-mb-clear {
+	background: var(--paper);
+	border: 1.5px solid var(--ink);
+	box-shadow: 1.5px 1.5px 0 var(--ink);
+	padding: 3px 8px;
+	margin-top: 4px;
+	font-family: var(--display);
+	font-size: 9px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--ink);
+	cursor: pointer;
+	white-space: nowrap;
+}
+.pn .pn-mb-clear:hover {
+	background: var(--red);
+	color: var(--paper);
+}
+
+/* ===== Mobile swipeable =====
+   On mobile the bracket bleeds edge-to-edge: negative margin cancels the
+   page's 28px body padding, and the side borders + shadow are dropped so
+   the navy stage runs corner-to-corner like the mockup. */
+.pn .pn-brkt-mob {
+	margin-left: -28px;
+	margin-right: -28px;
+}
 .pn .pn-mb {
 	display: flex;
 	flex-direction: column;
-	flex: 1;
-	min-height: 0;
 	background: var(--paper);
-	border: 2.5px solid var(--ink);
-	box-shadow: 5px 5px 0 var(--ink);
+	border-top: 2.5px solid var(--ink);
+	border-bottom: 2.5px solid var(--ink);
 	margin-bottom: 22px;
 }
 .pn .pn-mb-h {
@@ -325,13 +446,18 @@
 .pn .pn-mb-label .next { color: var(--ink); }
 .pn .pn-mb-label .arrow { color: var(--red); font-size: 16px; line-height: 1; }
 
+/* Stage = full panel width, navy bleeds edge-to-edge for the
+   wallpaper effect. The viewport inside is the actual clipping window
+   — exactly 2 cols + gap + padding wide — and centres horizontally
+   in the stage. Anything outside it (extra navy on either side, the
+   3 off-screen track cols) is hidden by viewport's overflow:hidden,
+   so adjacent rounds never peek through. Stage height is JS-driven
+   (current-page content) and animates between pages — no inner
+   scrollbar, short pages collapse cleanly. */
 .pn .pn-mb-stage {
-	flex: 1;
 	position: relative;
 	overflow: hidden;
 	background: var(--navy);
-	padding: 12px;
-	min-height: 380px;
 }
 .pn .pn-mb-stage::before {
 	content: '';
@@ -340,20 +466,70 @@
 	background-image: repeating-linear-gradient(135deg, transparent 0 18px, rgba(255, 255, 255, 0.03) 18px 19px);
 	pointer-events: none;
 }
-.pn .pn-mb-scroll {
+.pn .pn-mb-viewport {
 	position: relative;
 	z-index: 1;
 	height: 100%;
-	overflow-y: auto;
-	overflow-x: hidden;
+	margin: 0 auto;
+	padding: 12px;
+	overflow: hidden;
+}
+
+/* Gold swipe arrows — sit centred in the navy gutter on each side of
+   the viewport. Gutter width = (stage − viewport) / 2, so each
+   gutter's midpoint sits (stage − viewport) / 4 from the stage edge.
+   That's what the calc() below resolves to, using --viewport-w (set
+   inline on the stage). Each arrow uses translate(-50%, -50%) to
+   center its bounding box on that midpoint. Hidden on small screens
+   where the gutter would collapse and the arrow would overlap cards. */
+.pn .pn-mb-arrow {
+	position: absolute;
+	top: 50%;
+	z-index: 3;
+	background: transparent;
+	border: 0;
+	padding: 4px 8px;
+	color: var(--gold);
+	font-family: var(--display);
+	font-size: 32px;
+	line-height: 1;
+	cursor: pointer;
+	opacity: 0.65;
+	transition: opacity 180ms ease, transform 180ms ease;
+	user-select: none;
+	-webkit-tap-highlight-color: transparent;
+}
+.pn .pn-mb-arrow.prev {
+	left: calc((100% - var(--viewport-w, 0px)) / 4);
+	transform: translate(-50%, -50%);
+}
+.pn .pn-mb-arrow.next {
+	left: calc(100% - (100% - var(--viewport-w, 0px)) / 4);
+	transform: translate(-50%, -50%);
+}
+.pn .pn-mb-arrow:hover { opacity: 1; }
+.pn .pn-mb-arrow.prev:hover {
+	transform: translate(-50%, -50%) translateX(-3px);
+}
+.pn .pn-mb-arrow.next:hover {
+	transform: translate(-50%, -50%) translateX(3px);
+}
+/* On phones the viewport fills the stage so the gutter collapses to
+   ~0 — hiding the arrows keeps them from overlapping the cards. The
+   user swipes with their finger at that size anyway. */
+@media (max-width: 699px) {
+	.pn .pn-mb-arrow { display: none; }
+}
+.pn .pn-mb-scroll {
+	position: relative;
+	height: 100%;
 	display: flex;
-	align-items: center;
-	-webkit-overflow-scrolling: touch;
+	align-items: flex-start;
 }
 .pn .pn-mb-track {
 	display: flex;
 	gap: 12px;
-	align-items: stretch;
+	align-items: flex-start;
 	touch-action: pan-y;
 }
 .pn .pn-mb-col {
@@ -449,10 +625,13 @@
 	text-transform: uppercase;
 }
 
-/* Desktop / mobile show-hide for the bracket */
+/* Desktop / mobile show-hide for the bracket.
+   The desktop wall chart needs ~9 columns × ~110px + 8 gaps + panel
+   padding/borders before it stops cramping. Below ~1180px the cards lose
+   legibility, so switch to the 2-round mobile view aggressively. */
 .pn .pn-brkt-desk { display: none; }
 .pn .pn-brkt-mob { display: block; }
-@media (min-width: 900px) {
+@media (min-width: 1180px) {
 	.pn .pn-brkt-desk { display: block; }
 	.pn .pn-brkt-mob { display: none; }
 }

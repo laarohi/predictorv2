@@ -19,6 +19,12 @@
 	$: pickedAway = awayTeam !== null && winner === awayTeam;
 	$: anyTeam = !!(homeTeam || awayTeam);
 
+	// 3-letter codes keep the cards a fixed visual width regardless of
+	// which teams advance — so card layout is determined at render time,
+	// not at content time. Final card stays full-name (it has the room).
+	$: homeCode = homeTeam ? teamCode(homeTeam) : '—';
+	$: awayCode = awayTeam ? teamCode(awayTeam) : '—';
+
 	function clickHome() {
 		if (locked || !homeTeam) return;
 		onSelect(homeTeam);
@@ -30,43 +36,48 @@
 </script>
 
 {#if isFinal}
-	<div class="pn-bm final">
-		<div class="l">★ Predicted Champion</div>
-		{#if winner}
-			<button class="winner-row" type="button" on:click={pickedHome ? clickHome : clickAway}>
-				<PnFlag code={teamCode(winner)} w={28} h={20} />
-				<span>{winner.toUpperCase()}</span>
+	{#if !anyTeam}
+		<div class="pn-bm final empty">
+			<div class="empty-l">Final awaits semi winners</div>
+		</div>
+	{:else}
+		<!-- Option B: same two-row click-to-switch pattern as other bracket
+		     cells, but on a gold "centerpiece" body (thicker border, red
+		     offset shadow, bigger flag + code). The "celebration" lives in
+		     the champion sticker rendered above this card in PnKnockoutBracket. -->
+		<div class="pn-bm final" class:locked>
+			<button
+				type="button"
+				class="row"
+				class:pred={pickedHome}
+				class:lose-pred={winner !== null && !pickedHome}
+				on:click={clickHome}
+				disabled={locked || !homeTeam}
+			>
+				<span class="nm">
+					<PnFlag code={teamCode(homeTeam ?? '???')} w={18} h={12} />
+					<span class="nm-text">{homeCode}</span>
+				</span>
 			</button>
-			{#if homeTeam && homeTeam !== winner}
-				<button class="alt-row" type="button" on:click={clickHome} disabled={locked}>
-					<PnFlag code={teamCode(homeTeam)} w={16} h={11} />
-					<span>{homeTeam.toUpperCase()}</span>
-				</button>
-			{/if}
-			{#if awayTeam && awayTeam !== winner}
-				<button class="alt-row" type="button" on:click={clickAway} disabled={locked}>
-					<PnFlag code={teamCode(awayTeam)} w={16} h={11} />
-					<span>{awayTeam.toUpperCase()}</span>
-				</button>
-			{/if}
-			<div class="sub">over {winner === homeTeam ? awayTeam ?? '—' : homeTeam ?? '—'}</div>
-		{:else if homeTeam || awayTeam}
-			<button class="alt-row" type="button" on:click={clickHome} disabled={locked || !homeTeam}>
-				<PnFlag code={teamCode(homeTeam ?? '???')} w={16} h={11} />
-				<span>{(homeTeam ?? 'TBD').toUpperCase()}</span>
+			<button
+				type="button"
+				class="row"
+				class:pred={pickedAway}
+				class:lose-pred={winner !== null && !pickedAway}
+				on:click={clickAway}
+				disabled={locked || !awayTeam}
+			>
+				<span class="nm">
+					<PnFlag code={teamCode(awayTeam ?? '???')} w={18} h={12} />
+					<span class="nm-text">{awayCode}</span>
+				</span>
 			</button>
-			<button class="alt-row" type="button" on:click={clickAway} disabled={locked || !awayTeam}>
-				<PnFlag code={teamCode(awayTeam ?? '???')} w={16} h={11} />
-				<span>{(awayTeam ?? 'TBD').toUpperCase()}</span>
-			</button>
-		{:else}
-			<div class="sub" style="margin-top: 8px;">Final awaits semi winners</div>
-		{/if}
-	</div>
+		</div>
+	{/if}
 {:else if !anyTeam}
 	<div class="pn-bm tbd"></div>
 {:else}
-	<div class="pn-bm" class:locked>
+	<div class="pn-bm" class:locked class:compact>
 		<button
 			type="button"
 			class="row"
@@ -76,10 +87,10 @@
 			disabled={locked || !homeTeam}
 		>
 			<span class="nm">
-				{#if homeTeam && !compact}
-					<PnFlag code={teamCode(homeTeam)} w={14} h={10} />
+				{#if homeTeam}
+					<PnFlag code={teamCode(homeTeam)} w={compact ? 13 : 14} h={compact ? 9 : 10} />
 				{/if}
-				<span class="nm-text">{homeTeam ?? '—'}</span>
+				<span class="nm-text">{homeCode}</span>
 			</span>
 		</button>
 		<button
@@ -91,10 +102,10 @@
 			disabled={locked || !awayTeam}
 		>
 			<span class="nm">
-				{#if awayTeam && !compact}
-					<PnFlag code={teamCode(awayTeam)} w={14} h={10} />
+				{#if awayTeam}
+					<PnFlag code={teamCode(awayTeam)} w={compact ? 13 : 14} h={compact ? 9 : 10} />
 				{/if}
-				<span class="nm-text">{awayTeam ?? '—'}</span>
+				<span class="nm-text">{awayCode}</span>
 			</span>
 		</button>
 	</div>
