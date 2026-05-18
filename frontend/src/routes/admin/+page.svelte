@@ -74,8 +74,13 @@
 		}
 	}
 
+	// Draft is the raw text the admin is typing. Comma-separated for
+	// multi-answer questions (ties). Falls back to the persisted list
+	// joined with ", " so editing starts from the current saved state.
 	function draftFor(view: BonusAnswerView): string {
-		return bonusDrafts.get(view.question_id) ?? view.correct_answer ?? '';
+		const stored = bonusDrafts.get(view.question_id);
+		if (stored !== undefined) return stored;
+		return view.correct_answers.join(', ');
 	}
 
 	function setDraft(qid: string, value: string) {
@@ -84,12 +89,28 @@
 		bonusDrafts = next;
 	}
 
+	/** Split a comma-separated draft into a deduplicated list of trimmed
+	 *  non-empty strings. Empty list → un-resolves the question. */
+	function parseDraft(raw: string): string[] {
+		const seen = new Set<string>();
+		const out: string[] = [];
+		for (const part of raw.split(',')) {
+			const trimmed = part.trim();
+			if (!trimmed) continue;
+			const key = trimmed.toLowerCase();
+			if (seen.has(key)) continue;
+			seen.add(key);
+			out.push(trimmed);
+		}
+		return out;
+	}
+
 	async function handleSaveBonusAnswer(view: BonusAnswerView) {
-		const value = draftFor(view).trim();
+		const answers = parseDraft(draftFor(view));
 		savingQId = view.question_id;
 		bonusError = null;
 		try {
-			const updated = await setBonusAnswer(view.question_id, value);
+			const updated = await setBonusAnswer(view.question_id, answers);
 			bonusAnswerViews = bonusAnswerViews.map((v) =>
 				v.question_id === view.question_id ? updated : v
 			);
@@ -452,7 +473,7 @@
 			<section class="pn-pf-section">
 				<div class="h">
 					<span>Bonus Question Answers</span>
-					<span class="right">{bonusAnswerViews.filter((v) => v.correct_answer).length} of {bonusAnswerViews.length} resolved</span>
+					<span class="right">{bonusAnswerViews.filter((v) => v.correct_answers.length > 0).length} of {bonusAnswerViews.length} resolved</span>
 				</div>
 				<div class="body">
 					{#if bonusError}<div class="pn-pf-alert error" style="margin-bottom: 12px;">{bonusError}</div>{/if}
@@ -467,20 +488,34 @@
 									<div class="who">
 										<div class="nm" style="font-size: 13px; text-transform: none; letter-spacing: 0;">{v.label}</div>
 										<div class="em">{v.points} pts · {v.input_type} · {fmtResolved(v.resolved_at)}</div>
+										{#if v.computed_answers.length > 0}
+											<button
+												type="button"
+												class="pn-ad-computed"
+												title="Click to populate the input with this auto-derived answer. Then click Save to persist."
+												on:click={() => setDraft(v.question_id, v.computed_answers.join(', '))}
+											>
+												<span class="lbl">Auto:</span>
+												<span class="val">{v.computed_answers.join(', ')}</span>
+												<span class="apply">↓ use</span>
+											</button>
+										{/if}
 									</div>
 									<input
 										type="text"
 										class="pn-ad-search"
 										style="margin: 0; max-width: 100%;"
-										placeholder={v.correct_answer ? '' : 'Enter correct answer…'}
+										placeholder={v.correct_answers.length ? '' : 'Enter correct answer(s), comma-separated…'}
 										value={draftFor(v)}
 										on:input={(e) => setDraft(v.question_id, e.currentTarget.value)}
 									/>
-									<div class="badges">
-										{#if v.correct_answer}
-											<span class="pn-tag got" title="Currently saved: {v.correct_answer}">✓ {v.correct_answer}</span>
-										{:else}
+									<div class="badges" style="display: flex; flex-wrap: wrap; gap: 4px;">
+										{#if v.correct_answers.length === 0}
 											<span class="pn-tag" style="opacity: 0.6;">— Unset</span>
+										{:else}
+											{#each v.correct_answers as a (a)}
+												<span class="pn-tag got" title="Currently saved">✓ {a}</span>
+											{/each}
 										{/if}
 									</div>
 									<div class="actions">
@@ -498,7 +533,7 @@
 						{/if}
 					{/each}
 					<p style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 14px;">
-						★ Saving a correct answer awards bonus points to every player whose pick matches (case- and accent-insensitive). Leave blank to un-resolve a question.
+						★ Enter one correct answer, or several comma-separated when teams tie on the criterion — every listed answer awards full points to players who picked it (case- and accent-insensitive). Leave blank to un-resolve a question.
 					</p>
 				</div>
 			</section>

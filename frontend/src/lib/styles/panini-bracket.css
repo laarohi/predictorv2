@@ -76,6 +76,26 @@
 	gap: 6px;
 	justify-content: space-around;
 }
+/* Non-final columns: lift the round-label chip out of the flex
+   distribution by absolute-positioning it at the top. Without this,
+   the chip is a participating flex item, which throws off the
+   space-around math because R32 has 9 items (chip + 8 cards) but R16
+   only has 5 — different proportions, different y-positions, so the
+   R16 cards don't sit at the midpoints of R32 pairs. With the chip
+   absolute and a fixed padding-top to reserve room, every column's
+   body distributes its cards over an identical area, and the bracket
+   tree lines up properly. */
+.pn .pn-brkt-col:not(.pn-brkt-col-final) {
+	position: relative;
+	padding-top: 36px;
+}
+.pn .pn-brkt-col:not(.pn-brkt-col-final) > .head {
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	margin-bottom: 0;
+}
 .pn .pn-brkt-col .head {
 	background: var(--gold);
 	color: var(--ink);
@@ -226,17 +246,22 @@
 
 /* ===== Champion sticker =====
    Lives inside the FINAL column but absolute-positioned at the column's
-   top, where the centered FINAL chip + final card already leave ~80px
-   of empty vertical space. Because it's out of flow, appearing doesn't
-   shift the bracket grid down. It overflows the FINAL column's narrow
-   1.5fr width horizontally so full names (SWITZERLAND, NETHERLANDS)
-   render in one line — the navy panel has no clip so the overflow is
-   safe. Pops in with an overshoot bounce on first appearance; re-runs
-   every time the champion changes via {#key winner} in the parent. */
+   BOTTOM (below the centered FINAL chip + final card cluster). Used to
+   sit at the top, but that overlapped the adjacent columns' absolute-
+   positioned round-label chips once the bracket alignment fix moved
+   those chips to top:0. The bottom slot is empty (justify-content:
+   center on the final col leaves room above AND below the centered
+   cluster), so the sticker fits naturally there. Because it's out of
+   flow, appearing doesn't shift the bracket grid. Overflows the FINAL
+   column's narrow 1.5fr width horizontally so full names (SWITZERLAND,
+   NETHERLANDS) render on one line — the navy panel doesn't clip, so
+   the overflow is safe. Pops in with an overshoot bounce on first
+   appearance; re-runs every time the champion changes via {#key
+   winner} in the parent. */
 .pn .pn-brkt-col-final { position: relative; }
 .pn .pn-champ-sticker-pos {
 	position: absolute;
-	top: 0;
+	bottom: 0;
 	left: 50%;
 	transform: translateX(-50%);
 	z-index: 5;
@@ -248,7 +273,9 @@
 	box-shadow: 6px 6px 0 var(--red);
 	padding: 10px 22px 12px;
 	text-align: center;
-	transform-origin: 50% 80%;
+	/* Origin near the top — sticker is anchored below the final card, so
+	   it should appear to "drop in" from above the bottom slot. */
+	transform-origin: 50% 20%;
 	animation: pn-sticker-pop 520ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 .pn .pn-champ-sticker .badge {
@@ -517,7 +544,7 @@
 /* On phones the viewport fills the stage so the gutter collapses to
    ~0 — hiding the arrows keeps them from overlapping the cards. The
    user swipes with their finger at that size anyway. */
-@media (max-width: 699px) {
+@media (max-width: 499px) {
 	.pn .pn-mb-arrow { display: none; }
 }
 .pn .pn-mb-scroll {

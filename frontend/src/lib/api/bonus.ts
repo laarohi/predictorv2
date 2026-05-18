@@ -30,7 +30,12 @@ export interface BonusAnswerView {
 	category: BonusCategory;
 	points: number;
 	input_type: BonusInputType;
-	correct_answer: string | null;
+	/** All accepted correct answers (multiple entries = a tie). Empty if unresolved. */
+	correct_answers: string[];
+	/** Auto-derived suggestion(s) from fixtures + scores. Group-stage and
+	 *  top/flop only; awards-category questions always have []. Advisory
+	 *  — admin can apply via "Use computed" or override manually. */
+	computed_answers: string[];
 	resolved_at: string | null;
 }
 
@@ -58,10 +63,10 @@ export async function listBonusAnswers(): Promise<BonusAnswerView[]> {
 
 export async function setBonusAnswer(
 	questionId: string,
-	correctAnswer: string
+	correctAnswers: string[]
 ): Promise<BonusAnswerView> {
 	return api.post<BonusAnswerView>('/admin/bonus/answers', {
 		question_id: questionId,
-		correct_answer: correctAnswer
+		correct_answers: correctAnswers
 	});
 }

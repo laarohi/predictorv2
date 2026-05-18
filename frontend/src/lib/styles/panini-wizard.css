@@ -912,17 +912,54 @@
 .pn .save-tag.empty { background: var(--paper-2); color: var(--ink-3); }
 .pn .save-tag.locked { background: var(--ink); color: var(--paper); }
 
-/* ==== Bonus questions ==== */
-.pn .pn-bonus-row {
-	display: grid;
-	grid-template-columns: 1fr;
-	gap: 16px;
-	margin-bottom: 22px;
+/* Section-banner tie disclaimer — small panini-chip with an info dot,
+   sits to the right of the section title (before the "N questions"
+   label). Used for group_stage and top_flop sections where two or
+   more teams can legitimately tie on the scoring criterion. */
+.pn .pn-tie-note {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 9px;
+	background: var(--paper-2);
+	border: 1.5px solid var(--ink);
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--ink-2);
+	white-space: nowrap;
+	box-shadow: 2px 2px 0 var(--ink);
 }
-@media (min-width: 700px) {
-	.pn .pn-bonus-row {
-		grid-template-columns: 1fr 1fr 1fr;
+.pn .pn-tie-note .i {
+	color: var(--red);
+	font-size: 12px;
+	line-height: 1;
+}
+/* On narrow screens the banner row would overflow; let the note wrap to
+   the next line beneath the title and drop the bottom shadow so it sits
+   flush. */
+@media (max-width: 799px) {
+	.pn .pn-tie-note {
+		font-size: 9px;
+		padding: 3px 7px;
+		white-space: normal;
+		box-shadow: none;
 	}
+}
+
+/* ==== Bonus questions ====
+   Flex grid sized for 4/2/1 columns by viewport. Items use max-width
+   so they never grow beyond their target share; with justify-content:
+   center, sections that have fewer questions than the column count
+   (e.g. top_flop's 2 in a 4-col row) sit centred rather than left-
+   aligned. */
+.pn .pn-bonus-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 16px;
+	justify-content: center;
+	margin-bottom: 22px;
 }
 .pn .pn-bonus {
 	background: var(--paper);
@@ -930,6 +967,28 @@
 	box-shadow: 4px 4px 0 var(--ink);
 	padding: 14px 18px;
 	position: relative;
+	flex: 1 1 100%;
+	max-width: 100%;
+	min-width: 0;
+	/* Column flex so the answer row can be anchored to the card bottom
+	   via margin-top:auto. Combined with the parent .pn-bonus-row's
+	   default align-items:stretch, every card in a row ends up the same
+	   height — which means the dropdowns end up aligned across the row,
+	   regardless of how many lines the question text wraps to. */
+	display: flex;
+	flex-direction: column;
+}
+@media (min-width: 700px) {
+	.pn .pn-bonus {
+		flex-basis: calc(50% - 8px);
+		max-width: calc(50% - 8px);
+	}
+}
+@media (min-width: 1100px) {
+	.pn .pn-bonus {
+		flex-basis: calc(25% - 12px);
+		max-width: calc(25% - 12px);
+	}
 }
 .pn .pn-bonus .l {
 	font-family: var(--mono);
@@ -949,12 +1008,30 @@
 	background: var(--gold);
 	display: inline-block;
 }
+/* Question block: prominent nickname + smaller mono descriptor underneath.
+   Labels in YAML follow "Nickname — descriptor" — the page splits on the
+   em-dash and renders the two parts differently so the fun name reads big
+   and the clarifier sits as a subtitle. If a label has no em-dash, only
+   the nickname block renders (graceful fallback). */
 .pn .pn-bonus .q {
+	margin-bottom: 12px;
+}
+.pn .pn-bonus .q-name {
 	font-family: var(--display);
-	font-size: 16px;
-	line-height: 1.15;
+	font-size: 19px;
+	line-height: 1.1;
 	text-transform: uppercase;
-	margin-bottom: 10px;
+	color: var(--ink);
+	letter-spacing: -0.005em;
+}
+.pn .pn-bonus .q-desc {
+	font-family: var(--mono);
+	font-size: 12px;
+	line-height: 1.45;
+	letter-spacing: 0.04em;
+	text-transform: none;
+	color: var(--ink-2);
+	margin-top: 6px;
 }
 .pn .pn-bonus .answer {
 	display: flex;
@@ -966,11 +1043,33 @@
 	font-family: var(--display);
 	font-size: 14px;
 	text-transform: uppercase;
+	width: 100%;
+	margin-top: auto;
 }
 .pn .pn-bonus .answer.empty {
 	background: var(--paper);
 	border-style: dashed;
 	color: var(--ink-3);
+}
+.pn .pn-bonus .answer-row {
+	display: flex;
+	align-items: stretch;
+	gap: 10px;
+	width: 100%;
+	margin-top: auto;
+}
+.pn .pn-bonus .answer-row > :first-child {
+	flex: 1;
+	min-width: 0;
+}
+.pn .pn-bonus .answer-flag {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 4px 6px;
+	background: var(--paper-2);
+	border: 2px solid var(--ink);
+	flex-shrink: 0;
 }
 .pn .pn-bonus .pts-pill {
 	position: absolute;
@@ -983,6 +1082,108 @@
 	font-size: 10px;
 	letter-spacing: 0.08em;
 	border: 2px solid var(--ink);
+}
+
+/* ==== Custom panini dropdown (PnDropdown.svelte) ====
+   Trigger looks like the existing .answer field so the bonus card
+   reads consistently; the popover panel uses the panini paper body +
+   ink border + offset hard shadow language. Selected option gets the
+   gold treatment, hover state uses paper-2 (matches the rest of the
+   wizard). */
+.pn .pn-dd {
+	position: relative;
+	width: 100%;
+}
+.pn .pn-dd-trigger {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	width: 100%;
+	padding: 8px 10px;
+	background: var(--paper-2);
+	border: 2px solid var(--ink);
+	font-family: var(--display);
+	font-size: 14px;
+	text-transform: uppercase;
+	color: var(--ink);
+	cursor: pointer;
+	text-align: left;
+	letter-spacing: 0.02em;
+}
+.pn .pn-dd-trigger.empty {
+	background: var(--paper);
+	border-style: dashed;
+	color: var(--ink-3);
+}
+.pn .pn-dd-trigger:focus-visible {
+	outline: 2px solid var(--red);
+	outline-offset: 2px;
+}
+.pn .pn-dd-trigger .lbl {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	min-width: 0;
+	flex: 1;
+}
+.pn .pn-dd-trigger .lbl > span {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.pn .pn-dd-trigger .lbl .ph {
+	color: var(--ink-3);
+}
+.pn .pn-dd-trigger .caret {
+	font-size: 12px;
+	color: var(--ink-2);
+	margin-left: 6px;
+	transition: transform 200ms ease;
+}
+.pn .pn-dd.open .pn-dd-trigger .caret {
+	transform: rotate(180deg);
+}
+.pn .pn-dd-panel {
+	position: absolute;
+	top: calc(100% + 4px);
+	left: 0;
+	right: 0;
+	z-index: 50;
+	background: var(--paper);
+	border: 2px solid var(--ink);
+	box-shadow: 4px 4px 0 var(--ink);
+	max-height: 280px;
+	overflow-y: auto;
+}
+.pn .pn-dd-opt {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	width: 100%;
+	padding: 8px 10px;
+	background: transparent;
+	border: 0;
+	border-bottom: 1px solid var(--paper-3);
+	font-family: var(--display);
+	font-size: 13px;
+	text-transform: uppercase;
+	color: var(--ink);
+	cursor: pointer;
+	text-align: left;
+	letter-spacing: 0.02em;
+}
+.pn .pn-dd-opt:last-child {
+	border-bottom: 0;
+}
+.pn .pn-dd-opt:hover {
+	background: var(--paper-2);
+}
+.pn .pn-dd-opt.selected {
+	background: var(--gold);
+	font-weight: 700;
+}
+.pn .pn-dd-opt.selected:hover {
+	background: var(--gold);
 }
 
 /* ==== Sticky save bar ==== */

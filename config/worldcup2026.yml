@@ -61,9 +61,26 @@ scoring:
 # below updates the wording everywhere automatically.
 bonus:
   # Configurable: which FIFA rank cutoff defines "dark horse" / "flop". Users
-  # see this number substituted into the question labels; the admin enters
-  # the correct answer based on this same cutoff.
+  # see this number substituted into the question labels; auto-computation of
+  # those questions reads `fifa_top_teams` below to decide which teams count
+  # as "inside the top N".
   top_n: 10
+
+  # Teams considered FIFA top-N at tournament start. Used by the auto-resolver
+  # to decide "dark horse" (best progress among teams OUTSIDE this list) and
+  # "bottlers" (earliest exit among teams INSIDE this list). Only teams that
+  # are actually in the competition contribute — others are ignored.
+  fifa_top_teams:
+    - "Argentina"
+    - "France"
+    - "Spain"
+    - "England"
+    - "Brazil"
+    - "Belgium"
+    - "Portugal"
+    - "Netherlands"
+    - "Italy"
+    - "Germany"
 
   # Point values per category. Flat within a category, so all 4 group-stage
   # questions are worth the same. Tweak here without code changes.
@@ -80,43 +97,47 @@ bonus:
     # ── Group stage ──────────────────────────────────────────────────
     - id: most_goals_scored_group
       category: group_stage
-      label: "Team to score the most goals in the group stage"
+      label: "Goal Machine — team that scored the most goals in the group stage"
       input_type: team
     - id: least_goals_scored_group
       category: group_stage
-      label: "Team to score the fewest goals in the group stage"
+      label: "Toothless Attack — team that scored the fewest goals in the group stage"
       input_type: team
     - id: most_goals_conceded_group
       category: group_stage
-      label: "Team to concede the most goals in the group stage"
+      label: "The Sieve — team that conceded the most goals in the group stage"
       input_type: team
     - id: least_goals_conceded_group
       category: group_stage
-      label: "Team to concede the fewest goals in the group stage"
+      label: "The Fortress — team that conceded the fewest goals in the group stage"
       input_type: team
 
     # ── Top / Flop (FIFA top_n cutoff) ───────────────────────────────
     - id: dark_horse
       category: top_flop
-      label: "Dark horse — team outside FIFA top {top_n} that progresses furthest"
+      label: "Dark Horse — team outside FIFA top {top_n} that progresses furthest"
       input_type: team
     - id: flop
       category: top_flop
-      label: "Flop — team inside FIFA top {top_n} eliminated earliest"
+      label: "Bottlers — team inside FIFA top {top_n} eliminated earliest"
       input_type: team
 
     # ── Awards (FIFA awards ceremony) ────────────────────────────────
     - id: best_player
       category: awards
-      label: "Best player (Golden Ball)"
+      label: "Golden Ball — best player of the tournament"
       input_type: player
     - id: top_scorer
       category: awards
-      label: "Top scorer (Golden Boot)"
+      label: "Golden Boot — top scorer of the tournament"
       input_type: player
     - id: best_young_player
       category: awards
-      label: "Best young player"
+      label: "Golden Boy — best young player of the tournament"
+      input_type: player
+    - id: golden_glove
+      category: awards
+      label: "Golden Glove — best goalkeeper of the tournament"
       input_type: player
 
 # Group stage configuration

@@ -15,13 +15,15 @@ from __future__ import annotations
 import unicodedata
 import uuid
 from dataclasses import dataclass
-from typing import Literal
+from typing import Iterable, Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
 from app.config import get_tournament_config
 from app.models.bonus import BonusAnswer, BonusPrediction
+from app.models.fixture import Fixture, MatchStatus
 
 
 BonusCategory = Literal["group_stage", "top_flop", "awards"]
@@ -98,8 +100,19 @@ def _normalize(s: str) -> str:
 
 
 def answers_match(user_answer: str, correct_answer: str) -> bool:
-    """Compare two free-text answers leniently."""
+    """Compare two free-text answers leniently (case- and accent-insensitive)."""
     return _normalize(user_answer) == _normalize(correct_answer)
+
+
+def answer_in(user_answer: str, correct_answers: list[str]) -> bool:
+    """True if `user_answer` matches any one of `correct_answers`. Used
+    for bonus questions where multiple teams may tie on the criterion
+    (e.g. two teams scoring the same number of goals in the group stage)
+    — picking any of the tied teams should award full points."""
+    if not user_answer:
+        return False
+    n = _normalize(user_answer)
+    return any(_normalize(c) == n for c in correct_answers)
 
 
 # ---- Scoring ----------------------------------------------------------------
@@ -116,7 +129,8 @@ async def calculate_bonus_points(
     check whether the user's prediction matches via answers_match() and
     award the question's category points if so. Returns the sum.
     """
-    # Load all bonus answers (optionally filtered by competition).
+    # Load all bonus answers (optionally filtered by competition). Each
+    # question may have several rows now — one per tied correct answer.
     ans_q = select(BonusAnswer)
     if competition_id is not None:
         ans_q = ans_q.where(BonusAnswer.competition_id == competition_id)
@@ -124,7 +138,9 @@ async def calculate_bonus_points(
     if not ans_rows:
         return 0
 
-    correct_by_qid: dict[str, str] = {a.question_id: a.correct_answer for a in ans_rows}
+    correct_by_qid: dict[str, list[str]] = {}
+    for a in ans_rows:
+        correct_by_qid.setdefault(a.question_id, []).append(a.correct_answer)
 
     # User's predictions for those questions.
     pred_rows = (
@@ -140,10 +156,184 @@ async def calculate_bonus_points(
 
     total = 0
     for pred in pred_rows:
-        correct = correct_by_qid.get(pred.question_id)
+        corrects = correct_by_qid.get(pred.question_id)
         question = questions_by_id.get(pred.question_id)
-        if correct is None or question is None:
+        if not corrects or question is None:
             continue
-        if answers_match(pred.answer, correct):
+        # Full points if the user picked any of the tied correct answers.
+        if answer_in(pred.answer, corrects):
             total += question.points
     return total
+
+
+# ---- Auto-computed answers --------------------------------------------------
+#
+# The four group-stage questions (Goal Machine, Toothless Attack, The Sieve,
+# The Fortress) and the two top/flop questions (Dark Horse, Bottlers) can be
+# derived directly from fixtures + scores. The Awards section cannot — those
+# come from the FIFA awards ceremony and must be entered manually.
+#
+# The compute functions below are pure (operate on plain data, no DB I/O)
+# so they're trivially unit-testable. `compute_bonus_answers_for_competition`
+# is the thin async orchestrator that loads from the DB and calls them.
+
+
+# Stage rank for "how far did this team progress". Group stage = 0, winner
+# = 6. Used by the dark-horse and bottlers calculators.
+_STAGE_ORDER = ["group", "round_of_32", "round_of_16", "quarter_final", "semi_final", "final"]
+_STAGE_RANK = {s: i for i, s in enumerate(_STAGE_ORDER)}
+# Winner is one step above "final" — represents winning the final (not just
+# reaching it). Used in dark-horse comparisons so a winning underdog out-
+# ranks a finalist who lost the final.
+_WINNER_RANK = len(_STAGE_ORDER)
+
+
+def compute_group_stats(fixtures_with_scores: Iterable[Fixture]) -> dict[str, dict[str, int]]:
+    """Aggregate {team: {gf, ga}} from finished group-stage fixtures only.
+
+    Pure function — pass it any iterable of Fixture objects with their
+    .score relationship preloaded. Fixtures without a final score, with
+    placeholder team names ("TBD"), or in non-group stages are skipped.
+    """
+    stats: dict[str, dict[str, int]] = {}
+    for f in fixtures_with_scores:
+        if f.stage != "group":
+            continue
+        if f.status != MatchStatus.FINISHED:
+            continue
+        score = getattr(f, "score", None)
+        if score is None:
+            continue
+        if not f.home_team or f.home_team == "TBD":
+            continue
+        if not f.away_team or f.away_team == "TBD":
+            continue
+        h = stats.setdefault(f.home_team, {"gf": 0, "ga": 0})
+        a = stats.setdefault(f.away_team, {"gf": 0, "ga": 0})
+        h["gf"] += score.home_score
+        h["ga"] += score.away_score
+        a["gf"] += score.away_score
+        a["ga"] += score.home_score
+    return stats
+
+
+def compute_team_progress(fixtures_with_scores: Iterable[Fixture]) -> dict[str, str]:
+    """For each team, the furthest stage they have *definitively* reached
+    according to completed fixtures. A team that only appears in group
+    fixtures (no knockout appearance yet) ends up at "group". The winner
+    of a finished final gets the special "winner" stage."""
+    progress: dict[str, str] = {}
+    final_winner: str | None = None
+    for f in fixtures_with_scores:
+        if f.status != MatchStatus.FINISHED:
+            continue
+        if f.stage not in _STAGE_RANK:
+            continue
+        if not f.home_team or f.home_team == "TBD":
+            continue
+        if not f.away_team or f.away_team == "TBD":
+            continue
+        rank = _STAGE_RANK[f.stage]
+        for team in (f.home_team, f.away_team):
+            existing = _STAGE_RANK.get(progress.get(team, "group"), 0)
+            if rank > existing or team not in progress:
+                progress[team] = f.stage
+        # Determine the final winner — used to bump them past plain "final".
+        if f.stage == "final":
+            score = getattr(f, "score", None)
+            if score is not None:
+                outcome = score.outcome
+                if outcome == "1":
+                    final_winner = f.home_team
+                elif outcome == "2":
+                    final_winner = f.away_team
+    if final_winner:
+        progress[final_winner] = "winner"
+    return progress
+
+
+def _teams_with_extremum(
+    stats: dict[str, dict[str, int]], key: str, want_max: bool
+) -> list[str]:
+    """Return the team(s) whose stats[key] is the max (or min). Empty if
+    no stats. Ties are returned in alphabetical order so the list is
+    deterministic — admins reading the auto-suggestion see a stable set."""
+    if not stats:
+        return []
+    values = [s[key] for s in stats.values()]
+    target = max(values) if want_max else min(values)
+    return sorted(t for t, s in stats.items() if s[key] == target)
+
+
+def compute_dark_horse(progress: dict[str, str], fifa_top: set[str]) -> list[str]:
+    """Team(s) NOT in `fifa_top` with the furthest progression. Empty if
+    no non-top team has played any completed match yet."""
+    if not progress:
+        return []
+    candidates: dict[str, int] = {}
+    for team, stage in progress.items():
+        if team in fifa_top:
+            continue
+        rank = _WINNER_RANK if stage == "winner" else _STAGE_RANK.get(stage, 0)
+        candidates[team] = rank
+    if not candidates:
+        return []
+    max_rank = max(candidates.values())
+    return sorted(t for t, r in candidates.items() if r == max_rank)
+
+
+def compute_bottlers(
+    progress: dict[str, str], fifa_top: set[str], competition_teams: set[str]
+) -> list[str]:
+    """Top-N team(s) with the earliest exit (lowest stage rank). Only
+    considers top-N teams that are actually in the competition. A top
+    team with no finished fixtures yet is treated as still at "group"."""
+    top_in_comp = [t for t in fifa_top if t in competition_teams]
+    if not top_in_comp:
+        return []
+    ranks = {t: _STAGE_RANK.get(progress.get(t, "group"), 0) for t in top_in_comp}
+    # Skip the winner — they didn't "bottle" anything.
+    ranks = {t: r for t, r in ranks.items() if progress.get(t) != "winner"}
+    if not ranks:
+        return []
+    min_rank = min(ranks.values())
+    return sorted(t for t, r in ranks.items() if r == min_rank)
+
+
+async def compute_bonus_answers_for_competition(
+    session: AsyncSession,
+    competition_id: uuid.UUID,
+) -> dict[str, list[str]]:
+    """Compute auto-derived correct answers for every question that
+    *can* be auto-derived. Awards-category questions get an empty list
+    (they're manual-only). The returned dict maps question_id → list of
+    correct answers (multiple = a tie). Callers can decide whether to
+    surface as a suggestion (current admin flow) or persist directly."""
+    fx_rows = (
+        await session.execute(
+            select(Fixture)
+            .where(Fixture.competition_id == competition_id)
+            .options(selectinload(Fixture.score))
+        )
+    ).scalars().all()
+
+    stats = compute_group_stats(fx_rows)
+    progress = compute_team_progress(fx_rows)
+    competition_teams: set[str] = set()
+    for f in fx_rows:
+        for t in (f.home_team, f.away_team):
+            if t and t != "TBD":
+                competition_teams.add(t)
+
+    cfg = _get_bonus_config()
+    fifa_top = set(cfg.get("fifa_top_teams", []) or [])
+
+    return {
+        "most_goals_scored_group": _teams_with_extremum(stats, "gf", True),
+        "least_goals_scored_group": _teams_with_extremum(stats, "gf", False),
+        "most_goals_conceded_group": _teams_with_extremum(stats, "ga", True),
+        "least_goals_conceded_group": _teams_with_extremum(stats, "ga", False),
+        "dark_horse": compute_dark_horse(progress, fifa_top),
+        "flop": compute_bottlers(progress, fifa_top, competition_teams),
+        # Awards questions intentionally omitted — manual only.
+    }

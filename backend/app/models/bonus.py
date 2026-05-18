@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import UniqueConstraint  # noqa: F401  (used by BonusPrediction)
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models._datetime import utc_datetime_column, utc_now
@@ -51,7 +51,13 @@ class BonusPrediction(SQLModel, table=True):
 
 
 class BonusAnswer(SQLModel, table=True):
-    """The correct answer for a bonus question in a given competition.
+    """One correct answer for a bonus question in a given competition.
+
+    There can be MULTIPLE rows per (competition, question) — used when
+    teams legitimately tie on the relevant criterion (e.g. two teams
+    score the same number of goals in the group stage). Scoring treats
+    every row as a winning answer: a user's pick scores full points if
+    it matches any row for the question.
 
     Set by an admin via /api/admin/bonus/answers when the question is
     resolved (group stage ending, tournament awards ceremony, etc.).
@@ -60,14 +66,14 @@ class BonusAnswer(SQLModel, table=True):
     """
 
     __tablename__ = "bonus_answers"
-    __table_args__ = (
-        UniqueConstraint("competition_id", "question_id", name="uq_bonus_ans_comp_q"),
-    )
+    # No unique on (competition_id, question_id) — multiple correct answers
+    # per question are intentional. See alembic 5a8c1e2f3b09.
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     competition_id: uuid.UUID = Field(foreign_key="competitions.id", index=True)
     question_id: str = Field(index=True, max_length=64)
-    # The canonical correct answer — same shape as predictions.answer.
+    # One canonical correct answer — same shape as predictions.answer.
+    # Multiple correct answers are stored as multiple rows.
     correct_answer: str
     resolved_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())
 

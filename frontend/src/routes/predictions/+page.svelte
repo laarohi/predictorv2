@@ -46,10 +46,12 @@
 		lastLocalSave
 	} from '$stores/unsavedPersistence';
 	import { teamCode } from '$lib/utils/teamCodes';
+	import { displayTeamName } from '$lib/utils/teamName';
 	import type { Fixture, MatchPrediction, BracketPrediction, TeamAdvancementPrediction } from '$types';
 
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import PnFlag from '$components/panini/PnFlag.svelte';
+	import PnDropdown from '$components/panini/PnDropdown.svelte';
 	import PnKnockoutBracket from '$components/panini/PnKnockoutBracket.svelte';
 
 	$: if (!$isAuthenticated) {
@@ -565,6 +567,7 @@
 		}
 		return Array.from(set).sort();
 	})();
+	$: teamOptions = allTeams.map((t) => ({ value: t, label: displayTeamName(t), flag: teamCode(t) }));
 
 	// Group questions by category for layout
 	$: bonusByCategory = (() => {
@@ -818,7 +821,7 @@
 										<td>
 											<span class="team">
 												<PnFlag code={teamCode(t.team)} w={20} h={14} />
-												<span class="nm-text">{t.team}</span>
+												<span class="nm-text">{displayTeamName(t.team)}</span>
 											</span>
 										</td>
 										<td class="stat">{t.played}</td>
@@ -892,7 +895,7 @@
 										<td>
 											<span class="team">
 												<PnFlag code={teamCode(t.team)} w={20} h={14} />
-												<span class="nm-text">{t.team}</span>
+												<span class="nm-text">{displayTeamName(t.team)}</span>
 											</span>
 										</td>
 										<td class="stat">{t.played}</td>
@@ -1039,29 +1042,44 @@
 				{#each Object.entries(bonusByCategory) as [cat, qs] (cat)}
 					{#if qs.length > 0}
 						<div class="pn-banner" style="margin-top: 18px;">
-							<span class="n">{cat === 'group_stage' ? '06' : cat === 'top_flop' ? '07' : '08'}</span>
+							<span class="n">{cat === 'group_stage' ? '01' : cat === 'top_flop' ? '02' : '03'}</span>
 							<h2>{CATEGORY_LABEL[cat]}</h2>
+							{#if cat === 'group_stage' || cat === 'top_flop'}
+								<span class="pn-tie-note" title="If two or more teams tie on the relevant criterion, picking any one of them scores full points.">
+									<span class="i" aria-hidden="true">ⓘ</span>
+									Ties: any tied team scores full points
+								</span>
+							{/if}
 							<span class="end">{qs.length} question{qs.length === 1 ? '' : 's'}</span>
 						</div>
 						<section class="pn-bonus-row">
 							{#each qs as bq (bq.id)}
 								{@const answer = bonusAnswer(bq.id)}
+								{@const dashIdx = bq.label.indexOf(' — ')}
+								{@const nickname = dashIdx >= 0 ? bq.label.slice(0, dashIdx) : bq.label}
+								{@const descriptor = dashIdx >= 0 ? bq.label.slice(dashIdx + 3) : ''}
 								<div class="pn-bonus">
 									<div class="l"><span class="pip"></span>{CATEGORY_LABEL[cat]}</div>
-									<div class="q">{bq.label}</div>
+									<div class="q">
+										<div class="q-name">{nickname}</div>
+										{#if descriptor}
+											<div class="q-desc">{descriptor}</div>
+										{/if}
+									</div>
 									{#if bq.input_type === 'team'}
-										<select
-											class="answer"
-											class:empty={!answer}
-											value={answer}
-											on:change={(e) => setBonusAnswer(bq.id, e.currentTarget.value)}
-											style="cursor: pointer;"
-										>
-											<option value="">— Select a team —</option>
-											{#each allTeams as t (t)}
-												<option value={t}>{t}</option>
-											{/each}
-										</select>
+										<div class="answer-row">
+											<PnDropdown
+												value={answer}
+												options={teamOptions}
+												placeholder="— Select a team —"
+												on:change={(e) => setBonusAnswer(bq.id, e.detail)}
+											/>
+											{#if answer}
+												<div class="answer-flag" aria-hidden="true">
+													<PnFlag code={teamCode(answer)} w={36} h={26} />
+												</div>
+											{/if}
+										</div>
 									{:else}
 										<input
 											type="text"

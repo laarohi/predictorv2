@@ -16,7 +16,10 @@ from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction
 from app.models.score import Score, ScoreSource
 from app.models.user import User
-from app.services.bonus import get_questions as get_bonus_questions
+from app.services.bonus import (
+    compute_bonus_answers_for_competition,
+    get_questions as get_bonus_questions,
+)
 from app.services.external_scores import get_score_provider, ExternalScore
 from app.services.leaderboard import invalidate_cache
 from app.services.score_sync import sync_scores_once
@@ -451,22 +454,56 @@ async def sync_scores_from_api(
 
 
 class BonusAnswerView(BaseModel):
-    """One question + its current correct answer (if any), for the admin UI."""
+    """One question + the full list of correct answers (empty if unresolved),
+    for the admin UI. Multiple entries in `correct_answers` indicate a tie —
+    every entry awards full points to any user who picked it.
+
+    `computed_answers` is the auto-derived answer(s) calculated from
+    fixtures + scores (for group_stage and top_flop questions). It's
+    purely advisory: the admin can apply it via the UI or override with
+    a manual entry. Awards-category questions always have an empty
+    `computed_answers` since they're manual-only."""
 
     question_id: str
     label: str
     category: str
     points: int
     input_type: str
-    correct_answer: str | None
+    correct_answers: list[str]
+    computed_answers: list[str]
     resolved_at: datetime | None
 
 
 class BonusAnswerUpdate(BaseModel):
-    """Payload for admin setting / updating a correct answer."""
+    """Payload for admin setting / replacing the correct answers for a
+    question. The full list replaces whatever was previously stored —
+    empty list un-resolves the question."""
 
     question_id: str
-    correct_answer: str
+    correct_answers: list[str]
+
+
+def _build_view(
+    q,
+    rows: list[BonusAnswer] | None,
+    computed: list[str] | None = None,
+) -> BonusAnswerView:
+    """Helper: assemble a BonusAnswerView from a question definition +
+    its (possibly empty) list of stored answer rows. `resolved_at` is the
+    most recent resolution timestamp across rows; falsy if no rows.
+    `computed` is the auto-derived suggestion (empty for awards or when
+    no data is available yet)."""
+    rs = rows or []
+    return BonusAnswerView(
+        question_id=q.id,
+        label=q.label,
+        category=q.category,
+        points=q.points,
+        input_type=q.input_type,
+        correct_answers=[r.correct_answer for r in rs],
+        computed_answers=computed or [],
+        resolved_at=max((r.resolved_at for r in rs), default=None) if rs else None,
+    )
 
 
 @router.get("/bonus/answers", response_model=list[BonusAnswerView])
@@ -474,47 +511,36 @@ async def list_bonus_answers(
     session: DbSession,
     _admin: AdminUser,
 ) -> list[BonusAnswerView]:
-    """List every bonus question with its current correct answer (if set).
-
-    Used by the admin "Bonus question answers" section. Joins the YAML
-    question list with the per-competition `bonus_answers` rows.
+    """List every bonus question with its full list of stored correct
+    answers. Joins the YAML question list with the per-competition
+    `bonus_answers` rows; questions with no stored answer get an empty
+    list and a null `resolved_at`.
     """
     qs = get_bonus_questions()
-    # Pull active competition's existing answers in one query.
     comp_result = await session.execute(
         select(Competition).where(Competition.is_active == True)  # noqa: E712
     )
     competition = comp_result.scalar_one_or_none()
     if not competition:
-        # No active competition → no resolved answers possible.
-        return [
-            BonusAnswerView(
-                question_id=q.id,
-                label=q.label,
-                category=q.category,
-                points=q.points,
-                input_type=q.input_type,
-                correct_answer=None,
-                resolved_at=None,
-            )
-            for q in qs
-        ]
+        return [_build_view(q, None) for q in qs]
 
     ans_result = await session.execute(
         select(BonusAnswer).where(BonusAnswer.competition_id == competition.id)
     )
-    by_qid = {a.question_id: a for a in ans_result.scalars().all()}
+    rows_by_qid: dict[str, list[BonusAnswer]] = {}
+    for row in ans_result.scalars().all():
+        rows_by_qid.setdefault(row.question_id, []).append(row)
+
+    # Auto-computed suggestions for group_stage + top_flop questions.
+    # Awards have no entries here (manual-only) and the helper returns []
+    # for any qid it doesn't know about, so we don't need to special-case
+    # them — they just see an empty `computed_answers` field.
+    computed_by_qid = await compute_bonus_answers_for_competition(
+        session, competition.id
+    )
 
     return [
-        BonusAnswerView(
-            question_id=q.id,
-            label=q.label,
-            category=q.category,
-            points=q.points,
-            input_type=q.input_type,
-            correct_answer=by_qid[q.id].correct_answer if q.id in by_qid else None,
-            resolved_at=by_qid[q.id].resolved_at if q.id in by_qid else None,
-        )
+        _build_view(q, rows_by_qid.get(q.id), computed_by_qid.get(q.id, []))
         for q in qs
     ]
 
@@ -525,11 +551,10 @@ async def set_bonus_answer(
     session: DbSession,
     _admin: AdminUser,
 ) -> BonusAnswerView:
-    """Set / update the correct answer for a bonus question. Invalidates the
-    leaderboard cache so bonus points show up in the next leaderboard fetch.
-
-    Empty `correct_answer` deletes the answer (un-resolves the question).
-    """
+    """Replace the correct answers for a bonus question. Empty list
+    un-resolves the question (all existing rows deleted). Multiple
+    entries record a tie — every entry awards full points. Invalidates
+    the leaderboard cache so points propagate on the next fetch."""
     valid_questions = {q.id: q for q in get_bonus_questions()}
     if payload.question_id not in valid_questions:
         raise HTTPException(
@@ -547,52 +572,51 @@ async def set_bonus_answer(
             detail="No active competition",
         )
 
-    existing = (
+    # Normalise + dedupe inbound answers, dropping empty entries.
+    seen: set[str] = set()
+    cleaned: list[str] = []
+    for raw in payload.correct_answers:
+        s = (raw or "").strip()
+        if not s:
+            continue
+        key = s.casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(s)
+
+    q = valid_questions[payload.question_id]
+
+    # Replace-all semantics: delete every row for this (comp, question)
+    # and re-insert the new set. Simpler than diffing, and the table is
+    # tiny (12 questions × ~3 answers).
+    existing_rows = (
         await session.execute(
             select(BonusAnswer)
             .where(BonusAnswer.competition_id == competition.id)
             .where(BonusAnswer.question_id == payload.question_id)
         )
-    ).scalar_one_or_none()
+    ).scalars().all()
+    for row in existing_rows:
+        await session.delete(row)
 
-    clean = payload.correct_answer.strip()
-    q = valid_questions[payload.question_id]
-
-    if not clean:
-        if existing is not None:
-            await session.delete(existing)
-            await session.commit()
-        invalidate_cache()
-        return BonusAnswerView(
-            question_id=q.id,
-            label=q.label,
-            category=q.category,
-            points=q.points,
-            input_type=q.input_type,
-            correct_answer=None,
-            resolved_at=None,
-        )
-
-    if existing is not None:
-        existing.correct_answer = clean
-        existing.resolved_at = utc_now()
-    else:
-        existing = BonusAnswer(
+    new_rows: list[BonusAnswer] = []
+    for ans in cleaned:
+        row = BonusAnswer(
             competition_id=competition.id,
             question_id=payload.question_id,
-            correct_answer=clean,
+            correct_answer=ans,
         )
-        session.add(existing)
+        session.add(row)
+        new_rows.append(row)
     await session.commit()
-    await session.refresh(existing)
+    for row in new_rows:
+        await session.refresh(row)
     invalidate_cache()
 
-    return BonusAnswerView(
-        question_id=q.id,
-        label=q.label,
-        category=q.category,
-        points=q.points,
-        input_type=q.input_type,
-        correct_answer=existing.correct_answer,
-        resolved_at=existing.resolved_at,
+    # Re-compute the auto-suggestion so the frontend can keep showing the
+    # "Use computed" chip after a manual save.
+    computed_by_qid = await compute_bonus_answers_for_competition(
+        session, competition.id
     )
+    return _build_view(q, new_rows, computed_by_qid.get(q.id, []))
