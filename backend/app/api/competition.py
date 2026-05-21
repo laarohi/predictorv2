@@ -12,6 +12,7 @@ from app.models._datetime import utc_now
 from app.models.competition import Competition
 from app.models.user import User
 from app.services.locking import get_current_phase, is_phase2_bracket_locked
+from app.services.scoring import get_scoring_config
 
 
 router = APIRouter()
@@ -116,4 +117,41 @@ async def get_phase_status(
         is_phase2_active=competition.is_phase2_active if competition else False,
         phase2_bracket_deadline=competition.phase2_bracket_deadline if competition else None,
         phase2_bracket_locked=bracket_locked,
+    )
+
+
+class ScoringConfigResponse(BaseModel):
+    """Scoring configuration as the frontend needs it to render per-match
+    breakdowns (Outcome / Exact / Rarity pills + Total).
+
+    The rarity formula uses per-fixture predictor counts, not a global
+    player count — the frontend has those via `/predictions/agreements`
+    (FixtureAgreement.total). For mode='logarithmic':
+
+        R = min(rarity_cap, round(alpha * log2(1 / (2f))))
+
+    where f = agrees_outcome / total and alpha = 10/log2(15) ≈ 2.5596.
+    """
+
+    mode: str  # 'fixed' | 'hybrid' (legacy) | 'logarithmic'
+    outcome_points: int
+    exact_points: int
+    rarity_cap: int
+
+
+@router.get("/scoring-config", response_model=ScoringConfigResponse)
+async def get_scoring_config_endpoint(
+    _current_user: CurrentUser,
+) -> ScoringConfigResponse:
+    """Return scoring config so the Results & Fixtures page can project
+    per-match rarity bonuses client-side using the same formula the backend
+    will eventually score with. Per-fixture predictor counts come from
+    /predictions/agreements."""
+    config = get_scoring_config()
+    match_cfg = config.get("match", {})
+    return ScoringConfigResponse(
+        mode=config.get("mode", "logarithmic"),
+        outcome_points=match_cfg.get("correct_outcome", 5),
+        exact_points=match_cfg.get("exact_score", 10),
+        rarity_cap=match_cfg.get("rarity_cap", match_cfg.get("hybrid_cap", 10)),
     )

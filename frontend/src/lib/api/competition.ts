@@ -26,3 +26,19 @@ export interface CompetitionInfo {
 export async function getCompetitionInfo(): Promise<CompetitionInfo> {
 	return api.get<CompetitionInfo>('/competition/info');
 }
+
+/** Scoring config. The Results page projects per-match rarity bonuses with
+ *  the same formula the backend uses. For mode='logarithmic':
+ *  R = min(rarity_cap, round(alpha * log2(1 / (2f)))) where f = agrees_outcome
+ *  / total and alpha = 10/log2(15) ≈ 2.5596. Per-fixture predictor counts
+ *  come from FixtureAgreement.total. Mirrors backend ScoringConfigResponse. */
+export interface ScoringConfig {
+	mode: 'fixed' | 'hybrid' | 'logarithmic';
+	outcome_points: number;
+	exact_points: number;
+	rarity_cap: number;
+}
+
+export async function getScoringConfig(): Promise<ScoringConfig> {
+	return api.get<ScoringConfig>('/competition/scoring-config');
+}
