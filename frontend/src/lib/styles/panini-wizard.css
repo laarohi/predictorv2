@@ -4,6 +4,182 @@
  * Bonus questions and Knockout get their own tabs inside the same pill bar.
  * ========================================================================= */
 
+/* ==== Desktop vs mobile hero toggle ====
+ * Visibility toggle for .pn-ws-only / .pn-wm-only lives in the page
+ * component's <style> block (routes/predictions/+page.svelte) so it
+ * ships inline with the SSR'd HTML — avoids a dev-mode flash where
+ * Vite injects this external stylesheet slightly after first paint. */
+
+/* ==== MOBILE Predict hero (≤699px) ====
+ * Mirrors the Results & Fixtures mobile hero pattern: full-bleed ink
+ * block with a red 3px bottom border, slim title row + Phase pill
+ * top-right, progress bar row, then flush ink-on-cream tabs flush
+ * against the hero. Uses negative margins to escape .pn-body's 28px
+ * padding so the ink bleeds edge to edge. */
+.pn .pn-wm-wrap {
+	/* Flush full-bleed by default — escapes .pn-body's 28px padding on
+	 * all sides so the ink hero sits edge-to-edge against the chrome,
+	 * matching the Results & Fixtures mobile hero. */
+	margin: -28px -28px 14px;
+}
+/* When the restoration banner is rendered above us, drop the negative
+ * top margin so we don't pull up under it. The banner is transient
+ * (auto-dismissed) so most sessions render with the flush layout. */
+.pn .pn-wm-wrap.has-banner {
+	margin: 0 -28px 14px;
+}
+.pn .pn-wm-hero {
+	background: var(--ink);
+	color: var(--paper);
+	padding: 14px 14px 14px;
+}
+.pn .pn-wm-hero .top-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+.pn .pn-wm-hero .top-row .ttl {
+	font-family: var(--display);
+	font-size: 28px;
+	line-height: 1;
+	letter-spacing: -0.01em;
+	color: var(--paper);
+	text-transform: uppercase;
+}
+.pn .pn-wm-hero .phase-pill {
+	display: flex;
+	border: 1.5px solid var(--paper);
+	flex-shrink: 0;
+}
+.pn .pn-wm-hero .phase-pill button {
+	background: transparent;
+	border: 0;
+	border-right: 1.5px solid var(--paper);
+	padding: 5px 10px 6px;
+	font-family: var(--display);
+	font-size: 10.5px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--paper);
+	cursor: pointer;
+	white-space: nowrap;
+}
+.pn .pn-wm-hero .phase-pill button:last-child { border-right: 0; }
+.pn .pn-wm-hero .phase-pill button.on {
+	background: var(--paper);
+	color: var(--ink);
+}
+
+/* Mobile progress row — count anchor + bar + labels. The bar keeps its
+ * red diagonal-striped fill from the desktop hero (panini-wizard.css
+ * lower in the file) so the "red urgency" cue stays intact on the
+ * darker background. */
+.pn .pn-wm-hero .progress-row {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	min-width: 0;
+}
+.pn .pn-wm-hero .progress-row .big-num {
+	font-family: var(--display);
+	line-height: 0.85;
+	color: var(--paper-3);
+	letter-spacing: -0.02em;
+	flex-shrink: 0;
+}
+.pn .pn-wm-hero .progress-row .big-num b {
+	color: var(--paper);
+	font-size: 34px;
+	font-weight: inherit;
+}
+.pn .pn-wm-hero .progress-row .big-num .slash {
+	font-size: 16px;
+	margin-left: 2px;
+}
+.pn .pn-wm-hero .progress-row .bar-and-labels {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	min-width: 0;
+}
+.pn .pn-wm-hero .progress-row .l {
+	display: flex;
+	justify-content: space-between;
+	font-family: var(--mono);
+	font-size: 9.5px;
+	letter-spacing: 0.10em;
+	text-transform: uppercase;
+	color: var(--paper-3);
+}
+.pn .pn-wm-hero .progress-row .l b {
+	color: var(--paper);
+	font-weight: 600;
+}
+.pn .pn-wm-hero .progress-row .bar {
+	height: 10px;
+	background: rgba(255, 255, 255, 0.10);
+	border: 1.5px solid var(--paper);
+	position: relative;
+	overflow: hidden;
+}
+.pn .pn-wm-hero .progress-row .bar-fill {
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	background: var(--red);
+}
+.pn .pn-wm-hero .progress-row .bar-fill::after {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background-image: repeating-linear-gradient(
+		45deg,
+		transparent 0 6px,
+		rgba(241, 235, 222, 0.20) 6px 7px
+	);
+	pointer-events: none;
+}
+
+/* Flush ink-on-cream tab strip directly below the hero — same visual
+ * rhythm as the Results page tools row. Red 3px line acts as the
+ * boundary between hero and tabs; tabs themselves sit on cream. */
+.pn .pn-wm-tabs {
+	display: flex;
+	background: var(--paper);
+	border-top: 3px solid var(--red);
+	border-bottom: 2px solid var(--ink);
+}
+.pn .pn-wm-tabs button {
+	flex: 1;
+	background: transparent;
+	border: 0;
+	border-right: 1.5px solid var(--ink);
+	padding: 11px 8px;
+	font-family: var(--display);
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--ink);
+	cursor: pointer;
+}
+.pn .pn-wm-tabs button:last-child { border-right: 0; }
+.pn .pn-wm-tabs button.on {
+	background: var(--ink);
+	color: var(--paper);
+}
+.pn .pn-wm-tabs button.gated {
+	color: var(--ink-3);
+	cursor: not-allowed;
+}
+.pn .pn-wm-tabs button.gated::after {
+	content: ' ●';
+	color: var(--red);
+}
+
 /* ==== Hero / progress strip ====
  *
  * Three columns:
@@ -302,7 +478,7 @@
 .pn .pn-wiz-nav-mobile {
 	display: none; /* shown only at < 800px (see media query below) */
 	flex-direction: column;
-	gap: 10px;
+	gap: 6px;
 }
 @media (max-width: 799px) {
 	.pn .pn-wiz-nav-desktop {
@@ -311,20 +487,26 @@
 	.pn .pn-wiz-nav-mobile {
 		display: flex;
 	}
+	/* Tighter spacing between the picker row and the standings panel
+	 * once we're in the slim mobile layout. */
+	.pn .pn-wiz-nav {
+		margin-bottom: 12px;
+		padding: 0 0 8px;
+	}
 }
 .pn .pn-wiz-nav-mobile .picker-row {
 	display: grid;
-	grid-template-columns: auto 1fr auto;
-	gap: 8px;
+	grid-template-columns: auto 1fr auto auto;
+	gap: 6px;
 }
 .pn .pn-wiz-nav-mobile .arrow {
 	background: var(--paper);
 	border: 2px solid var(--ink);
 	font-family: var(--display);
-	font-size: 14px;
+	font-size: 12px;
 	color: var(--ink);
 	cursor: pointer;
-	padding: 0 14px;
+	padding: 0 10px;
 	transition: background 80ms, color 80ms;
 }
 .pn .pn-wiz-nav-mobile .arrow:hover,
@@ -339,16 +521,16 @@
 	width: 100%;
 	background: var(--paper);
 	border: 2px solid var(--ink);
-	padding: 10px 14px;
+	padding: 7px 10px;
 	font-family: var(--display);
-	font-size: 14px;
+	font-size: 12px;
 	text-transform: uppercase;
 	letter-spacing: 0.04em;
 	cursor: pointer;
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: 10px;
+	gap: 8px;
 	color: var(--ink);
 }
 /* Chevron pushed to the right so the label + progress stay visually
@@ -358,9 +540,35 @@
 }
 .pn .pn-wiz-nav-mobile .trigger .prog {
 	font-family: var(--mono);
-	font-size: 11px;
+	font-size: 10px;
 	color: var(--ink-3);
 	letter-spacing: 0.06em;
+}
+/* Inline 3rd-Place chip — sits to the right of the prev/next/dropdown
+ * trio inside .picker-row. Gold by default to telegraph "important
+ * sub-task"; flips to ink when active (matches the .trigger.special
+ * inverse pattern for visual consistency). */
+.pn .pn-wiz-nav-mobile .third-chip {
+	background: var(--gold);
+	border: 2px solid var(--ink);
+	font-family: var(--display);
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--ink);
+	cursor: pointer;
+	padding: 0 10px;
+	white-space: nowrap;
+	transition: background 80ms, color 80ms;
+}
+.pn .pn-wiz-nav-mobile .third-chip.active {
+	background: var(--ink);
+	color: var(--gold);
+}
+.pn .pn-wiz-nav-mobile .third-chip:hover,
+.pn .pn-wiz-nav-mobile .third-chip:focus-visible {
+	outline: none;
+	box-shadow: 0 0 0 2px var(--paper), 0 0 0 4px var(--ink);
 }
 .pn .pn-wiz-nav-mobile .trigger .chev {
 	font-size: 12px;
@@ -568,6 +776,13 @@
 .pn .pn-wiz-group > .pn-restore-banner {
 	grid-column: 1 / -1;
 }
+/* Grid items default to min-width: min-content. Without overriding this,
+ * a wide child (e.g. the 11-col third-place table with nowrap team names)
+ * pushes the cell — and its sibling banners — past the viewport on mobile.
+ * min-width: 0 lets the cell shrink and contain its overflow internally. */
+.pn .pn-wiz-group > * {
+	min-width: 0;
+}
 .pn .pn-stnd {
 	background: var(--paper);
 	border: 2.5px solid var(--ink);
@@ -671,14 +886,12 @@
 	padding-left: 4px;
 	padding-right: 4px;
 }
-/* Clip rather than scroll: even with no real overflow, Safari's
- * overflow-x:auto sometimes shows a thin scrollbar inside the card
- * due to sub-pixel rounding on the cell padding totals. `clip` doesn't
- * create a scroll container, doesn't show a scrollbar, but still hides
- * any content that genuinely overflows. The .nm-text rule below has
- * text-overflow: ellipsis to handle the only realistic overflow case
- * (a very long team name). */
-.pn .pn-stnd { overflow-x: clip; }
+/* Allow horizontal scroll within the card on mobile where the 11-col
+ * table cannot fit. `clip` (used previously to avoid a sub-pixel scrollbar
+ * on desktop) silently truncated columns on phones — `auto` makes the
+ * overflow scrollable so users can reach Pts/GD. The .nm-text rule below
+ * still ellipsises individual long team names. */
+.pn .pn-stnd { overflow-x: auto; }
 
 /* ==== Standings legend ====
  * Strip of three coloured pips + labels rendered below per-group tables.
@@ -1186,55 +1399,102 @@
 	background: var(--gold);
 }
 
-/* ==== Sticky save bar ==== */
-.pn .pn-wiz-foot {
-	position: sticky;
-	bottom: 0;
-	background: var(--ink);
-	color: var(--paper);
-	padding: 12px 18px;
-	border-top: 3px solid var(--red);
-	display: grid;
-	grid-template-columns: 1fr auto auto;
-	gap: 14px;
+/* ==== Hero save button ====
+ * Lives inside the wizard hero — desktop in the right-side .toggle-stack,
+ * mobile as a full-width row between progress and section tabs (.pn-hero-save--mobile).
+ *
+ * Rationale (recorded after iterating through bar / FAB / hero variants):
+ *   - A full-width sticky bar wasted screen real estate on chatty status text.
+ *   - A bottom-right FAB obstructed the bottom-right match card on desktop
+ *     and required a 96px offset on mobile to clear the bottom nav.
+ *   - The hero is always at the top of the page and houses navigation
+ *     (phase + section toggles), so adding the save action there reuses
+ *     existing chrome rather than introducing new persistent UI.
+ *
+ * States (priority order — first match wins):
+ *   .saving  — disabled, "Saving…", muted background
+ *   .success — green flash for ~2s after a successful save
+ *   .error   — red, "× Retry"
+ *   .dirty   — gold sticker, "Save Phase I/II" + red count badge
+ *   (default / idle) — paper outline, lower opacity, "✓ All saved"
+ *
+ * Badge shows total INDIVIDUAL unsaved predictions (matches + bracket slot
+ * changes + bonus answer changes), so it reads naturally vs. "X out of 145".
+ */
+.pn .pn-hero-save {
+	display: inline-flex;
 	align-items: center;
-	z-index: 10;
-}
-.pn .pn-wiz-foot .saved-tag {
-	font-family: var(--mono);
-	font-size: 10px;
-	color: var(--paper-3);
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	white-space: nowrap;
-}
-.pn .pn-wiz-foot .stats {
-	font-family: var(--mono);
-	font-size: 11px;
-	letter-spacing: 0.08em;
-	text-transform: uppercase;
-	color: var(--paper-3);
-}
-.pn .pn-wiz-foot .stats b { color: var(--gold); font-family: var(--display); font-size: 14px; }
-.pn .pn-wiz-foot .stats .sep { margin: 0 6px; color: var(--paper-3); }
-.pn .pn-wiz-foot .submit-btn {
-	background: var(--gold);
-	color: var(--ink);
+	justify-content: center;
+	gap: 8px;
+	background: var(--paper-2);
+	color: var(--ink-3);
 	font-family: var(--display);
-	font-size: 14px;
+	font-size: 12px;
 	letter-spacing: 0.06em;
 	text-transform: uppercase;
-	padding: 10px 22px;
-	border: 2px solid var(--paper);
+	padding: 10px 16px;
+	border: 2.5px solid var(--ink);
+	box-shadow: 4px 4px 0 var(--ink);
 	cursor: pointer;
-	box-shadow: 3px 3px 0 var(--paper);
+	transition: background-color 120ms ease, color 120ms ease,
+		transform 120ms ease, box-shadow 120ms ease, opacity 200ms ease;
+	opacity: 0.7;
+	white-space: nowrap;
 }
-.pn .pn-wiz-foot .submit-btn:disabled {
-	opacity: 0.45;
+.pn .pn-hero-save:disabled {
 	cursor: not-allowed;
 }
-.pn .pn-wiz-foot .submit-btn.success { background: var(--green); color: var(--paper); }
-.pn .pn-wiz-foot .submit-btn.error { background: var(--red); color: var(--paper); }
+.pn .pn-hero-save.dirty {
+	background: var(--gold);
+	color: var(--ink);
+	opacity: 1;
+}
+.pn .pn-hero-save.saving {
+	background: var(--paper-3);
+	color: var(--ink-2);
+	opacity: 1;
+}
+.pn .pn-hero-save.success {
+	background: var(--green);
+	color: var(--paper);
+	opacity: 1;
+}
+.pn .pn-hero-save.error {
+	background: var(--red);
+	color: var(--paper);
+	opacity: 1;
+}
+.pn .pn-hero-save:hover:not(:disabled) {
+	transform: translate(-1px, -1px);
+	box-shadow: 5px 5px 0 var(--ink);
+	opacity: 1;
+}
+.pn .pn-hero-save:active:not(:disabled) {
+	transform: translate(2px, 2px);
+	box-shadow: 1px 1px 0 var(--ink);
+}
+.pn .pn-hero-save .badge {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 22px;
+	height: 22px;
+	padding: 0 6px;
+	background: var(--red);
+	color: var(--paper);
+	border: 2px solid var(--ink);
+	border-radius: 999px;
+	font-family: var(--display);
+	font-size: 11px;
+	line-height: 1;
+}
+/* Mobile variant — full width row, slightly taller for thumb targets. */
+.pn .pn-hero-save--mobile {
+	width: 100%;
+	padding: 12px 16px;
+	font-size: 13px;
+	margin-top: 12px;
+}
 
 /* ==== Locked-section screen (gating Phase 1 knockout) ==== */
 .pn .pn-locked {
@@ -1435,6 +1695,9 @@
 	font-size: 13px;
 	line-height: 1.45;
 	color: var(--ink);
+	box-sizing: border-box;
+	max-width: 100%;
+	overflow-wrap: break-word;
 }
 .pn .pn-tie-warn h4 {
 	font-family: var(--display);

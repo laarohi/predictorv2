@@ -260,15 +260,39 @@
 	};
 
 	// Phase 1 knockout bracket is gated on completing every group prediction.
-	// Phase 2 uses real standings so doesn't need the gate.
-	$: phase1BracketGated =
-		activePhase === 'phase1' &&
-		!(
-			phaseProgress.total > 0 &&
-			phaseProgress.done === phaseProgress.total
-		);
+	// Phase 2 uses real standings so doesn't need the gate. Note we use
+	// allGroupsComplete (group fixtures only) rather than phaseProgress —
+	// the latter now sums groups + bracket + bonus and would never satisfy
+	// the gate until the user has filled the bracket they can't yet open.
+	$: phase1BracketGated = activePhase === 'phase1' && !allGroupsComplete;
 
 	$: phaseProgress = (() => {
+		let done = 0;
+		let total = 0;
+		// Group-stage fixtures
+		for (const g of $groupFixtures) {
+			const p = groupProgress(g);
+			done += p.done;
+			total += p.total;
+		}
+		// Phase 1 bracket — 63 advancement picks (R32 + R16 + QF + SF + F + W)
+		const bracket = countBracketSlotsFilled($unsavedBracketPrediction || $bracketPrediction);
+		done += bracket.done;
+		total += bracket.total;
+		// Bonus questions — only count once they've loaded (avoids "100%" flash
+		// on initial mount before the bonus list arrives from the backend).
+		if (bonusQuestions.length > 0) {
+			done += bonusAnswers.size;
+			total += bonusQuestions.length;
+		}
+		const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+		return { done, total, pct };
+	})();
+
+	// Group-only progress — kept for the "matches predicted · N%" mini-bar
+	// shown on the locked-knockout gate screen, which specifically measures
+	// the group-completion gate condition rather than overall Phase 1 progress.
+	$: groupOnlyProgress = (() => {
 		let done = 0;
 		let total = 0;
 		for (const g of $groupFixtures) {
@@ -422,20 +446,8 @@
 		return out;
 	}
 
-	let bracketSaveStatus: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
 	function handleBracketUpdate(event: CustomEvent<BracketPrediction>) {
 		unsavedBracketPrediction.set(event.detail);
-	}
-	async function handleSaveBracket() {
-		const b = $unsavedBracketPrediction;
-		if (!b) return;
-		bracketSaveStatus = 'saving';
-		const ok = await saveBracketPredictions(bracketToPredictions(b));
-		bracketSaveStatus = ok ? 'saved' : 'error';
-		if (ok) {
-			unsavedBracketPrediction.set(null);
-			setTimeout(() => (bracketSaveStatus = 'idle'), 2000);
-		}
 	}
 
 	// ---- Phase 2 wiring ---------------------------------------------------
@@ -472,7 +484,12 @@
 	}
 
 	// ---- Unified save -----------------------------------------------------
-	$: hasAnyUnsaved = $hasUnsavedChanges || $hasUnsavedBracketChanges || $hasUnsavedPhase2BracketChanges;
+	// Phase 1 has three independent dirty sources: match picks, the knockout
+	// bracket, and bonus questions. We treat them as one logical "save Phase I"
+	// from the user's POV — one button, one progress count, one round-trip
+	// (parallel under the hood).
+	$: hasAnyPhase1Unsaved = $hasUnsavedChanges || $hasUnsavedBracketChanges || hasUnsavedBonus;
+	$: hasAnyUnsaved = $hasUnsavedChanges || $hasUnsavedBracketChanges || $hasUnsavedPhase2BracketChanges || hasUnsavedBonus;
 	beforeNavigate(({ cancel, type }) => {
 		if (!hasAnyUnsaved) return;
 		if (type === 'leave') return;
@@ -486,9 +503,134 @@
 
 	async function handleSaveAll() {
 		saveStatus = 'saving';
-		const ok = await saveAllPredictions();
-		saveStatus = ok ? 'saved' : 'error';
-		if (ok) setTimeout(() => (saveStatus = 'idle'), 2000);
+		const tasks: Promise<boolean>[] = [];
+
+		if ($hasUnsavedChanges) {
+			tasks.push(saveAllPredictions());
+		}
+		if ($hasUnsavedBracketChanges && $unsavedBracketPrediction) {
+			const b = $unsavedBracketPrediction;
+			tasks.push(
+				saveBracketPredictions(bracketToPredictions(b)).then((ok) => {
+					if (ok) unsavedBracketPrediction.set(null);
+					return ok;
+				})
+			);
+		}
+		if (hasUnsavedBonus) {
+			tasks.push(
+				(async () => {
+					try {
+						const { saveBonusPredictions } = await import('$api/bonus');
+						const preds = Array.from(bonusAnswers.entries()).map(([question_id, answer]) => ({
+							question_id,
+							answer
+						}));
+						const saved = await saveBonusPredictions(preds);
+						const fresh = new Map<string, string>();
+						for (const p of saved) fresh.set(p.question_id, p.answer);
+						bonusAnswers = fresh;
+						bonusInitial = new Map(fresh);
+						return true;
+					} catch (_e) {
+						return false;
+					}
+				})()
+			);
+		}
+
+		const results = await Promise.all(tasks);
+		const allOk = results.length > 0 && results.every((r) => r);
+		saveStatus = allOk ? 'saved' : 'error';
+		if (allOk) setTimeout(() => (saveStatus = 'idle'), 2000);
+	}
+
+	// Diff helpers — count INDIVIDUAL prediction changes (not section flags)
+	// so the save button's badge can show "X unsaved out of 145" in user terms.
+	function countBracketChangedSlots(
+		unsaved: BracketPrediction | null,
+		saved: BracketPrediction | null
+	): number {
+		if (!unsaved) return 0;
+		let count = 0;
+		const empty = { round_of_32: [], round_of_16: [], quarter_finals: [], semi_finals: [], final: [] };
+		const base = saved || ({ ...empty, group_winners: {}, winner: '' } as BracketPrediction);
+		const stages: (keyof typeof empty)[] = [
+			'round_of_32',
+			'round_of_16',
+			'quarter_finals',
+			'semi_finals',
+			'final'
+		];
+		for (const key of stages) {
+			const u = unsaved[key] || [];
+			const s = base[key] || [];
+			const len = Math.max(u.length, s.length);
+			for (let i = 0; i < len; i++) {
+				const uv = u[i] || '';
+				const sv = s[i] || '';
+				if (uv !== sv) count++;
+			}
+		}
+		if ((unsaved.winner || '') !== (base.winner || '')) count++;
+		return count;
+	}
+
+	function countBonusChangedAnswers(
+		answers: Map<string, string>,
+		initial: Map<string, string>
+	): number {
+		let count = 0;
+		// Changed or newly added answers
+		for (const [k, v] of answers) {
+			if (initial.get(k) !== v) count++;
+		}
+		// Removed answers (in initial but not in current)
+		for (const k of initial.keys()) {
+			if (!answers.has(k)) count++;
+		}
+		return count;
+	}
+
+	// Reactive count of TOTAL unsaved individual predictions across all three
+	// Phase 1 sources. This is the number shown on the save button's badge —
+	// reads naturally as "N unsaved out of 145".
+	$: phase1UnsavedTotal =
+		$unsavedChangesCount +
+		countBracketChangedSlots($unsavedBracketPrediction, $bracketPrediction) +
+		(bonusQuestions.length > 0 ? countBonusChangedAnswers(bonusAnswers, bonusInitial) : 0);
+
+	// Human-readable breakdown of which Phase 1 sources are unsaved.
+	// Used by the save button's tooltip.
+	$: phase1DirtySources = (() => {
+		const parts: string[] = [];
+		if ($unsavedChangesCount > 0)
+			parts.push(`${$unsavedChangesCount} match ${$unsavedChangesCount === 1 ? 'pick' : 'picks'}`);
+		const bracketChanged = countBracketChangedSlots($unsavedBracketPrediction, $bracketPrediction);
+		if (bracketChanged > 0)
+			parts.push(`${bracketChanged} bracket ${bracketChanged === 1 ? 'pick' : 'picks'}`);
+		if (bonusQuestions.length > 0) {
+			const bonusChanged = countBonusChangedAnswers(bonusAnswers, bonusInitial);
+			if (bonusChanged > 0)
+				parts.push(`${bonusChanged} bonus ${bonusChanged === 1 ? 'answer' : 'answers'}`);
+		}
+		return parts;
+	})();
+
+	// Count filled bracket slots across all knockout stages for the Phase 1
+	// progress bar. Phase 1 bracket has 32 R32 winners + 16 R16 + 8 QF + 4 SF
+	// + 2 F + 1 W = 63 advancement picks total. Phase 2 bracket skips R32
+	// (actual standings already determined R32) so totals 31 — we only use
+	// this helper for Phase 1 progress.
+	function countBracketSlotsFilled(b: BracketPrediction | null): { done: number; total: number } {
+		const total = 63;
+		if (!b) return { done: 0, total };
+		let done = 0;
+		for (const arr of [b.round_of_32, b.round_of_16, b.quarter_finals, b.semi_finals, b.final]) {
+			for (const t of arr || []) if (t) done++;
+		}
+		if (b.winner) done++;
+		return { done, total };
 	}
 
 	// ---- Bonus questions (real backend) ----------------------------------
@@ -496,7 +638,6 @@
 	let bonusQuestions: import('$api/bonus').BonusQuestion[] = [];
 	let bonusAnswers: Map<string, string> = new Map(); // question_id → answer
 	let bonusInitial: Map<string, string> = new Map(); // for change tracking
-	let bonusSaveStatus: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
 
 	$: hasUnsavedBonus = (() => {
 		if (bonusQuestions.length === 0) return false;
@@ -517,27 +658,6 @@
 		for (const p of preds) map.set(p.question_id, p.answer);
 		bonusAnswers = map;
 		bonusInitial = new Map(map);
-	}
-
-	async function handleSaveBonus() {
-		bonusSaveStatus = 'saving';
-		try {
-			const { saveBonusPredictions } = await import('$api/bonus');
-			const preds = Array.from(bonusAnswers.entries()).map(([question_id, answer]) => ({
-				question_id,
-				answer
-			}));
-			const saved = await saveBonusPredictions(preds);
-			// Reset baseline to whatever the backend returned.
-			const fresh = new Map<string, string>();
-			for (const p of saved) fresh.set(p.question_id, p.answer);
-			bonusAnswers = fresh;
-			bonusInitial = new Map(fresh);
-			bonusSaveStatus = 'saved';
-			setTimeout(() => (bonusSaveStatus = 'idle'), 2000);
-		} catch (_e) {
-			bonusSaveStatus = 'error';
-		}
 	}
 
 	// Reactive lambda (same pattern as groupProgress / predictionState above):
@@ -623,7 +743,8 @@
 				<button class="dismiss" aria-label="Dismiss" on:click={() => (restorationBanner = null)}>×</button>
 			</div>
 		{/if}
-		<!-- Hero / progress / phase toggle -->
+		<!-- Hero / progress / phase toggle — DESKTOP (≥700px) -->
+		<div class="pn-ws-only">
 		<section class="pn-wiz-hero">
 			<div class="title-block">
 				<div class="l">
@@ -649,7 +770,6 @@
 								{#if $isPhase2BracketLocked}Locked{:else}Locks in {$phase2Countdown ?? '—'}{/if}
 							{/if}
 						</span>
-						<span>{$unsavedChangesCount} unsaved</span>
 					</div>
 				</div>
 			</div>
@@ -670,8 +790,124 @@
 					>Knockout</button>
 					<button class:on={activeSection === 'bonus'} on:click={() => (activeSection = 'bonus')}>Bonus</button>
 				</div>
+				<!-- Hero save button — primary commit action for both phases.
+				     Anchored in the hero (visible at the natural read-position
+				     of the page) rather than floating, so it never overlaps
+				     content cards. State is communicated via the .dirty /
+				     .saving / .success / .error class modifiers. -->
+				<button
+					class="pn-hero-save"
+					class:dirty={(activePhase === 'phase1' ? hasAnyPhase1Unsaved : $hasUnsavedChanges) && saveStatus === 'idle'}
+					class:saving={saveStatus === 'saving'}
+					class:success={saveStatus === 'saved'}
+					class:error={saveStatus === 'error'}
+					on:click={handleSaveAll}
+					disabled={((activePhase === 'phase1' ? !hasAnyPhase1Unsaved : !$hasUnsavedChanges) && saveStatus === 'idle') || saveStatus === 'saving' || $matchPredictionsLoading}
+					title={activePhase === 'phase1' && hasAnyPhase1Unsaved
+						? `Unsaved: ${phase1DirtySources.join(' · ')}`
+						: $lastLocalSave
+							? `All saved · drafts mirrored locally at ${formatLocalTime($lastLocalSave)}`
+							: 'All predictions saved'}
+				>
+					{#if saveStatus === 'saving'}
+						Saving…
+					{:else if saveStatus === 'saved'}
+						✓ Saved
+					{:else if saveStatus === 'error'}
+						× Retry
+					{:else if activePhase === 'phase1' && hasAnyPhase1Unsaved}
+						Save Phase I
+						<span class="badge">{phase1UnsavedTotal}</span>
+					{:else if activePhase === 'phase2' && $hasUnsavedChanges}
+						Save Phase II
+						<span class="badge">{$unsavedChangesCount}</span>
+					{:else}
+						✓ All saved
+					{/if}
+				</button>
 			</div>
 		</section>
+		</div>
+
+		<!-- Hero / progress / tabs — MOBILE (≤699px) -->
+		<div
+			class="pn-wm-only pn-wm-wrap"
+			class:has-banner={restorationBanner}
+		>
+			<section class="pn-wm-hero">
+				<div class="top-row">
+					<div class="ttl">Predict</div>
+					{#if $isPhase2Active}
+						<div class="phase-pill">
+							<button class:on={activePhase === 'phase1'} on:click={() => (activePhase = 'phase1')}>Phase I</button>
+							<button class:on={activePhase === 'phase2'} on:click={() => (activePhase = 'phase2')}>Phase II</button>
+						</div>
+					{/if}
+				</div>
+				<div class="progress-row">
+					<div class="big-num" aria-hidden="true">
+						<b>{phaseProgress.done}</b><span class="slash">/{phaseProgress.total}</span>
+					</div>
+					<div class="bar-and-labels">
+						<div class="l">
+							<span>Matches predicted</span>
+							<span>{phaseProgress.pct}%</span>
+						</div>
+						<div class="bar"><div class="bar-fill" style="width: {phaseProgress.pct}%;"></div></div>
+						<div class="l">
+							<span>
+								{#if activePhase === 'phase1'}
+									{#if $isPhase1Locked}Locked{:else}Locks in {$phase1Countdown ?? '—'}{/if}
+								{:else}
+									{#if $isPhase2BracketLocked}Locked{:else}Locks in {$phase2Countdown ?? '—'}{/if}
+								{/if}
+							</span>
+						</div>
+					</div>
+				</div>
+				<!-- Mobile save button — full-width below the progress row,
+				     above the section tabs. Same state machine as the desktop
+				     hero save (see above for comment). -->
+				<button
+					class="pn-hero-save pn-hero-save--mobile"
+					class:dirty={(activePhase === 'phase1' ? hasAnyPhase1Unsaved : $hasUnsavedChanges) && saveStatus === 'idle'}
+					class:saving={saveStatus === 'saving'}
+					class:success={saveStatus === 'saved'}
+					class:error={saveStatus === 'error'}
+					on:click={handleSaveAll}
+					disabled={((activePhase === 'phase1' ? !hasAnyPhase1Unsaved : !$hasUnsavedChanges) && saveStatus === 'idle') || saveStatus === 'saving' || $matchPredictionsLoading}
+					title={activePhase === 'phase1' && hasAnyPhase1Unsaved
+						? `Unsaved: ${phase1DirtySources.join(' · ')}`
+						: 'All predictions saved'}
+				>
+					{#if saveStatus === 'saving'}
+						Saving…
+					{:else if saveStatus === 'saved'}
+						✓ Saved
+					{:else if saveStatus === 'error'}
+						× Retry
+					{:else if activePhase === 'phase1' && hasAnyPhase1Unsaved}
+						Save Phase I
+						<span class="badge">{phase1UnsavedTotal}</span>
+					{:else if activePhase === 'phase2' && $hasUnsavedChanges}
+						Save Phase II
+						<span class="badge">{$unsavedChangesCount}</span>
+					{:else}
+						✓ All saved
+					{/if}
+				</button>
+			</section>
+			<nav class="pn-wm-tabs">
+				<button class:on={activeSection === 'groups'} on:click={() => (activeSection = 'groups')}>Groups</button>
+				<button
+					class:on={activeSection === 'knockout'}
+					class:gated={phase1BracketGated}
+					on:click={() => (activeSection = 'knockout')}
+					title={phase1BracketGated ? 'Complete all group predictions to unlock' : ''}
+				>Knockout</button>
+				<button class:on={activeSection === 'bonus'} on:click={() => (activeSection = 'bonus')}>Bonus</button>
+			</nav>
+		</div>
 
 		<!-- Phase 1 wizard -->
 		{#if activePhase === 'phase1'}
@@ -761,14 +997,13 @@
 								on:click={nextGroup}
 								aria-label="Next group"
 							>▶</button>
+							<button
+								class="third-chip"
+								class:active={activeGroupPill === 'thirdplace'}
+								on:click={() => (activeGroupPill = 'thirdplace')}
+								aria-label="3rd Place standings"
+							>3rd</button>
 						</div>
-						<button
-							class="pn-wiz-gp special wide"
-							class:active={activeGroupPill === 'thirdplace'}
-							on:click={() => (activeGroupPill = 'thirdplace')}
-						>
-							3rd Place
-						</button>
 					</div>
 				</section>
 			{/if}
@@ -1002,7 +1237,6 @@
 				</section>
 			{:else if activeSection === 'knockout'}
 				{#if phase1BracketGated}
-					{@const pct = phaseProgress.total > 0 ? Math.round((phaseProgress.done / phaseProgress.total) * 100) : 0}
 					<section class="pn-locked">
 						<div class="lock-icon">
 							<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -1015,9 +1249,9 @@
 							Predict every group-stage match before opening the bracket. The bracket uses your predicted group standings to seed the Round of 32 — it can't be filled in until those are settled.
 						</p>
 						<div class="lock-progress">
-							<div class="v">{phaseProgress.done}<span class="of">/{phaseProgress.total}</span></div>
-							<div class="label">matches predicted · {pct}%</div>
-							<div class="bar"><div class="bar-fill" style="width: {pct}%;"></div></div>
+							<div class="v">{groupOnlyProgress.done}<span class="of">/{groupOnlyProgress.total}</span></div>
+							<div class="label">matches predicted · {groupOnlyProgress.pct}%</div>
+							<div class="bar"><div class="bar-fill" style="width: {groupOnlyProgress.pct}%;"></div></div>
 						</div>
 						<button class="pn-btn gold" type="button" on:click={() => (activeSection = 'groups')}>← Back to Groups</button>
 					</section>
@@ -1030,13 +1264,6 @@
 						phase="phase_1"
 						on:update={handleBracketUpdate}
 					/>
-					<div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; margin-bottom: 22px;">
-						{#if $hasUnsavedBracketChanges}
-							<button class="pn-btn gold" on:click={handleSaveBracket} disabled={bracketSaveStatus === 'saving'}>
-								{bracketSaveStatus === 'saving' ? 'Saving…' : bracketSaveStatus === 'saved' ? '✓ Saved' : 'Save bracket'}
-							</button>
-						{/if}
-					</div>
 				{/if}
 			{:else if activeSection === 'bonus'}
 				{#each Object.entries(bonusByCategory) as [cat, qs] (cat)}
@@ -1101,58 +1328,12 @@
 					<span style="font-family: var(--mono); font-size: 10px; letter-spacing: 0.10em; text-transform: uppercase; color: var(--ink-3);">
 						{bonusAnswers.size} of {bonusQuestions.length} answered
 					</span>
-					<button
-						class="pn-btn gold"
-						on:click={handleSaveBonus}
-						disabled={!hasUnsavedBonus || bonusSaveStatus === 'saving'}
-					>
-						{bonusSaveStatus === 'saving'
-							? 'Saving…'
-							: bonusSaveStatus === 'saved'
-								? '✓ Saved'
-								: bonusSaveStatus === 'error'
-									? '× Error — retry'
-									: 'Save bonus picks'}
-					</button>
 				</div>
 				<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase;">
 					★ Bonus picks lock with Phase I · admin will reveal correct answers as the tournament resolves
 				</p>
 			{/if}
 
-			<!-- Sticky save bar -->
-			<section class="pn-wiz-foot">
-				<div class="stats">
-					{#if $unsavedChangesCount === 0 && !$hasUnsavedBracketChanges}
-						All changes saved
-					{:else}
-						{#if $unsavedChangesCount > 0}
-							<b>{$unsavedChangesCount}</b> match {$unsavedChangesCount === 1 ? 'pick' : 'picks'} unsaved
-						{/if}
-						{#if $unsavedChangesCount > 0 && $hasUnsavedBracketChanges}
-							<span class="sep">·</span>
-						{/if}
-						{#if $hasUnsavedBracketChanges}
-							bracket has unsaved changes
-						{/if}
-					{/if}
-				</div>
-				{#if $lastLocalSave}
-					<span class="saved-tag">Saved locally · {formatLocalTime($lastLocalSave)}</span>
-				{/if}
-				<button
-					class="submit-btn"
-					class:success={saveStatus === 'saved'}
-					class:error={saveStatus === 'error'}
-					on:click={handleSaveAll}
-					disabled={!$hasUnsavedChanges || saveStatus === 'saving' || $matchPredictionsLoading}
-				>
-					{#if saveStatus === 'saving'}Saving…
-					{:else if saveStatus === 'saved'}✓ Saved
-					{:else if saveStatus === 'error'}× Error — retry
-					{:else}Save Phase I ({$unsavedChangesCount}){/if}
-				</button>
-			</section>
 		{/if}
 
 		<!-- Phase 2 — Panini bracket + knockout match score cards -->
@@ -1267,31 +1448,27 @@
 				</section>
 			{/if}
 
-			<!-- Sticky save bar for phase 2 match score picks -->
-			<section class="pn-wiz-foot">
-				<div class="stats">
-					{#if $unsavedChangesCount === 0}
-						All changes saved
-					{:else}
-						<b>{$unsavedChangesCount}</b> match {$unsavedChangesCount === 1 ? 'pick' : 'picks'} unsaved
-					{/if}
-				</div>
-				{#if $lastLocalSave}
-					<span class="saved-tag">Saved locally · {formatLocalTime($lastLocalSave)}</span>
-				{/if}
-				<button
-					class="submit-btn"
-					class:success={saveStatus === 'saved'}
-					class:error={saveStatus === 'error'}
-					on:click={handleSaveAll}
-					disabled={!$hasUnsavedChanges || saveStatus === 'saving' || $matchPredictionsLoading}
-				>
-					{#if saveStatus === 'saving'}Saving…
-					{:else if saveStatus === 'saved'}✓ Saved
-					{:else if saveStatus === 'error'}× Error — retry
-					{:else}Save Phase II ({$unsavedChangesCount}){/if}
-				</button>
-			</section>
 		{/if}
 	</PnPageShell>
 {/if}
+
+<style>
+	/* Desktop/mobile hero toggle — inlined here (rather than in the
+	 * external panini-wizard.css) so the rule ships with the SSR'd HTML
+	 * and there's no first-paint flash in Vite dev mode where the
+	 * external stylesheet otherwise loads slightly after the markup. */
+	:global(.pn .pn-ws-only) {
+		display: block;
+	}
+	:global(.pn .pn-wm-only) {
+		display: none;
+	}
+	@media (max-width: 699px) {
+		:global(.pn .pn-ws-only) {
+			display: none;
+		}
+		:global(.pn .pn-wm-only) {
+			display: block;
+		}
+	}
+</style>
