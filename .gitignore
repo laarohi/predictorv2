@@ -89,6 +89,9 @@ worktrees/
 .worktrees/
 
 # Local-only & ephemeral
-.superpowers/                              # superpowers session cache
-panini-files/                              # original Panini mockup source (HTML/JSX)
-backend/scripts/.test_match_detail_state.json  # scratch state from manual UI tests
+# superpowers session cache
+.superpowers/
+# original Panini mockup source (HTML/JSX)
+panini-files/
+# scratch state from manual UI tests
+backend/scripts/.test_match_detail_state.json
