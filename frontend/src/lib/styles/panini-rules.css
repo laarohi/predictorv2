@@ -172,6 +172,59 @@
 	margin-top: 4px;
 }
 
+/* Rarity bonus table — count→bonus mapping for the current pool size.
+ * Lives directly under the rarity bonus row in section 03. */
+.pn .pn-rl-rarity {
+	margin-top: 14px;
+	border: 2px solid var(--ink);
+	background: var(--paper);
+}
+.pn .pn-rl-rarity-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	background: var(--ink);
+	color: var(--paper);
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	padding: 8px 12px;
+}
+.pn .pn-rl-rarity-head .right { font-weight: bold; }
+.pn .pn-rl-rarity-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	padding: 8px 12px;
+	border-top: 1px solid var(--paper-3);
+}
+.pn .pn-rl-rarity-row:first-of-type { border-top: none; }
+.pn .pn-rl-rarity-row .count {
+	font-family: var(--mono);
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	color: var(--ink);
+}
+.pn .pn-rl-rarity-row .pts {
+	font-family: var(--display);
+	font-size: 22px;
+	line-height: 1;
+	color: var(--gold);
+}
+.pn .pn-rl-rarity-row.cap { background: rgba(212, 154, 46, 0.12); }
+.pn .pn-rl-rarity-row.cap .pts { color: var(--red); }
+.pn .pn-rl-rarity-row.zero .pts { color: var(--ink-3); }
+.pn .pn-rl-rarity-foot {
+	border-top: 2px solid var(--ink);
+	padding: 8px 12px;
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	color: var(--ink-3);
+	background: var(--paper-2);
+}
+
 /* Bracket-stage point table — compact mini-grid. */
 .pn .pn-rl-stages {
 	display: grid;

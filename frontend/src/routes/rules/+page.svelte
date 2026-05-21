@@ -8,9 +8,15 @@
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import { getCompetitionInfo, type CompetitionInfo } from '$api/competition';
 	import { getBonusQuestions, type BonusQuestion } from '$api/bonus';
+	import { logarithmicRarityBonus } from '$lib/utils/matchBreakdown';
 
 	let info: CompetitionInfo | null = null;
 	let bonusQuestions: BonusQuestion[] = [];
+
+	/** Cap of the rarity bonus — matches `match.rarity_cap` in
+	 *  config/worldcup2026.yml. Hardcoded here because the rules page is
+	 *  public (no auth → no /scoring-config call). Touch both if you tune. */
+	const RARITY_CAP = 10;
 
 	onMount(async () => {
 		try {
@@ -46,6 +52,40 @@
 		info && info.entry_fee && info.paid_players
 			? info.entry_fee * info.paid_players
 			: 0;
+
+	/** Group consecutive agreement counts (1..P) that yield the same rarity
+	 * bonus into bands, so the table is compact (e.g. "5–6 of 30 → +3"). */
+	function rarityBands(
+		totalPredictors: number,
+		cap: number
+	): Array<{ countLabel: string; bonus: number }> {
+		if (totalPredictors <= 0) return [];
+		const bands: Array<{ countLabel: string; bonus: number }> = [];
+		let bandStart = 1;
+		let bandBonus = logarithmicRarityBonus(totalPredictors, 1, cap);
+		for (let k = 2; k <= totalPredictors; k++) {
+			const r = logarithmicRarityBonus(totalPredictors, k, cap);
+			if (r !== bandBonus) {
+				bands.push({
+					countLabel: bandStart === k - 1 ? `${bandStart}` : `${bandStart}–${k - 1}`,
+					bonus: bandBonus
+				});
+				bandStart = k;
+				bandBonus = r;
+			}
+		}
+		bands.push({
+			countLabel:
+				bandStart === totalPredictors ? `${bandStart}` : `${bandStart}–${totalPredictors}`,
+			bonus: bandBonus
+		});
+		return bands;
+	}
+
+	// Fall back to 30 (the design anchor) before info loads, so the table
+	// renders something sensible on first paint.
+	$: rarityPredictorCount = info?.total_players ?? 30;
+	$: rarityRows = rarityBands(rarityPredictorCount, RARITY_CAP);
 
 	const CATEGORY_LABEL: Record<string, string> = {
 		group_stage: 'Group stage',
@@ -165,9 +205,38 @@
 				<div class="pn-rl-row">
 					<span class="pts gold">up to +10</span>
 					<div>
-						<div class="lbl">Rarity bonus (hybrid mode)</div>
-						<div class="desc">The fewer players who got the outcome right, the higher this bonus climbs. Capped at +10.</div>
+						<div class="lbl">Rarity bonus</div>
+						<div class="desc">
+							The fewer of your fellow predictors who picked the same outcome,
+							the higher this bonus. Gated at 50% — consensus picks pay nothing
+							extra. Derived from Shannon surprisal (the same logarithmic
+							scoring rule used in forecasting tournaments), scaled so a
+							uniquely correct call out of ~30 predictors hits the cap of +10.
+						</div>
 					</div>
+				</div>
+			</div>
+
+			<!-- Rarity bonus table: count → bonus mapping for the current pool size. -->
+			<div class="pn-rl-rarity">
+				<div class="pn-rl-rarity-head">
+					<span>How many friends picked the same outcome as you</span>
+					<span class="right">Bonus</span>
+				</div>
+				{#each rarityRows as band}
+					<div class="pn-rl-rarity-row" class:cap={band.bonus === RARITY_CAP} class:zero={band.bonus === 0}>
+						<span class="count">
+							{band.countLabel} of {rarityPredictorCount}
+						</span>
+						<span class="pts">
+							{band.bonus > 0 ? `+${band.bonus}` : '—'}
+						</span>
+					</div>
+				{/each}
+				<div class="pn-rl-rarity-foot">
+					Scales with how many friends predicted that fixture. Numbers shown
+					assume all {rarityPredictorCount} of you submitted — bands shift if
+					fewer predictors are in.
 				</div>
 			</div>
 		</div>
