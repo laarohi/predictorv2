@@ -80,7 +80,10 @@
 	width: 100%;
 	padding: 10px 12px;
 	font-family: var(--body);
-	font-size: 14px;
+	/* 16px is the iOS Safari threshold below which tapping an input
+	   triggers an auto-zoom that persists into subsequent same-document
+	   navigations (e.g. login → dashboard renders zoomed). */
+	font-size: 16px;
 	background: var(--paper-2);
 	border: 2px solid var(--ink);
 	color: var(--ink);
