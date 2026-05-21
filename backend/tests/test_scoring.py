@@ -15,6 +15,7 @@ from app.services.scoring import (
     get_scoring_strategy,
     FixedScoring,
     HybridScoring,
+    LogarithmicScoring,
     SCORING_STRATEGIES,
 )
 
@@ -31,7 +32,7 @@ class TestGetScoringConfig:
             assert config["match"]["correct_outcome"] == 5
             assert config["match"]["exact_score"] == 10
             assert config["advancement"]["winner"] == 100
-            assert config["mode"] == "hybrid"
+            assert config["mode"] == "logarithmic"
 
     def test_config_merges_with_defaults(self):
         """Should merge YAML config with defaults for missing keys."""
@@ -135,7 +136,7 @@ class TestCalculateMatchPoints:
     def test_correct_outcome_home_win(self, home_win_prediction, home_win_score):
         """Should award points for correct home win prediction."""
         points, correct, exact = calculate_match_points(
-            home_win_prediction, home_win_score, total_players=30, correct_players=10
+            home_win_prediction, home_win_score, total_predictors=30, correct_predictors=10
         )
 
         assert correct is True
@@ -144,7 +145,7 @@ class TestCalculateMatchPoints:
     def test_correct_outcome_draw(self, draw_prediction, draw_score):
         """Should award points for correct draw prediction."""
         points, correct, exact = calculate_match_points(
-            draw_prediction, draw_score, total_players=30, correct_players=10
+            draw_prediction, draw_score, total_predictors=30, correct_predictors=10
         )
 
         assert correct is True
@@ -153,7 +154,7 @@ class TestCalculateMatchPoints:
     def test_incorrect_outcome(self, home_win_prediction, draw_score):
         """Should not award points for incorrect prediction."""
         points, correct, exact = calculate_match_points(
-            home_win_prediction, draw_score, total_players=30, correct_players=10
+            home_win_prediction, draw_score, total_predictors=30, correct_predictors=10
         )
 
         assert correct is False
@@ -163,7 +164,7 @@ class TestCalculateMatchPoints:
         """Should award bonus for exact score."""
         # Prediction: 2-1, Score: 2-1 (exact match)
         points, correct, exact = calculate_match_points(
-            home_win_prediction, home_win_score, total_players=30, correct_players=10
+            home_win_prediction, home_win_score, total_predictors=30, correct_predictors=10
         )
 
         assert exact is True
@@ -176,7 +177,7 @@ class TestCalculateMatchPoints:
         home_win_prediction.away_score = 0
 
         points, correct, exact = calculate_match_points(
-            home_win_prediction, home_win_score, total_players=30, correct_players=10
+            home_win_prediction, home_win_score, total_predictors=30, correct_predictors=10
         )
 
         assert correct is True
@@ -186,12 +187,12 @@ class TestCalculateMatchPoints:
         """Hybrid bonus should be higher when fewer people are correct."""
         # Only 3 people got it right out of 30
         points_few, _, _ = calculate_match_points(
-            home_win_prediction, home_win_score, total_players=30, correct_players=3
+            home_win_prediction, home_win_score, total_predictors=30, correct_predictors=3
         )
 
         # 15 people got it right out of 30
         points_many, _, _ = calculate_match_points(
-            home_win_prediction, home_win_score, total_players=30, correct_players=15
+            home_win_prediction, home_win_score, total_predictors=30, correct_predictors=15
         )
 
         # Fewer correct = higher bonus (capped at 10)
@@ -201,7 +202,7 @@ class TestCalculateMatchPoints:
         """Hybrid bonus should be capped at 10 points."""
         # Only 1 person got it right - would be 30 points without cap
         points, _, _ = calculate_match_points(
-            home_win_prediction, home_win_score, total_players=30, correct_players=1
+            home_win_prediction, home_win_score, total_predictors=30, correct_predictors=1
         )
 
         # Points should be: 5 (outcome) + 10 (capped hybrid) + 10 (exact) = 25 max
@@ -236,14 +237,14 @@ class TestFixedVsHybridScoring:
         # Few correct
         points_few, _, _ = calculate_match_points(
             home_win_prediction, home_win_score,
-            total_players=30, correct_players=3,
+            total_predictors=30, correct_predictors=3,
             mode="fixed"
         )
 
         # Many correct
         points_many, _, _ = calculate_match_points(
             home_win_prediction, home_win_score,
-            total_players=30, correct_players=25,
+            total_predictors=30, correct_predictors=25,
             mode="fixed"
         )
 
@@ -255,14 +256,14 @@ class TestFixedVsHybridScoring:
         # Few correct (rare outcome)
         points_few, _, _ = calculate_match_points(
             home_win_prediction, home_win_score,
-            total_players=30, correct_players=3,
+            total_predictors=30, correct_predictors=3,
             mode="hybrid"
         )
 
         # Many correct (common outcome)
         points_many, _, _ = calculate_match_points(
             home_win_prediction, home_win_score,
-            total_players=30, correct_players=25,
+            total_predictors=30, correct_predictors=25,
             mode="hybrid"
         )
 
@@ -277,13 +278,13 @@ class TestFixedVsHybridScoring:
 
         fixed_points, fixed_correct, fixed_exact = calculate_match_points(
             home_win_prediction, home_win_score,
-            total_players=30, correct_players=15,
+            total_predictors=30, correct_predictors=15,
             mode="fixed"
         )
 
         hybrid_points, hybrid_correct, hybrid_exact = calculate_match_points(
             home_win_prediction, home_win_score,
-            total_players=30, correct_players=15,
+            total_predictors=30, correct_predictors=15,
             mode="hybrid"
         )
 
@@ -304,19 +305,177 @@ class TestFixedVsHybridScoring:
         # Explicitly use fixed mode
         fixed_points, _, _ = calculate_match_points(
             home_win_prediction, home_win_score,
-            total_players=30, correct_players=3,
+            total_predictors=30, correct_predictors=3,
             mode="fixed"
         )
 
         # Explicitly use hybrid mode
         hybrid_points, _, _ = calculate_match_points(
             home_win_prediction, home_win_score,
-            total_players=30, correct_players=3,
+            total_predictors=30, correct_predictors=3,
             mode="hybrid"
         )
 
         # Should get different results due to hybrid bonus
         assert hybrid_points > fixed_points
+
+
+class TestLogarithmicScoring:
+    """Logarithmic rarity bonus: R = min(cap, round(alpha * log2(1/(2f)))).
+
+    Derived from Shannon surprisal in bits beyond a 50/50 coin flip. Anchor
+    alpha = 10/log2(15) so that f = 1/30 (the "uniquely correct out of 30
+    predictors" case) hits the cap of 10.
+
+    Gates at f >= 0.5 -> R = 0 (consensus pays no premium).
+    """
+
+    @pytest.fixture
+    def home_win_prediction(self) -> MatchPrediction:
+        pred = MagicMock(spec=MatchPrediction)
+        pred.home_score = 2
+        pred.away_score = 1
+        pred.predicted_outcome = "1"
+        return pred
+
+    @pytest.fixture
+    def home_win_score(self) -> Score:
+        score = MagicMock(spec=Score)
+        score.home_score = 2
+        score.away_score = 1
+        score.final_home_score = 2
+        score.final_away_score = 1
+        score.outcome = "1"
+        return score
+
+    @pytest.fixture
+    def draw_score(self) -> Score:
+        score = MagicMock(spec=Score)
+        score.home_score = 1
+        score.away_score = 1
+        score.final_home_score = 1
+        score.final_away_score = 1
+        score.outcome = "X"
+        return score
+
+    def test_strategy_registered_as_logarithmic(self):
+        """get_scoring_strategy('logarithmic') returns a LogarithmicScoring."""
+        assert isinstance(get_scoring_strategy("logarithmic"), LogarithmicScoring)
+        assert "logarithmic" in SCORING_STRATEGIES
+
+    def test_unanimous_correct_no_rarity_bonus(self, home_win_prediction, home_win_score):
+        """f = 1.0: everyone got it right, rarity = 0."""
+        points, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_predictors=30, correct_predictors=30,
+            mode="logarithmic",
+        )
+        assert points == 15  # base 5 + exact 10
+
+    def test_half_correct_no_rarity_bonus(self, home_win_prediction, home_win_score):
+        """f = 0.5: at the gate, rarity = 0."""
+        points, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_predictors=30, correct_predictors=15,
+            mode="logarithmic",
+        )
+        assert points == 15
+
+    def test_three_way_split_token_bonus(self, home_win_prediction, home_win_score):
+        """f = 1/3: three-way uncertainty, R = 1 (alpha * log2(1.5) ~= 1.497)."""
+        points, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_predictors=30, correct_predictors=10,
+            mode="logarithmic",
+        )
+        assert points == 16  # base 5 + exact 10 + rarity 1
+
+    def test_one_in_six_moderate_bonus(self, home_win_prediction, home_win_score):
+        """f = 1/6: R = 4 (alpha * log2(3) ~= 4.057)."""
+        points, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_predictors=30, correct_predictors=5,
+            mode="logarithmic",
+        )
+        assert points == 19  # base 5 + exact 10 + rarity 4
+
+    def test_one_in_ten_high_bonus(self, home_win_prediction, home_win_score):
+        """f = 1/10: R = 6 (alpha * log2(5) ~= 5.943)."""
+        points, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_predictors=30, correct_predictors=3,
+            mode="logarithmic",
+        )
+        assert points == 21  # base 5 + exact 10 + rarity 6
+
+    def test_uniquely_correct_hits_cap(self, home_win_prediction, home_win_score):
+        """f = 1/30: anchor point, R = 10 (cap)."""
+        points, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_predictors=30, correct_predictors=1,
+            mode="logarithmic",
+        )
+        assert points == 25  # base 5 + exact 10 + rarity 10 (cap)
+
+    def test_beyond_anchor_clamped_to_cap(self, home_win_prediction, home_win_score):
+        """f = 1/60 (rarer than anchor): bonus is still capped at 10."""
+        points, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_predictors=60, correct_predictors=1,
+            mode="logarithmic",
+        )
+        assert points == 25  # capped
+
+    def test_no_bonus_when_outcome_wrong(self, home_win_prediction, draw_score):
+        """No rarity bonus paid for incorrect outcome (even if k is tiny)."""
+        points, correct, exact = calculate_match_points(
+            home_win_prediction, draw_score,
+            total_predictors=30, correct_predictors=1,
+            mode="logarithmic",
+        )
+        assert correct is False
+        assert exact is False
+        assert points == 0
+
+    def test_correct_outcome_wrong_exact_score(self, home_win_prediction, home_win_score):
+        """Correct outcome + wrong score: rarity paid, exact bonus not."""
+        home_win_prediction.home_score = 3
+        home_win_prediction.away_score = 0
+        points, correct, exact = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_predictors=30, correct_predictors=10,
+            mode="logarithmic",
+        )
+        assert correct is True
+        assert exact is False
+        assert points == 6  # base 5 + rarity 1 (no exact bonus)
+
+    def test_zero_predictors_no_crash(self, home_win_prediction, home_win_score):
+        """Division-by-zero guard: 0 predictors -> no bonus, no crash."""
+        points, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_predictors=0, correct_predictors=0,
+            mode="logarithmic",
+        )
+        # Safe default: base 5 + exact 10 + no rarity = 15
+        assert points == 15
+
+    def test_scale_invariance_same_fraction_same_bonus(
+        self, home_win_prediction, home_win_score
+    ):
+        """Same f produces same R regardless of P (percentage-based, scale-invariant)."""
+        # f = 1/6 in both cases
+        points_small, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_predictors=12, correct_predictors=2,
+            mode="logarithmic",
+        )
+        points_large, _, _ = calculate_match_points(
+            home_win_prediction, home_win_score,
+            total_predictors=60, correct_predictors=10,
+            mode="logarithmic",
+        )
+        assert points_small == points_large == 19  # base 5 + exact 10 + rarity 4
 
 
 class TestCalculateAdvancementPoints:

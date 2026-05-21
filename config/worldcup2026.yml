@@ -18,18 +18,40 @@ locking:
 # Scoring configuration
 scoring:
   # Scoring mode for match predictions:
-  # - "fixed": Flat points for correct outcome
-  # - "hybrid": Base points + bonus based on how many players got it right
-  #             (fewer correct = higher bonus, up to cap)
-  mode: "hybrid"
+  # - "fixed":       Flat points for correct outcome (no rarity bonus).
+  # - "hybrid":      Legacy. Base points + integer-divide rarity bonus
+  #                  min(cap, total_predictors // correct_predictors).
+  # - "logarithmic": Default. Base points + Shannon-surprisal rarity bonus.
+  #                  R = min(cap, round(alpha * log2(1 / (2f))))
+  #                  where f = correct_predictors / total_predictors and
+  #                  alpha = 10/log2(15) ≈ 2.5596 so f = 1/30 hits cap 10.
+  #                  Gates at f >= 0.5 (consensus picks earn no premium).
+  #
+  # Published rarity bonus by % of predictors who picked the actual outcome
+  # (independent of pool size — scale-invariant):
+  #   R = 0   when f > 43.67%   (consensus zone)
+  #   R = 1   when 33.31% < f ≤ 43.67%
+  #   R = 2   when 25.41% < f ≤ 33.31%
+  #   R = 3   when 19.38% < f ≤ 25.41%
+  #   R = 4   when 14.78% < f ≤ 19.38%
+  #   R = 5   when 11.28% < f ≤ 14.78%
+  #   R = 6   when  8.60% < f ≤ 11.28%
+  #   R = 7   when  6.56% < f ≤  8.60%
+  #   R = 8   when  5.00% < f ≤  6.56%
+  #   R = 9   when  3.82% < f ≤  5.00%
+  #   R = 10  when f ≤ 3.82%    (capped)
+  # See docs/scoring-system.md for derivation.
+  mode: "logarithmic"
 
   match:
     # Points for correctly predicting match outcome (1-X-2)
     correct_outcome: 5
     # Bonus points for predicting exact score
     exact_score: 10
-    # Maximum hybrid bonus (only used when mode is "hybrid")
-    # Formula: min(cap, total_players / correct_players)
+    # Maximum rarity bonus. Anchor: alpha is chosen so f = 1/30 hits this
+    # cap, so a uniquely correct call out of ~30 predictors maxes out.
+    rarity_cap: 10
+    # Legacy alias (read as fallback for older configs).
     hybrid_cap: 10
 
   advancement:

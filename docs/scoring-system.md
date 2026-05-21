@@ -22,13 +22,14 @@ config/worldcup2026.yml
 
 ```yaml
 scoring:
-  # Scoring mode: "fixed" or "hybrid"
-  mode: "hybrid"
+  # Scoring mode: "fixed" | "hybrid" (legacy) | "logarithmic" (default)
+  mode: "logarithmic"
 
   match:
     correct_outcome: 5      # Points for correct 1-X-2 prediction
     exact_score: 10         # Bonus points for exact score
-    hybrid_cap: 10          # Max hybrid bonus (only for hybrid mode)
+    rarity_cap: 10          # Max rarity bonus (logarithmic / hybrid modes)
+    hybrid_cap: 10          # Legacy alias, read as fallback
 
   advancement:
     group_advance: 10       # Team advances from group
@@ -56,26 +57,86 @@ In **fixed** mode, players receive flat points for correct predictions regardles
 - Exact score: +10 points
 - Total for exact score: 15 points
 
-### Hybrid Scoring
+### Logarithmic Scoring (default)
 
-In **hybrid** mode, players receive base points plus a rarity bonus. The fewer players who predicted correctly, the higher the bonus.
+In **logarithmic** mode, players receive base points plus a rarity bonus
+derived from **Shannon surprisal** — bits of information the crowd's prior
+was wrong by. Predicting outcomes the room avoided is rewarded; riding
+consensus pays nothing extra.
 
 **Formula:**
+
 ```
-outcome_points + min(hybrid_cap, total_players / correct_players) + exact_score_bonus
+R = min(rarity_cap, round(alpha * log2(1 / (2f))))   for f < 0.5
+R = 0                                                for f >= 0.5
+
+where  f     = correct_predictors / total_predictors
+       alpha = 10 / log2(15) ≈ 2.5596
 ```
 
-**Example (30 players):**
-- Only 3 players got the outcome right: 5 + min(10, 30/3) = 5 + 10 = 15 points
-- 15 players got the outcome right: 5 + min(10, 30/15) = 5 + 2 = 7 points
-- Exact score bonus is always flat: +10 points
+`total_predictors` is the number of users who submitted a prediction for
+*that fixture* ("the room that showed up"), not the global active-user
+count. `correct_predictors` is the subset of those who picked the actual
+outcome.
 
-The `hybrid_cap` prevents runaway bonus points when very few players are correct.
+**Key properties:**
+
+- **Gated at 50%.** Consensus picks (≥ half the predictors correct) earn
+  no rarity premium — base points only.
+- **Anchored.** Alpha is chosen so that a uniquely correct pick out of 30
+  predictors (f = 1/30 ≈ 3.3%) hits the cap of 10. Rarer picks stay
+  capped.
+- **Scale-invariant.** The same fraction `f` produces the same bonus
+  regardless of pool size — so the published band table below applies
+  whether there are 12, 30, or 60 predictors.
+
+**Published bonus by % of predictors who picked the correct outcome:**
+
+| f (correct %) | Rarity bonus R |
+|---:|---:|
+| > 43.67% | 0 |
+| 33.31% – 43.67% | 1 |
+| 25.41% – 33.31% | 2 |
+| 19.38% – 25.41% | 3 |
+| 14.78% – 19.38% | 4 |
+| 11.28% – 14.78% | 5 |
+| 8.60% – 11.28% | 6 |
+| 6.56% – 8.60% | 7 |
+| 5.00% – 6.56% | 8 |
+| 3.82% – 5.00% | 9 |
+| ≤ 3.82% | 10 (cap) |
+
+**Worked examples (30 predictors):**
+
+- Uniquely correct (1 of 30, f ≈ 3.3%): 5 + 10 + (10 if exact) = **15 or 25**
+- One-in-ten correct (3 of 30, f = 10%): 5 + 6 = **11** (or **21** with exact)
+- Three-way split (10 of 30, f ≈ 33%): 5 + 1 = **6** (or **16** with exact)
+- Half-right (15 of 30, f = 50%): 5 + 0 = **5** (or **15** with exact)
+- Unanimous correct (30 of 30): 5 + 0 = **5** (or **15** with exact)
+
+**Why logarithmic?** Log scoring is the unique *proper scoring rule* whose
+payoff depends only on the probability assigned to the realized outcome
+(Good, 1952). It treats "halving the underdog odds" as a fixed-size reward
+— going from 20% to 10% adds the same ~2.5 points as going from 10% to 5%
+— which matches how forecasters actually think about belief revision.
+
+### Hybrid Scoring (legacy)
+
+In **hybrid** mode, the rarity bonus uses integer division instead of a log:
+
+```
+R = min(hybrid_cap, total_predictors // correct_predictors)
+```
+
+Kept registered for backward compatibility with any deployment still
+configured with `mode: "hybrid"`. The integer-divide formula has visible
+plateaus and gaps that the logarithmic curve smooths out; logarithmic
+should be preferred for new deployments.
 
 ## Match Prediction Points
 
-| Prediction | Fixed Mode | Hybrid Mode |
-|------------|-----------|-------------|
+| Prediction | Fixed Mode | Logarithmic / Hybrid Mode |
+|------------|-----------|---------------------------|
 | Correct outcome (1-X-2) | 5 pts | 5 pts + rarity bonus (0-10 pts) |
 | Exact score bonus | +10 pts | +10 pts |
 | **Maximum per match** | 15 pts | 25 pts |
@@ -113,11 +174,12 @@ GET /api/leaderboard/scoring-rules
 **Response:**
 ```json
 {
-  "mode": "hybrid",
-  "available_modes": ["fixed", "hybrid"],
+  "mode": "logarithmic",
+  "available_modes": ["fixed", "hybrid", "logarithmic"],
   "match": {
     "correct_outcome": 5,
     "exact_score": 10,
+    "rarity_cap": 10,
     "hybrid_cap": 10
   },
   "advancement": {
@@ -154,8 +216,8 @@ class MyCustomScoring:
         prediction: MatchPrediction,
         score: Score,
         config: dict[str, Any],
-        total_players: int,
-        correct_players: int,
+        total_predictors: int,
+        correct_predictors: int,
     ) -> tuple[int, bool, bool]:
         """
         Calculate match points.
@@ -164,8 +226,9 @@ class MyCustomScoring:
             prediction: User's prediction
             score: Actual match result
             config: Match scoring config from YAML
-            total_players: Total players in competition
-            correct_players: Players who got correct outcome
+            total_predictors: Number of users who submitted a prediction
+                for this fixture
+            correct_predictors: Number of those who picked the actual outcome
 
         Returns:
             Tuple of (points, correct_outcome, exact_score)
@@ -198,6 +261,7 @@ Add to the `SCORING_STRATEGIES` dict:
 SCORING_STRATEGIES: dict[str, MatchScoringStrategy] = {
     "fixed": FixedScoring(),
     "hybrid": HybridScoring(),
+    "logarithmic": LogarithmicScoring(),
     "my_custom": MyCustomScoring(),  # Add your new mode
 }
 ```
@@ -253,11 +317,12 @@ If the config file is missing or incomplete, the system uses these defaults:
 
 ```python
 DEFAULT_SCORING_CONFIG = {
-    "mode": "hybrid",
+    "mode": "logarithmic",
     "match": {
         "correct_outcome": 5,
         "exact_score": 10,
         "hybrid_cap": 10,
+        "rarity_cap": 10,
     },
     "advancement": {
         "group_advance": 10,

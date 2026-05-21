@@ -5,11 +5,17 @@ All scoring rules are configurable via YAML.
 
 Supports multiple scoring modes:
 - "fixed": Flat points for correct outcome
-- "hybrid": Base points + bonus based on how rare the correct answer is
+- "hybrid": Base points + integer-division rarity bonus (legacy, kept for
+  comparison)
+- "logarithmic": Base points + Shannon-surprisal rarity bonus
+  R = min(cap, round(alpha * log2(1 / (2f))))
+  where f = correct_predictors / total_predictors and
+  alpha = 10/log2(15) so f = 1/30 hits the cap of 10.
 
 Scoring modes are extensible via the SCORING_STRATEGIES dict.
 """
 
+import math
 import uuid
 from typing import Any, Protocol
 
@@ -20,17 +26,17 @@ from app.config import get_tournament_config
 from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.score import Score
-from app.models.user import User
 from app.schemas.leaderboard import PhaseBreakdown, PointBreakdown
 
 
 # Default scoring configuration (used when YAML config is unavailable)
 DEFAULT_SCORING_CONFIG: dict[str, Any] = {
-    "mode": "hybrid",
+    "mode": "logarithmic",
     "match": {
         "correct_outcome": 5,
         "exact_score": 10,
         "hybrid_cap": 10,
+        "rarity_cap": 10,
     },
     "advancement": {
         "group_advance": 10,
@@ -87,8 +93,8 @@ class MatchScoringStrategy(Protocol):
         prediction: MatchPrediction,
         score: Score,
         config: dict[str, Any],
-        total_players: int,
-        correct_players: int,
+        total_predictors: int,
+        correct_predictors: int,
     ) -> tuple[int, bool, bool]:
         """Calculate match points.
 
@@ -96,8 +102,9 @@ class MatchScoringStrategy(Protocol):
             prediction: User's prediction
             score: Actual match result
             config: Match scoring config
-            total_players: Total players in competition
-            correct_players: Players who got correct outcome
+            total_predictors: Number of users who submitted a prediction for
+                this fixture
+            correct_predictors: Number of those who picked the actual outcome
 
         Returns:
             Tuple of (points, correct_outcome, exact_score)
@@ -113,8 +120,8 @@ class FixedScoring:
         prediction: MatchPrediction,
         score: Score,
         config: dict[str, Any],
-        total_players: int,
-        correct_players: int,
+        total_predictors: int,
+        correct_predictors: int,
     ) -> tuple[int, bool, bool]:
         outcome_points = config.get("correct_outcome", 5)
         exact_points = config.get("exact_score", 10)
@@ -138,10 +145,12 @@ class FixedScoring:
 
 
 class HybridScoring:
-    """Hybrid scoring: base points + rarity bonus.
+    """Legacy hybrid scoring: base points + integer-division rarity bonus.
 
-    Formula: outcome_points + min(cap, total_players / correct_players)
-    The fewer players who got it right, the higher the bonus.
+    Formula: outcome_points + min(cap, total_predictors // correct_predictors)
+
+    Superseded by LogarithmicScoring; kept registered for backward
+    compatibility with any deployment still configured with mode="hybrid".
     """
 
     def calculate(
@@ -149,8 +158,8 @@ class HybridScoring:
         prediction: MatchPrediction,
         score: Score,
         config: dict[str, Any],
-        total_players: int,
-        correct_players: int,
+        total_predictors: int,
+        correct_predictors: int,
     ) -> tuple[int, bool, bool]:
         outcome_points = config.get("correct_outcome", 5)
         exact_points = config.get("exact_score", 10)
@@ -168,11 +177,73 @@ class HybridScoring:
         points = 0
         if correct_outcome:
             points += outcome_points
-            # Hybrid bonus (capped)
-            if correct_players > 0:
-                bonus = min(cap, total_players // correct_players)
+            if correct_predictors > 0:
+                bonus = min(cap, total_predictors // correct_predictors)
                 points += bonus
 
+        if exact_score:
+            points += exact_points
+
+        return points, correct_outcome, exact_score
+
+
+# Anchor: alpha chosen so that f = 1/30 (one of thirty predictors correct)
+# hits the cap of 10. log2(15) ~= 3.9069, so alpha ~= 2.5596. Defined as a
+# module-level constant so a single number drives the published table.
+_LOG_ALPHA = 10.0 / math.log2(15.0)
+
+
+def _logarithmic_rarity_bonus(
+    total_predictors: int, correct_predictors: int, cap: int
+) -> int:
+    """Shannon-surprisal rarity bonus, capped and integer-rounded.
+
+    R = min(cap, round(alpha * log2(1 / (2f)))) for f < 0.5, else 0.
+    Returns 0 defensively when there are no predictors.
+    """
+    if total_predictors <= 0 or correct_predictors <= 0:
+        return 0
+    f = correct_predictors / total_predictors
+    if f >= 0.5:
+        return 0
+    raw = _LOG_ALPHA * math.log2(1.0 / (2.0 * f))
+    return min(cap, max(0, round(raw)))
+
+
+class LogarithmicScoring:
+    """Logarithmic rarity scoring: base points + Shannon-surprisal bonus.
+
+    The rarity bonus measures bits of information the crowd was wrong by,
+    scaled so f = 1/30 hits the cap. Gated at f >= 0.5 (consensus picks
+    earn no premium). Each ~1 bit of additional surprisal adds ~2.5 points.
+
+    See docs/scoring-system.md for the published percentage-band table.
+    """
+
+    def calculate(
+        self,
+        prediction: MatchPrediction,
+        score: Score,
+        config: dict[str, Any],
+        total_predictors: int,
+        correct_predictors: int,
+    ) -> tuple[int, bool, bool]:
+        outcome_points = config.get("correct_outcome", 5)
+        exact_points = config.get("exact_score", 10)
+        cap = config.get("rarity_cap", config.get("hybrid_cap", 10))
+
+        correct_outcome = prediction.predicted_outcome == score.outcome
+        exact_score = (
+            prediction.home_score == score.final_home_score
+            and prediction.away_score == score.final_away_score
+        )
+
+        points = 0
+        if correct_outcome:
+            points += outcome_points
+            points += _logarithmic_rarity_bonus(
+                total_predictors, correct_predictors, cap
+            )
         if exact_score:
             points += exact_points
 
@@ -184,6 +255,7 @@ class HybridScoring:
 SCORING_STRATEGIES: dict[str, MatchScoringStrategy] = {
     "fixed": FixedScoring(),
     "hybrid": HybridScoring(),
+    "logarithmic": LogarithmicScoring(),
 }
 
 
@@ -201,7 +273,7 @@ def get_scoring_strategy(mode: str | None = None) -> MatchScoringStrategy:
     """
     if mode is None:
         config = get_scoring_config()
-        mode = config.get("mode", "hybrid")
+        mode = config.get("mode", "logarithmic")
 
     strategy = SCORING_STRATEGIES.get(mode)
     if strategy is None:
@@ -214,19 +286,20 @@ def get_scoring_strategy(mode: str | None = None) -> MatchScoringStrategy:
 def calculate_match_points(
     prediction: MatchPrediction,
     score: Score,
-    total_players: int = 30,
-    correct_players: int = 1,
+    total_predictors: int = 30,
+    correct_predictors: int = 1,
     mode: str | None = None,
 ) -> tuple[int, bool, bool]:
     """Calculate points for a single match prediction.
 
-    Uses the configured scoring mode (fixed or hybrid).
+    Uses the configured scoring mode (fixed, hybrid, or logarithmic).
 
     Args:
         prediction: User's prediction
         score: Actual match result
-        total_players: Total number of players (for hybrid calculation)
-        correct_players: Number of players with correct outcome (for hybrid)
+        total_predictors: Number of users who submitted a prediction for this
+            fixture (used by rarity-bonus modes)
+        correct_predictors: Number of those who picked the actual outcome
         mode: Optional override for scoring mode. If None, uses config.
 
     Returns:
@@ -237,7 +310,7 @@ def calculate_match_points(
     strategy = get_scoring_strategy(mode)
 
     return strategy.calculate(
-        prediction, score, match_config, total_players, correct_players
+        prediction, score, match_config, total_predictors, correct_predictors
     )
 
 
@@ -443,12 +516,6 @@ async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> Po
     correct_outcomes = 0
     exact_scores = 0
 
-    # Get total player count for hybrid scoring
-    user_count_result = await session.execute(
-        select(User).where(User.is_active == True)
-    )
-    total_players = len(user_count_result.scalars().all())
-
     # Get all match predictions with scores
     result = await session.execute(
         select(MatchPrediction, Score, Fixture)
@@ -467,13 +534,18 @@ async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> Po
 
         total_predictions += 1
 
-        # Get correct player count for this fixture's outcome (for hybrid scoring)
+        # Rarity bonus uses per-fixture predictor counts: "the room that
+        # showed up", not all active users. Sum of outcome buckets gives
+        # the total predictors for this fixture.
         outcome_counts = await get_outcome_counts(session, fixture.id)
-        correct_players = outcome_counts.get(score.outcome, 1) or 1
+        total_predictors = sum(outcome_counts.values())
+        correct_predictors = outcome_counts.get(score.outcome, 0)
 
         # Calculate points using configured strategy
         points, is_correct_outcome, is_exact_score = calculate_match_points(
-            prediction, score, total_players=total_players, correct_players=correct_players
+            prediction, score,
+            total_predictors=total_predictors,
+            correct_predictors=correct_predictors,
         )
 
         if is_correct_outcome:

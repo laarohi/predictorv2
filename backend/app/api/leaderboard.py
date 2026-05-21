@@ -70,7 +70,7 @@ async def get_scoring_rules() -> ScoringConfigResponse:
     """Get the current scoring configuration.
 
     Returns the scoring rules in effect, including:
-    - Current scoring mode (fixed/hybrid)
+    - Current scoring mode (fixed, hybrid, or logarithmic)
     - Available scoring modes
     - Match prediction point values
     - Advancement prediction point values
@@ -78,7 +78,7 @@ async def get_scoring_rules() -> ScoringConfigResponse:
     """
     config = get_scoring_config()
     return ScoringConfigResponse(
-        mode=config.get("mode", "hybrid"),
+        mode=config.get("mode", "logarithmic"),
         available_modes=list(SCORING_STRATEGIES.keys()),
         match=config.get("match", {}),
         advancement=config.get("advancement", {}),
