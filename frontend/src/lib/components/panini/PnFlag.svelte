@@ -15,21 +15,15 @@
 	// the layout stays stable.
 
 	import { flagIsoCode } from '$lib/utils/teamCodes';
+	import { rawFlagSvg } from '$lib/utils/flagSvgs';
 
 	export let code: string;
 	export let w: number = 18;
 	export let h: number = 12;
 	export let border: boolean = true;
 
-	// Eager raw-string glob — Vite inlines each SVG's text content into the
-	// bundle at build time.
-	const flagSvgs = import.meta.glob<string>(
-		'/node_modules/flag-icons/flags/4x3/*.svg',
-		{ eager: true, query: '?raw', import: 'default' }
-	);
-
 	$: iso = flagIsoCode(code);
-	$: rawSvg = iso ? flagSvgs[`/node_modules/flag-icons/flags/4x3/${iso}.svg`] : undefined;
+	$: rawSvg = rawFlagSvg(iso);
 	// Inject preserveAspectRatio="none" on the root <svg> tag so the
 	// browser stretches the artwork to fill our viewport instead of
 	// letterboxing it. The regex inserts the attribute right after `<svg`
