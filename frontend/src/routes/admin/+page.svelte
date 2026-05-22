@@ -540,7 +540,13 @@
 
 			<!-- User Management -->
 			<section class="pn-pf-section">
-				<div class="h"><span>User Management</span><span class="right">{filteredUsers.length} of {users.length}</span></div>
+				<div class="h">
+					<span>User Management</span>
+					<span class="right">
+						<a href="/admin/audit" style="color: var(--ink-2); margin-right: 12px;">Audit log →</a>
+						{filteredUsers.length} of {users.length}
+					</span>
+				</div>
 				<div class="body">
 					{#if userActionError}<div class="pn-pf-alert error" style="margin-bottom: 12px;">{userActionError}</div>{/if}
 					<input

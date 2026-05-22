@@ -118,3 +118,34 @@ export async function toggleUserPaid(userId: string): Promise<boolean> {
 export async function syncScores(): Promise<SyncScoresResponse> {
 	return api.post<SyncScoresResponse>('/admin/scores/sync');
 }
+
+export type AuditEventKind = 'match' | 'team' | 'bonus';
+export type AuditEventAction = 'insert' | 'update' | 'delete' | 'lock';
+
+export interface AuditEvent {
+	id: string;
+	timestamp: string;
+	kind: AuditEventKind;
+	action: AuditEventAction;
+	source: string;
+	entity_id: string | null;
+	entity_label: string;
+	change_summary: string;
+	client_device: string;
+	client_ip: string | null;
+	user_agent: string | null;
+	request_id: string | null;
+	performed_by_user_id: string | null;
+	old_values: Record<string, unknown> | null;
+	new_values: Record<string, unknown> | null;
+	phase: 'phase_1' | 'phase_2' | null;
+}
+
+export interface UserHistoryResponse {
+	user: UserAdminView;
+	events: AuditEvent[];
+}
+
+export async function getUserAuditHistory(userId: string): Promise<UserHistoryResponse> {
+	return api.get<UserHistoryResponse>(`/admin/users/${userId}/history`);
+}

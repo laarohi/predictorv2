@@ -20,6 +20,7 @@ from sqlalchemy import UniqueConstraint  # noqa: F401  (used by BonusPrediction)
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models._datetime import utc_datetime_column, utc_now
+from app.models.prediction import PredictionPhase
 
 if TYPE_CHECKING:
     from app.models.competition import Competition
@@ -43,6 +44,12 @@ class BonusPrediction(SQLModel, table=True):
     # user typed — normalized at scoring time. Once the squads table ships,
     # player answers can be migrated to player_id references in-place.
     answer: str
+
+    # Structurally always Phase 1 — bonus questions lock with phase1_deadline
+    # and there is no Phase 2 bonus concept. The column exists for schema
+    # parity with MatchPrediction.phase and TeamPrediction.phase, so the
+    # audit log treats all three prediction kinds uniformly.
+    phase: PredictionPhase = Field(default=PredictionPhase.PHASE_1)
 
     created_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())
     updated_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())

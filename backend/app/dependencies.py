@@ -1,10 +1,12 @@
 """FastAPI dependencies for auth and database."""
 
+import uuid
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Annotated
 
 import bcrypt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -114,3 +116,43 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 OptionalUser = Annotated[User | None, Depends(get_current_user_optional)]
 AdminUser = Annotated[User, Depends(get_admin_user)]
 DbSession = Annotated[AsyncSession, Depends(get_session)]
+
+
+@dataclass(frozen=True, slots=True)
+class RequestContext:
+    """Per-request metadata captured for prediction-history rows.
+
+    Built fresh on every HTTP request by `get_request_context`. Pass it
+    into `app.services.prediction_history.record_*` calls so that audit
+    rows record who, where from, and which logical request.
+    """
+
+    request_id: uuid.UUID
+    client_ip: str | None
+    user_agent: str | None
+
+
+def _client_ip(request: Request) -> str | None:
+    """Best-effort client IP, X-Forwarded-For aware.
+
+    When the app sits behind a reverse proxy (production: Cloudflare
+    Tunnel → nginx → backend), `request.client.host` is the proxy. The
+    leftmost entry in `X-Forwarded-For` is the original client. Only
+    trust this header when running behind a known proxy.
+    """
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else None
+
+
+def get_request_context(request: Request) -> RequestContext:
+    """Build per-request audit metadata."""
+    return RequestContext(
+        request_id=uuid.uuid4(),
+        client_ip=_client_ip(request),
+        user_agent=request.headers.get("user-agent"),
+    )
+
+
+RequestCtx = Annotated[RequestContext, Depends(get_request_context)]
