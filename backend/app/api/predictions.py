@@ -8,10 +8,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, delete
 
-from app.dependencies import CurrentUser, DbSession, OptionalUser
+from app.dependencies import CurrentUser, DbSession, OptionalUser, RequestCtx
 from app.models._datetime import utc_now
 from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
+from app.models.prediction_history import PredictionAction, PredictionSource
 from app.models.user import User
 from app.schemas.fixture import FixtureScore
 from app.schemas.prediction import (
@@ -24,9 +25,27 @@ from app.schemas.prediction import (
     MatchPredictionUpdate,
 )
 from app.models.bonus import BonusPrediction
-from app.services.bonus import BonusQuestion, get_questions as get_bonus_questions
+from app.services.bonus import (
+    BonusQuestion,
+    fetch_competition_teams,
+    get_questions as get_bonus_questions,
+)
 from app.services.bracket_exposure import compute_bracket_exposure
-from app.services.locking import check_fixture_locked, get_current_phase, is_phase1_locked
+from app.services.locking import (
+    check_fixture_locked,
+    get_current_phase,
+    get_fixture_lock_view,
+    is_phase1_locked,
+    is_phase2_bracket_locked,
+)
+from app.services.prediction_history import (
+    record_bonus_prediction_change,
+    record_match_prediction_change,
+    record_team_prediction_change,
+    snapshot_bonus,
+    snapshot_match,
+    snapshot_team,
+)
 
 router = APIRouter()
 
@@ -39,6 +58,11 @@ class BonusQuestionResponse(BaseModel):
     label: str
     input_type: str  # 'team' | 'player'
     points: int
+    # For team-input questions with a YAML cutoff (currently dark_horse and
+    # flop), the pre-filtered list of competition teams the user is allowed
+    # to pick from. The frontend filters its dropdown to just these teams.
+    # None for questions without a cutoff or non-team inputs.
+    eligible_teams: list[str] | None = None
 
 
 class BonusPredictionResponse(BaseModel):
@@ -109,9 +133,13 @@ async def get_match_predictions(
         .order_by(Fixture.kickoff)
     )
     rows = result.all()
+    phase1_locked = await is_phase1_locked(session)
 
     predictions = []
     for pred, fixture in rows:
+        locked, _ = await get_fixture_lock_view(
+            session, fixture, phase1_locked=phase1_locked
+        )
         predictions.append(
             MatchPredictionRead(
                 id=pred.id,
@@ -125,7 +153,7 @@ async def get_match_predictions(
                 home_team=fixture.home_team,
                 away_team=fixture.away_team,
                 kickoff=fixture.kickoff,
-                is_locked=fixture.is_locked(),
+                is_locked=locked,
             )
         )
 
@@ -138,6 +166,7 @@ async def update_match_prediction(
     prediction_data: MatchPredictionUpdate,
     session: DbSession,
     current_user: CurrentUser,
+    ctx: RequestCtx,
 ) -> MatchPredictionRead:
     """Update a single match prediction."""
     # Get fixture
@@ -147,7 +176,17 @@ async def update_match_prediction(
     if not fixture:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fixture not found")
 
-    # Check if locked
+    # Phase 1 group-stage matches lock en-masse at competition.phase1_deadline,
+    # well before any group match kicks off. Without this check the per-fixture
+    # T-lock window below would still admit edits in the gap between the Phase 1
+    # deadline and the match's kickoff.
+    if fixture.stage == "group" and await is_phase1_locked(session):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Phase 1 predictions are locked",
+        )
+
+    # Per-match lock (Phase 2 knockout matches only, in practice).
     if check_fixture_locked(fixture):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -166,9 +205,21 @@ async def update_match_prediction(
     current_phase = await get_current_phase(session)
 
     if prediction:
+        old_values = snapshot_match(prediction)
         prediction.home_score = prediction_data.home_score
         prediction.away_score = prediction_data.away_score
         prediction.updated_at = utc_now()
+        new_values = snapshot_match(prediction)
+        record_match_prediction_change(
+            session,
+            prediction=prediction,
+            old_values=old_values,
+            new_values=new_values,
+            action=PredictionAction.UPDATE,
+            source=PredictionSource.API_SINGLE,
+            performed_by_user_id=current_user.id,
+            ctx=ctx,
+        )
     else:
         prediction = MatchPrediction(
             user_id=current_user.id,
@@ -178,10 +229,23 @@ async def update_match_prediction(
             phase=current_phase,
         )
         session.add(prediction)
+        # Flush so prediction.id is populated for the history row's entity_id.
+        await session.flush()
+        record_match_prediction_change(
+            session,
+            prediction=prediction,
+            old_values=None,
+            new_values=snapshot_match(prediction),
+            action=PredictionAction.INSERT,
+            source=PredictionSource.API_SINGLE,
+            performed_by_user_id=current_user.id,
+            ctx=ctx,
+        )
 
     await session.commit()
     await session.refresh(prediction)
 
+    locked, _ = await get_fixture_lock_view(session, fixture)
     return MatchPredictionRead(
         id=prediction.id,
         fixture_id=prediction.fixture_id,
@@ -194,7 +258,7 @@ async def update_match_prediction(
         home_team=fixture.home_team,
         away_team=fixture.away_team,
         kickoff=fixture.kickoff,
-        is_locked=fixture.is_locked(),
+        is_locked=locked,
     )
 
 
@@ -203,10 +267,12 @@ async def batch_update_predictions(
     predictions_data: list[MatchPredictionCreate],
     session: DbSession,
     current_user: CurrentUser,
+    ctx: RequestCtx,
 ) -> list[MatchPredictionRead]:
     """Batch update multiple match predictions."""
     results = []
     current_phase = await get_current_phase(session)
+    phase1_locked = await is_phase1_locked(session)
 
     for pred_data in predictions_data:
         # Get fixture
@@ -216,7 +282,11 @@ async def batch_update_predictions(
         if not fixture:
             continue  # Skip invalid fixtures
 
-        # Check if locked
+        # Phase 1 group-stage matches lock en-masse at phase1_deadline.
+        if fixture.stage == "group" and phase1_locked:
+            continue
+
+        # Per-match lock.
         if check_fixture_locked(fixture):
             continue  # Skip locked fixtures
 
@@ -230,9 +300,21 @@ async def batch_update_predictions(
         prediction = result.scalar_one_or_none()
 
         if prediction:
+            old_values = snapshot_match(prediction)
             prediction.home_score = pred_data.home_score
             prediction.away_score = pred_data.away_score
             prediction.updated_at = utc_now()
+            new_values = snapshot_match(prediction)
+            record_match_prediction_change(
+                session,
+                prediction=prediction,
+                old_values=old_values,
+                new_values=new_values,
+                action=PredictionAction.UPDATE,
+                source=PredictionSource.API_BATCH,
+                performed_by_user_id=current_user.id,
+                ctx=ctx,
+            )
         else:
             prediction = MatchPrediction(
                 user_id=current_user.id,
@@ -242,10 +324,25 @@ async def batch_update_predictions(
                 phase=current_phase,
             )
             session.add(prediction)
+            # Flush so prediction.id is set before we record the history row.
+            await session.flush()
+            record_match_prediction_change(
+                session,
+                prediction=prediction,
+                old_values=None,
+                new_values=snapshot_match(prediction),
+                action=PredictionAction.INSERT,
+                source=PredictionSource.API_BATCH,
+                performed_by_user_id=current_user.id,
+                ctx=ctx,
+            )
 
         await session.flush()
         await session.refresh(prediction)
 
+        locked, _ = await get_fixture_lock_view(
+            session, fixture, phase1_locked=phase1_locked
+        )
         results.append(
             MatchPredictionRead(
                 id=prediction.id,
@@ -259,7 +356,7 @@ async def batch_update_predictions(
                 home_team=fixture.home_team,
                 away_team=fixture.away_team,
                 kickoff=fixture.kickoff,
-                is_locked=fixture.is_locked(),
+                is_locked=locked,
             )
         )
 
@@ -332,12 +429,57 @@ async def update_bracket_predictions(
     bracket_data: BracketPredictionUpdate,
     session: DbSession,
     current_user: CurrentUser,
+    ctx: RequestCtx,
 ) -> dict[str, str]:
-    """Update bracket predictions for the current phase."""
+    """Update bracket predictions for the current phase.
+
+    Destructive: clears the user's existing bracket rows for this phase
+    and re-inserts. To keep the audit log complete we SELECT before
+    DELETE so we can record one history row per removed pick (otherwise
+    the bulk delete would tell us "N rows gone" but not which teams).
+    """
     current_phase = await get_current_phase(session)
 
-    # Clear existing bracket predictions for this user AND phase only
-    # This ensures Phase 1 and Phase 2 predictions are kept separate
+    # Each phase's bracket has its own deadline. After it passes, the rewrite
+    # path (delete-all-then-insert) must be refused — otherwise a user could
+    # erase their locked picks post-deadline and replace them.
+    if current_phase == PredictionPhase.PHASE_1 and await is_phase1_locked(session):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Phase 1 predictions are locked",
+        )
+    if current_phase == PredictionPhase.PHASE_2 and await is_phase2_bracket_locked(session):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Phase 2 bracket predictions are locked",
+        )
+
+    # Load existing picks for history capture before we delete them.
+    existing_result = await session.execute(
+        select(TeamPrediction).where(
+            TeamPrediction.user_id == current_user.id,
+            TeamPrediction.phase == current_phase,
+        )
+    )
+    existing_predictions = existing_result.scalars().all()
+
+    for existing in existing_predictions:
+        record_team_prediction_change(
+            session,
+            user_id=existing.user_id,
+            team=existing.team,
+            stage=existing.stage,
+            entity_id=existing.id,
+            old_values=snapshot_team(existing),
+            new_values=None,
+            action=PredictionAction.DELETE,
+            source=PredictionSource.API_BRACKET_REWRITE,
+            performed_by_user_id=current_user.id,
+            ctx=ctx,
+        )
+
+    # Clear existing bracket predictions for this user AND phase only.
+    # Phase 1 and Phase 2 predictions are kept separate.
     statement = delete(TeamPrediction).where(
         TeamPrediction.user_id == current_user.id,
         TeamPrediction.phase == current_phase,
@@ -353,12 +495,24 @@ async def update_bracket_predictions(
             phase=current_phase,
         )
         session.add(prediction)
+        # Flush so prediction.id is populated before we capture history.
+        await session.flush()
+        record_team_prediction_change(
+            session,
+            user_id=prediction.user_id,
+            team=prediction.team,
+            stage=prediction.stage,
+            entity_id=prediction.id,
+            old_values=None,
+            new_values=snapshot_team(prediction),
+            action=PredictionAction.INSERT,
+            source=PredictionSource.API_BRACKET_REWRITE,
+            performed_by_user_id=current_user.id,
+            ctx=ctx,
+        )
 
     await session.commit()
     return {"status": "ok"}
-
-
-LOCK_MINUTES = 5
 
 
 @router.get("/matches/{fixture_id}/community", response_model=CommunityPredictionsResponse)
@@ -380,8 +534,12 @@ async def get_community_predictions(
     if not fixture:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fixture not found")
 
-    # Blind pool enforcement: only visible after lock or when finished
-    if not fixture.is_locked(LOCK_MINUTES) and fixture.status != MatchStatus.FINISHED:
+    # Blind pool enforcement: only visible after lock or when finished. For
+    # Phase 1 group fixtures, "locked" means phase1_deadline has passed —
+    # they become visible the moment Phase 1 closes, not 15 min before each
+    # kickoff. get_fixture_lock_view encodes this rule.
+    locked, _ = await get_fixture_lock_view(session, fixture)
+    if not locked and fixture.status != MatchStatus.FINISHED:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Predictions are not yet visible for this match",
@@ -428,19 +586,24 @@ async def get_community_predictions(
 
 @router.get("/bonus/questions", response_model=list[BonusQuestionResponse])
 async def get_bonus_questions_route(
+    session: DbSession,
     _user: OptionalUser,
 ) -> list[BonusQuestionResponse]:
     """Return the list of bonus questions (loaded from worldcup2026.yml).
 
-    Labels have {top_n} already substituted with the configured value.
-    Points are per-category. Frontend renders these as the wizard's Bonus
-    tab; question IDs are stable strings used as upsert keys for picks.
+    Labels have any `{n}` token substituted with the question's own
+    cutoff.rank. Points are per-category. For team-input questions with a
+    cutoff (currently dark_horse and flop), `eligible_teams` is the
+    pre-filtered list of competition teams the user is allowed to pick —
+    derived from the DB fixtures table so the list reflects real qualifiers
+    rather than YAML scaffold.
 
     Public — the /rules page lists these for prospective joiners. Question
     definitions are config, not user data, so making this optionally-authed
     leaks nothing.
     """
-    qs = get_bonus_questions()
+    competition_teams = await fetch_competition_teams(session)
+    qs = get_bonus_questions(competition_teams=competition_teams)
     return [
         BonusQuestionResponse(
             id=q.id,
@@ -448,6 +611,7 @@ async def get_bonus_questions_route(
             label=q.label,
             input_type=q.input_type,
             points=q.points,
+            eligible_teams=q.eligible_teams,
         )
         for q in qs
     ]
@@ -473,6 +637,7 @@ async def save_bonus_predictions(
     payload: BonusPredictionBatch,
     session: DbSession,
     current_user: CurrentUser,
+    ctx: RequestCtx,
 ) -> list[BonusPredictionResponse]:
     """Upsert the calling user's bonus picks. Locks with Phase 1 — once the
     phase1_deadline passes, this endpoint returns 403.
@@ -505,18 +670,55 @@ async def save_bonus_predictions(
         if not clean_answer:
             # Empty string → delete the prediction.
             if existing is not None:
+                record_bonus_prediction_change(
+                    session,
+                    user_id=existing.user_id,
+                    question_id=existing.question_id,
+                    entity_id=existing.id,
+                    old_values=snapshot_bonus(existing),
+                    new_values=None,
+                    action=PredictionAction.DELETE,
+                    source=PredictionSource.API_BONUS_BATCH,
+                    performed_by_user_id=current_user.id,
+                    ctx=ctx,
+                )
                 await session.delete(existing)
             continue
         if existing is not None:
+            old_values = snapshot_bonus(existing)
             existing.answer = clean_answer
             existing.updated_at = utc_now()
+            record_bonus_prediction_change(
+                session,
+                user_id=existing.user_id,
+                question_id=existing.question_id,
+                entity_id=existing.id,
+                old_values=old_values,
+                new_values=snapshot_bonus(existing),
+                action=PredictionAction.UPDATE,
+                source=PredictionSource.API_BONUS_BATCH,
+                performed_by_user_id=current_user.id,
+                ctx=ctx,
+            )
         else:
-            session.add(
-                BonusPrediction(
-                    user_id=current_user.id,
-                    question_id=update.question_id,
-                    answer=clean_answer,
-                )
+            new_pred = BonusPrediction(
+                user_id=current_user.id,
+                question_id=update.question_id,
+                answer=clean_answer,
+            )
+            session.add(new_pred)
+            await session.flush()
+            record_bonus_prediction_change(
+                session,
+                user_id=new_pred.user_id,
+                question_id=new_pred.question_id,
+                entity_id=new_pred.id,
+                old_values=None,
+                new_values=snapshot_bonus(new_pred),
+                action=PredictionAction.INSERT,
+                source=PredictionSource.API_BONUS_BATCH,
+                performed_by_user_id=current_user.id,
+                ctx=ctx,
             )
     await session.commit()
 

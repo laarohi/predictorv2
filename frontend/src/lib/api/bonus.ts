@@ -2,8 +2,9 @@
  * Bonus-question API functions.
  *
  * Questions are defined in worldcup2026.yml under `bonus:` and shipped to
- * the frontend pre-rendered (with {top_n} substituted). The DB holds
- * per-user picks and per-competition correct answers.
+ * the frontend pre-rendered (with {n} substituted from each question's own
+ * cutoff.rank). The DB holds per-user picks and per-competition correct
+ * answers.
  */
 
 import { api } from './client';
@@ -17,6 +18,12 @@ export interface BonusQuestion {
 	label: string;
 	input_type: BonusInputType;
 	points: number;
+	/** For team-input questions with a YAML cutoff (e.g. dark_horse "outside
+	 *  FIFA top 12", flop "inside FIFA top 7"), the pre-filtered list of
+	 *  competition teams the user is allowed to pick from. The wizard
+	 *  filters its team dropdown to just these teams. Null/undefined for
+	 *  questions without a cutoff or non-team inputs. */
+	eligible_teams?: string[] | null;
 }
 
 export interface BonusPrediction {

@@ -16,8 +16,10 @@ from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction
 from app.models.score import Score, ScoreSource
 from app.models.user import User
+from app.services.audit_log import build_user_history
 from app.services.bonus import (
     compute_bonus_answers_for_competition,
+    fetch_competition_teams,
     get_questions as get_bonus_questions,
 )
 from app.services.external_scores import get_score_provider, ExternalScore
@@ -516,7 +518,8 @@ async def list_bonus_answers(
     `bonus_answers` rows; questions with no stored answer get an empty
     list and a null `resolved_at`.
     """
-    qs = get_bonus_questions()
+    competition_teams = await fetch_competition_teams(session)
+    qs = get_bonus_questions(competition_teams=competition_teams)
     comp_result = await session.execute(
         select(Competition).where(Competition.is_active == True)  # noqa: E712
     )
@@ -620,3 +623,57 @@ async def set_bonus_answer(
         session, competition.id
     )
     return _build_view(q, new_rows, computed_by_qid.get(q.id, []))
+
+
+class UserHistoryResponse(BaseModel):
+    """Audit log view for one user.
+
+    `user` carries enough context to title the page; `events` is a flat
+    list newest-first. Client-side toggles (phase / show locks /
+    group-by) all operate on this list.
+    """
+
+    user: UserAdminView
+    events: list[dict]
+
+
+@router.get("/users/{user_id}/history", response_model=UserHistoryResponse)
+async def get_user_audit_history(
+    user_id: uuid.UUID,
+    session: DbSession,
+    _admin: AdminUser,
+) -> UserHistoryResponse:
+    """Prettified audit log for one user — for dispute resolution.
+
+    Returns every recorded change to this user's predictions across the
+    three history tables, formatted for human reading. The page is
+    designed so a screenshot of a row is sufficient to settle a dispute.
+    """
+    # Load the user.
+    user_row = await session.execute(select(User).where(User.id == user_id))
+    user = user_row.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="User not found"
+        )
+
+    prediction_count = await session.scalar(
+        select(func.count(MatchPrediction.id)).where(MatchPrediction.user_id == user_id)
+    )
+
+    events = await build_user_history(session, user_id)
+
+    return UserHistoryResponse(
+        user=UserAdminView(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            auth_provider=user.auth_provider.value,
+            is_admin=user.is_admin,
+            is_active=user.is_active,
+            paid=user.paid,
+            created_at=user.created_at,
+            prediction_count=prediction_count or 0,
+        ),
+        events=[e.to_dict() for e in events],
+    )

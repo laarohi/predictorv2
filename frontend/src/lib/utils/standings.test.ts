@@ -18,7 +18,9 @@ import {
 	calculateGroupStandings,
 	calculateGroupStandingsWithWarnings,
 	computeGroupStandingsMapWithWarnings,
-	type TeamStanding
+	filterQualificationRelevantWarnings,
+	type TeamStanding,
+	type TieWarning
 } from './standings';
 import type { Fixture, MatchPrediction } from '$types';
 
@@ -326,5 +328,108 @@ describe('computeGroupStandingsMapWithWarnings', () => {
 		const groupBWarnings = warnings.filter((w) => w.group === 'B');
 		expect(groupAWarnings.length).toBe(1);
 		expect(groupBWarnings.length).toBe(1);
+	});
+});
+
+// ---------------------------------------------------------------------------
+// filterQualificationRelevantWarnings — drops ties that don't cross the
+// qualification boundary, so the modal doesn't alarm users about ties that
+// have no consequence (e.g. positions 1↔2 when top 8 advance).
+// ---------------------------------------------------------------------------
+
+describe('filterQualificationRelevantWarnings', () => {
+	// 12-team standings, alphabetical A-L. Position index = team's char index
+	// minus 'A'. Top 8 (A-H) qualify; bottom 4 (I-L) don't.
+	const sorted12: TeamStanding[] = [
+		'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'
+	].map((t) => _ts(t, 'X', 0, 0, 0));
+
+	function warn(tiedTeams: string[]): TieWarning {
+		return { group: 'multi', tiedTeams, context: 'third_place_qualifying' };
+	}
+
+	it('keeps a tie straddling the 8↔9 boundary (H + I)', () => {
+		const w = warn(['H', 'I']);
+		expect(filterQualificationRelevantWarnings([w], sorted12, 8)).toEqual([w]);
+	});
+
+	it('drops a tie entirely within qualifying positions (A + B)', () => {
+		const w = warn(['A', 'B']);
+		expect(filterQualificationRelevantWarnings([w], sorted12, 8)).toEqual([]);
+	});
+
+	it('drops a tie entirely within non-qualifying positions (I + J + K)', () => {
+		const w = warn(['I', 'J', 'K']);
+		expect(filterQualificationRelevantWarnings([w], sorted12, 8)).toEqual([]);
+	});
+
+	it('keeps a multi-team tie spanning the boundary (G H I J)', () => {
+		const w = warn(['G', 'H', 'I', 'J']);
+		expect(filterQualificationRelevantWarnings([w], sorted12, 8)).toEqual([w]);
+	});
+
+	it('drops a tie at the very top of qualifying (A B C)', () => {
+		const w = warn(['A', 'B', 'C']);
+		expect(filterQualificationRelevantWarnings([w], sorted12, 8)).toEqual([]);
+	});
+
+	it('drops a tie at the very bottom of non-qualifying (K + L)', () => {
+		const w = warn(['K', 'L']);
+		expect(filterQualificationRelevantWarnings([w], sorted12, 8)).toEqual([]);
+	});
+
+	it('preserves relevant warnings while dropping irrelevant ones in the same list', () => {
+		const relevant = warn(['H', 'I']); // straddles
+		const irrelevantTop = warn(['A', 'B']); // both qualify
+		const irrelevantBottom = warn(['J', 'K']); // both out
+		const result = filterQualificationRelevantWarnings(
+			[irrelevantTop, relevant, irrelevantBottom],
+			sorted12,
+			8
+		);
+		expect(result).toEqual([relevant]);
+	});
+
+	it('returns an empty array when given no warnings', () => {
+		expect(filterQualificationRelevantWarnings([], sorted12, 8)).toEqual([]);
+	});
+
+	it('drops a "tie" whose teams cannot be located in sorted (defensive)', () => {
+		// "Phantom" is not in sorted12 at all; A is at position 0. After
+		// filtering out -1, only one position remains → not a real tie.
+		const w = warn(['A', 'Phantom']);
+		expect(filterQualificationRelevantWarnings([w], sorted12, 8)).toEqual([]);
+	});
+
+	it('drops a tie whose teams are ALL phantom (zero located)', () => {
+		const w = warn(['Phantom1', 'Phantom2']);
+		expect(filterQualificationRelevantWarnings([w], sorted12, 8)).toEqual([]);
+	});
+
+	it('respects the qualifyingCount parameter (top-2 scheme)', () => {
+		const sorted4: TeamStanding[] = ['A', 'B', 'C', 'D'].map((t) =>
+			_ts(t, 'X', 0, 0, 0)
+		);
+		// qualifyingCount=2: B (pos 1) qualifies, C (pos 2) doesn't.
+		const straddling = warn(['B', 'C']);
+		expect(filterQualificationRelevantWarnings([straddling], sorted4, 2)).toEqual([
+			straddling
+		]);
+		// Both C and D are non-qualifying with qualifyingCount=2.
+		const bothOut = warn(['C', 'D']);
+		expect(filterQualificationRelevantWarnings([bothOut], sorted4, 2)).toEqual([]);
+		// Both A and B qualify with qualifyingCount=2.
+		const bothIn = warn(['A', 'B']);
+		expect(filterQualificationRelevantWarnings([bothIn], sorted4, 2)).toEqual([]);
+	});
+
+	it('keeps a tie at the exact boundary index (qualifyingCount-1 paired with qualifyingCount)', () => {
+		// Position 7 is the last qualifier (index 7 < 8), position 8 is the
+		// first non-qualifier (index 8 >= 8). This is the most consequential
+		// tie possible — make sure it survives.
+		const w = warn(['H', 'I']);
+		const result = filterQualificationRelevantWarnings([w], sorted12, 8);
+		expect(result).toHaveLength(1);
+		expect(result[0].tiedTeams).toEqual(['H', 'I']);
 	});
 });

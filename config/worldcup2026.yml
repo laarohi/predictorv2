@@ -10,8 +10,13 @@ tournament:
 
 # Prediction locking rules
 locking:
-  # Minutes before kickoff to lock predictions
-  match_lock_before_kickoff: 5
+  # Minutes before kickoff to lock match-score predictions. Applies to
+  # Phase 2 knockout 90-min score predictions (Phase 1 group-match scores
+  # already lock en-masse at competition.phase1_deadline, so this window
+  # is only reachable for Phase 2 knockout matches in practice).
+  # Frontend copy ("locks N minutes before kickoff") mirrors this value
+  # — bump in both places if you change it.
+  match_lock_before_kickoff: 15
   # Whether to lock entire bracket at a deadline vs individual match times
   bracket_lock_mode: "deadline"  # or "per_match"
 
@@ -82,27 +87,42 @@ scoring:
 # and bonus_answers. Labels support {top_n} substitution so changing top_n
 # below updates the wording everywhere automatically.
 bonus:
-  # Configurable: which FIFA rank cutoff defines "dark horse" / "flop". Users
-  # see this number substituted into the question labels; auto-computation of
-  # those questions reads `fifa_top_teams` below to decide which teams count
-  # as "inside the top N".
-  top_n: 10
-
-  # Teams considered FIFA top-N at tournament start. Used by the auto-resolver
-  # to decide "dark horse" (best progress among teams OUTSIDE this list) and
-  # "bottlers" (earliest exit among teams INSIDE this list). Only teams that
-  # are actually in the competition contribute — others are ignored.
-  fifa_top_teams:
-    - "Argentina"
-    - "France"
-    - "Spain"
-    - "England"
-    - "Brazil"
-    - "Belgium"
-    - "Portugal"
-    - "Netherlands"
-    - "Italy"
-    - "Germany"
+  # FIFA Men's World Ranking — one-time snapshot (top 25). Used by:
+  #   - the wizard UI to filter team-dropdowns per question (see `cutoff` on
+  #     each top_flop question below);
+  #   - the auto-resolver (services/bonus.py) to decide which teams count as
+  #     "inside top N" for dark-horse / bottlers scoring.
+  #
+  # Order = ranking position (1-indexed). Names MUST match the spelling used
+  # in `groups:` and DB fixtures — e.g. "United States" (not "USA"). Some
+  # entries (Italy, Croatia, Senegal, Switzerland, Turkey, Austria) may not
+  # be in the competition; the cutoff logic filters them out naturally.
+  fifa_rankings:
+    - "France"          # 1
+    - "Spain"           # 2
+    - "Argentina"       # 3
+    - "England"         # 4
+    - "Portugal"        # 5
+    - "Brazil"          # 6
+    - "Netherlands"     # 7
+    - "Morocco"         # 8
+    - "Belgium"         # 9
+    - "Germany"         # 10
+    - "Croatia"         # 11
+    - "Italy"           # 12  (top 25 but did not qualify for WC 2026)
+    - "Colombia"        # 13
+    - "Senegal"         # 14
+    - "Mexico"          # 15
+    - "United States"   # 16
+    - "Uruguay"         # 17
+    - "Japan"           # 18
+    - "Switzerland"     # 19
+    - "Denmark"         # 20
+    - "Iran"            # 21
+    - "Turkey"          # 22
+    - "Ecuador"         # 23
+    - "Austria"         # 24
+    - "South Korea"     # 25
 
   # Point values per category. Flat within a category, so all 4 group-stage
   # questions are worth the same. Tweak here without code changes.
@@ -112,9 +132,20 @@ bonus:
     awards: 20
 
   # Question definitions. `input_type` drives the wizard UI:
-  #   - 'team'   → 48-team dropdown sourced from the groups: section above
+  #   - 'team'   → 48-team dropdown sourced from the groups: section above.
+  #     If the question has a `cutoff:` block, the dropdown is filtered to
+  #     just the eligible teams (computed on the backend from competition
+  #     teams ± fifa_rankings[:rank]).
   #   - 'player' → free-text input until the squads table ships, at which
   #                point answers get normalized against player_id lookups.
+  #
+  # cutoff schema (top_flop questions only):
+  #   direction: 'inside'  → team must be in fifa_rankings[:rank]
+  #              'outside' → team must NOT be in fifa_rankings[:rank]
+  #                          (covers competition teams not on the ranking
+  #                          list — they're "outside" by default)
+  #   rank:      1-indexed position used to slice fifa_rankings
+  # The cutoff.rank value is substituted into label tokens "{n}".
   questions:
     # ── Group stage ──────────────────────────────────────────────────
     - id: most_goals_scored_group
@@ -134,15 +165,17 @@ bonus:
       label: "The Fortress — team that conceded the fewest goals in the group stage"
       input_type: team
 
-    # ── Top / Flop (FIFA top_n cutoff) ───────────────────────────────
+    # ── Top / Flop (FIFA-rank cutoffs) ───────────────────────────────
     - id: dark_horse
       category: top_flop
-      label: "Dark Horse — team outside FIFA top {top_n} that progresses furthest"
+      label: "Dark Horse — team outside FIFA top {n} that progresses furthest"
       input_type: team
+      cutoff: { direction: outside, rank: 12 }
     - id: flop
       category: top_flop
-      label: "Bottlers — team inside FIFA top {top_n} eliminated earliest"
+      label: "Bottlers — team inside FIFA top {n} eliminated earliest"
       input_type: team
+      cutoff: { direction: inside, rank: 7 }
 
     # ── Awards (FIFA awards ceremony) ────────────────────────────────
     - id: best_player
@@ -162,17 +195,12 @@ bonus:
       label: "Golden Glove — best goalkeeper of the tournament"
       input_type: player
 
-# Group stage configuration
-groups:
-  A: ["United States", "Morocco", "Jamaica", "TBD"]
-  B: ["France", "Denmark", "Poland", "TBD"]
-  C: ["Brazil", "Nigeria", "Cameroon", "TBD"]
-  D: ["Argentina", "Chile", "Peru", "TBD"]
-  E: ["Germany", "Netherlands", "Belgium", "TBD"]
-  F: ["Spain", "Portugal", "Italy", "TBD"]
-  G: ["England", "Wales", "Scotland", "TBD"]
-  H: ["Japan", "South Korea", "Australia", "TBD"]
-  I: ["Mexico", "Colombia", "Ecuador", "TBD"]
-  J: ["Uruguay", "Paraguay", "Venezuela", "TBD"]
-  K: ["Canada", "Costa Rica", "Panama", "TBD"]
-  L: ["Saudi Arabia", "Iran", "Qatar", "TBD"]
+# Group stage team rosters live in the database, not here. They're populated
+# by the Football-Data API import (see backend/scripts/seed_fixtures.py +
+# services/fixture_sync.py) and queried via `bonus.fetch_competition_teams()`
+# wherever the application needs to know which teams are in the competition.
+#
+# A prior `groups:` section in this file was redundant scaffold from before
+# the API integration and has been removed (see git history) — keeping team
+# rosters in two places (YAML + DB) led to them drifting apart, with the YAML
+# stuck at 36 teams / 12 TBDs while the DB had the real 48-team field.

@@ -87,7 +87,7 @@ async def seed_phase2_test():
         competition = result.scalar_one_or_none()
 
         if not competition:
-            print("No active competition found. Run seed_data.py first.")
+            print("No active competition found. Run seed_fixtures.py first.")
             return
 
         print(f"Found competition: {competition.name}")
@@ -104,7 +104,7 @@ async def seed_phase2_test():
         group_fixtures = result.scalars().all()
 
         if not group_fixtures:
-            print("No group fixtures found. Run seed_data.py first.")
+            print("No group fixtures found. Run seed_fixtures.py first.")
             return
 
         print(f"Found {len(group_fixtures)} group stage fixtures")

@@ -84,7 +84,7 @@ async def seed_scatter_test():
         )
         competition = result.scalar_one_or_none()
         if not competition:
-            print("No active competition found. Run seed_data.py first.")
+            print("No active competition found. Run seed_fixtures.py first.")
             return
 
         print(f"Found competition: {competition.name}")
@@ -100,7 +100,7 @@ async def seed_scatter_test():
         )
         fixture = result.scalar_one_or_none()
         if not fixture:
-            print("US vs Mexico Group A fixture not found. Check seed_data.py.")
+            print("US vs Mexico Group A fixture not found. Check seed_fixtures.py.")
             return
 
         print(f"Found fixture: {fixture.home_team} vs {fixture.away_team} (match #{fixture.match_number})")

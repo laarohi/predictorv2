@@ -36,9 +36,14 @@ class BonusQuestion:
 
     id: str
     category: BonusCategory
-    label: str  # already has {top_n} substituted
+    label: str  # cutoff.rank already substituted into "{n}" token
     input_type: BonusInputType
     points: int
+    # For team-input questions with a YAML `cutoff:` block, the pre-filtered
+    # list of competition teams that satisfy the cutoff (e.g. "in top 7" or
+    # "outside top 12"). The frontend uses this to filter the team dropdown.
+    # None = no restriction (no cutoff configured, or non-team question).
+    eligible_teams: list[str] | None = None
 
 
 # ---- Config loading ---------------------------------------------------------
@@ -58,31 +63,119 @@ def _category_points(bonus_cfg: dict, category: BonusCategory) -> int:
     return int(bonus_cfg.get("points", {}).get(category, 0))
 
 
-def get_questions() -> list[BonusQuestion]:
-    """Load the list of bonus questions from YAML, with `{top_n}` substituted
-    into labels so the API ships a fully-rendered string to the frontend."""
+def get_fifa_rankings() -> list[str]:
+    """Return the configured ordered FIFA rankings (top 25 or so) from YAML.
+    Order is significant — first entry is rank #1. Empty list if not
+    configured."""
+    return list(_get_bonus_config().get("fifa_rankings", []) or [])
+
+
+async def fetch_competition_teams(session: AsyncSession) -> set[str]:
+    """All distinct team names from the fixtures table, excluding 'TBD'
+    placeholder slots. This is the authoritative "who's in the competition?"
+    source — the DB is populated by the Football-Data API import
+    (services/fixture_sync.py), so it reflects the real qualifiers.
+
+    Used by `get_questions()` to pre-filter eligible teams per question.
+    Previously this came from a YAML `groups:` section, but that ended up
+    being a third out-of-sync source of truth (along with seed_data.py and
+    the DB itself); the DB is the only place kept current with reality."""
+    rows = (
+        await session.execute(
+            select(Fixture.home_team, Fixture.away_team).distinct()
+        )
+    ).all()
+    teams: set[str] = set()
+    for home, away in rows:
+        if home and home != "TBD":
+            teams.add(home)
+        if away and away != "TBD":
+            teams.add(away)
+    return teams
+
+
+def _eligible_teams_for_cutoff(
+    cutoff: dict,
+    rankings: list[str],
+    competition_teams: set[str],
+) -> list[str]:
+    """Apply a question's cutoff to the rankings + competition team set.
+
+    cutoff.direction = 'inside'  → eligible = competition ∩ rankings[:rank]
+                       'outside' → eligible = competition − rankings[:rank]
+                                   (i.e. teams ranked below `rank`, plus any
+                                   competition team not on the ranking list)
+    Returns a sorted list for deterministic API responses."""
+    n = int(cutoff.get("rank", 0))
+    direction = str(cutoff.get("direction", "inside"))
+    top_n_set = set(rankings[:n])
+    if direction == "inside":
+        return sorted(t for t in competition_teams if t in top_n_set)
+    # 'outside' is the default for any non-'inside' value — defensive against
+    # typos like 'out' or 'above'.
+    return sorted(t for t in competition_teams if t not in top_n_set)
+
+
+def get_question_top_n_set(question_id: str) -> set[str]:
+    """Return the FIFA top-N set for a question's cutoff. The rank comes from
+    the question's `cutoff:` block in YAML; the team list comes from
+    `fifa_rankings:`. Empty set if either is missing.
+
+    This is the *raw* top-N set — it includes all teams in the rankings up to
+    N regardless of whether they're in the competition. Callers that need the
+    competition-intersected set (e.g. `compute_bottlers`) intersect after."""
+    rankings = get_fifa_rankings()
     cfg = _get_bonus_config()
-    top_n = int(cfg.get("top_n", 10))
+    for q in cfg.get("questions", []) or []:
+        if q.get("id") == question_id:
+            n = int((q.get("cutoff") or {}).get("rank", 0))
+            return set(rankings[:n])
+    return set()
+
+
+def get_questions(
+    competition_teams: set[str] | None = None,
+) -> list[BonusQuestion]:
+    """Load the list of bonus questions from YAML, with per-question label
+    token substitution and (if `competition_teams` is provided) pre-computed
+    eligible_teams for team-input questions that have a `cutoff:` block.
+
+    Pass `competition_teams=None` from contexts that don't need dropdown
+    filtering — e.g. question-id validation, points lookup. In those cases
+    every question's `eligible_teams` stays `None` and the question metadata
+    is returned without a DB-derived team intersection.
+
+    Pass `competition_teams=<set>` (typically from `fetch_competition_teams`)
+    from contexts that *do* need the filtered list — e.g. the public bonus
+    questions API route, the admin listing route."""
+    cfg = _get_bonus_config()
+    rankings = get_fifa_rankings()
     raw_qs = cfg.get("questions", []) or []
     questions: list[BonusQuestion] = []
     for raw in raw_qs:
         category: BonusCategory = raw.get("category", "group_stage")
-        label = (raw.get("label") or "").replace("{top_n}", str(top_n))
+        cutoff = raw.get("cutoff") or None
+        # Substitute {n} with the question's cutoff rank (no-op if no cutoff).
+        label = raw.get("label") or ""
+        if cutoff:
+            label = label.replace("{n}", str(cutoff.get("rank", "")))
+        input_type = raw.get("input_type", "team")
+        eligible_teams: list[str] | None = None
+        if cutoff and input_type == "team" and competition_teams is not None:
+            eligible_teams = _eligible_teams_for_cutoff(
+                cutoff, rankings, competition_teams
+            )
         questions.append(
             BonusQuestion(
                 id=raw["id"],
                 category=category,
                 label=label,
-                input_type=raw.get("input_type", "team"),
+                input_type=input_type,
                 points=_category_points(cfg, category),
+                eligible_teams=eligible_teams,
             )
         )
     return questions
-
-
-def get_top_n() -> int:
-    """Return the configured FIFA top-N cutoff for dark-horse / flop questions."""
-    return int(_get_bonus_config().get("top_n", 10))
 
 
 # ---- Player-name normalization ---------------------------------------------
@@ -325,15 +418,17 @@ async def compute_bonus_answers_for_competition(
             if t and t != "TBD":
                 competition_teams.add(t)
 
-    cfg = _get_bonus_config()
-    fifa_top = set(cfg.get("fifa_top_teams", []) or [])
+    # Per-question top-N sets — pulled from each question's `cutoff:` block
+    # so dark_horse and flop can use different cutoffs (e.g. 12 vs 7).
+    dark_horse_top = get_question_top_n_set("dark_horse")
+    flop_top = get_question_top_n_set("flop")
 
     return {
         "most_goals_scored_group": _teams_with_extremum(stats, "gf", True),
         "least_goals_scored_group": _teams_with_extremum(stats, "gf", False),
         "most_goals_conceded_group": _teams_with_extremum(stats, "ga", True),
         "least_goals_conceded_group": _teams_with_extremum(stats, "ga", False),
-        "dark_horse": compute_dark_horse(progress, fifa_top),
-        "flop": compute_bottlers(progress, fifa_top, competition_teams),
+        "dark_horse": compute_dark_horse(progress, dark_horse_top),
+        "flop": compute_bottlers(progress, flop_top, competition_teams),
         # Awards questions intentionally omitted — manual only.
     }

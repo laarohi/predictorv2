@@ -202,9 +202,9 @@
 	grid-template-columns: auto 1fr auto;
 	gap: 28px;
 	align-items: center;
-	padding: 18px 0 16px;
+	padding: 10px 0 12px;
 	border-bottom: 2.5px solid var(--ink);
-	margin-bottom: 20px;
+	margin-bottom: 12px;
 }
 /* ==== Hero responsive layout modes ====
  *
@@ -277,7 +277,15 @@
 	display: flex;
 	flex-direction: column;
 	gap: 8px;
-	align-items: stretch;
+	/* Right-align children: the toggle-stack now holds the save button
+	 * (and the Phase I/II toggle when active), both content-width primary
+	 * actions. flex-end here aligns them to the right edge of the column
+	 * without stretching either one to ungainly width.
+	 *
+	 * Note: at 700-1099px the stack flips to flex-direction: row, where
+	 * align-items becomes the cross-axis (vertical) alignment — flex-end
+	 * still reads as "bottom" there, which is fine for the row layout. */
+	align-items: flex-end;
 	padding-left: 28px;
 	border-left: 2px solid var(--ink);
 	align-self: stretch;
@@ -287,23 +295,15 @@
 	display: flex;
 	flex-direction: column;
 	justify-content: center;
+	gap: 8px;
 }
-.pn .pn-wiz-hero .title-block .l {
-	font-family: var(--mono);
-	font-size: 10.5px;
-	letter-spacing: 0.16em;
-	text-transform: uppercase;
-	color: var(--ink-3);
+/* Prominent variant — used for the hero save button in the toggle-stack.
+ * Larger padding + font than the default .pn-hero-save so the primary
+ * commit action carries proper CTA weight. */
+.pn .pn-wiz-hero .pn-hero-save.pn-hero-save--prominent {
+	padding: 12px 22px;
+	font-size: 14px;
 }
-.pn .pn-wiz-hero .title-block .ttl {
-	font-family: var(--display);
-	font-size: 36px;
-	line-height: 0.95;
-	text-transform: uppercase;
-	letter-spacing: -0.01em;
-	margin-top: 6px;
-}
-.pn .pn-wiz-hero .title-block .ttl em { color: var(--red); font-style: normal; }
 .pn .pn-wiz-hero .phase-toggle {
 	display: flex;
 	border: 2px solid var(--ink);
@@ -434,9 +434,9 @@
  * are possible. Explicit `repeat(6, 1fr)` / `repeat(4, 1fr)` keeps
  * each row evenly populated. */
 .pn .pn-wiz-nav {
-	margin-bottom: 22px;
-	padding: 4px 0 12px;
-	border-bottom: 1.5px dashed var(--paper-3);
+	margin-bottom: 14px;
+	padding: 4px 0 8px;
+	border-bottom: 1.5px solid var(--paper-3);
 }
 
 /* --- Desktop layout --- */
@@ -621,7 +621,7 @@
 	width: 100%;
 	background: transparent;
 	border: 0;
-	border-bottom: 1px dashed var(--paper-3);
+	border-bottom: 1px solid var(--paper-3);
 	padding: 12px 14px;
 	font-family: var(--display);
 	font-size: 14px;
@@ -800,17 +800,6 @@
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
 }
-.pn .pn-stnd .h .live {
-	font-family: var(--mono);
-	font-size: 10px;
-	color: var(--gold);
-	letter-spacing: 0.10em;
-}
-.pn .pn-stnd .h .live::before {
-	content: '●';
-	margin-right: 4px;
-	animation: pn-blink 1.4s ease-in-out infinite;
-}
 .pn .pn-stnd-table {
 	width: 100%;
 	border-collapse: collapse;
@@ -832,7 +821,7 @@
 .pn .pn-stnd-table th.c { text-align: center; }
 .pn .pn-stnd-table td {
 	padding: 11px 6px;
-	border-bottom: 1px dashed var(--paper-3);
+	border-bottom: 1px solid var(--paper-3);
 	vertical-align: middle;
 }
 .pn .pn-stnd-table td:first-child { padding-left: 16px; }
@@ -850,10 +839,10 @@
 	width: 24px;
 }
 .pn .pn-stnd-table .pos.adv { color: var(--green); }
-/* Third place in a 4-team group: may qualify as one of the 8 best 3rd-placed
- * teams across all 12 groups. Gold matches the third-place table's
- * "qualifies" row highlight, so users recognise the colour as "might
- * advance, depending on other groups". */
+/* Position 3 with incomplete data — we can't yet say whether the team will
+ * be among the top-8 best 3rd-placed teams across all 12 groups, so gold
+ * signals "in play, undetermined". Once allGroupsComplete is true, position
+ * 3 resolves to .adv (green) or .out (grey) and the gold disappears. */
 .pn .pn-stnd-table .pos.maybe { color: var(--gold); }
 .pn .pn-stnd-table .pos.out { color: var(--ink-3); }
 .pn .pn-stnd-table .team {
@@ -923,10 +912,19 @@
 .pn .pn-stnd-legend .pip.gold { background: var(--gold); }
 .pn .pn-stnd-legend .pip.grey { background: var(--ink-3); }
 
-/* Third-place qualifying table — same shell as standings but with a Group
- * letter column. Top-8 qualify, highlighted gold. */
-.pn .pn-stnd-table tr.qualifies td { background: rgba(212, 154, 46, 0.16); }
-.pn .pn-stnd-table tr.qualifies td .pos { color: var(--gold); font-weight: 700; }
+/* Row-level "qualified" highlight. Applies in two contexts:
+ *   - Per-group standings: top 2 always; position 3 when allGroupsComplete
+ *     AND the team is in the top-8 third-place ranking.
+ *   - Third-place modal: the top 8 rows (i < 8).
+ * Light green tint + a left-edge green accent bar (via inset box-shadow so
+ * cell content doesn't reflow). The .pos colour comes from .pos.adv (green);
+ * the qualifies rule only adds weight so the number reads stronger inside the
+ * tinted row. */
+.pn .pn-stnd-table tr.qualifies td { background: rgba(27, 108, 62, 0.10); }
+.pn .pn-stnd-table tr.qualifies td:first-child {
+	box-shadow: inset 4px 0 0 var(--green);
+}
+.pn .pn-stnd-table tr.qualifies td .pos { font-weight: 700; }
 .pn .pn-stnd-table .grp {
 	font-family: var(--display);
 	font-size: 14px;
@@ -989,7 +987,31 @@
 	position: relative;
 }
 .pn .pn-mcard.locked { opacity: 0.6; }
-.pn .pn-mcard.empty { border-style: dashed; }
+/* Empty / unfilled match prediction card.
+ * Previously: dashed perimeter (dominated the page when many were unfilled).
+ * Now: same solid silhouette as a filled card — the "needs input" signal
+ * comes from (a) a subtle paper-2 + gold wash fill, and (b) a small "PICK"
+ * corner sticker (see .empty-tag below). Card sits calmly in the grid; the
+ * sticker carries the local signal. */
+.pn .pn-mcard.empty {
+	background: color-mix(in srgb, var(--paper-2) 92%, var(--gold) 8%);
+}
+.pn .pn-mcard .empty-tag {
+	position: absolute;
+	top: -7px;
+	left: 14px;
+	background: var(--gold);
+	color: var(--ink);
+	font-family: var(--display);
+	font-size: 9px;
+	letter-spacing: 0.10em;
+	text-transform: uppercase;
+	padding: 2px 7px 3px;
+	box-shadow: 2px 2px 0 var(--ink);
+	transform: rotate(-3deg);
+	transform-origin: left center;
+	z-index: 2;
+}
 /* While a user has the cursor inside a score input of this card, swap
  * the card's offset shadow from ink → red (a touch larger, 5px). The
  * border stays ink — a full red border was too visually aggressive,
@@ -1088,7 +1110,6 @@
 .pn .pn-score-cell.empty {
 	background: var(--paper);
 	color: var(--paper-3);
-	border-style: dashed;
 }
 .pn .pn-score .dash {
 	font-family: var(--display);
@@ -1100,7 +1121,7 @@
 	justify-content: space-between;
 	align-items: center;
 	padding-top: 6px;
-	border-top: 1.5px dashed var(--paper-3);
+	border-top: 1.5px solid var(--paper-3);
 	font-family: var(--mono);
 	font-size: 10px;
 	letter-spacing: 0.06em;
@@ -1260,8 +1281,7 @@
 	margin-top: auto;
 }
 .pn .pn-bonus .answer.empty {
-	background: var(--paper);
-	border-style: dashed;
+	background: color-mix(in srgb, var(--paper-2) 92%, var(--gold) 8%);
 	color: var(--ink-3);
 }
 .pn .pn-bonus .answer-row {
@@ -1324,8 +1344,7 @@
 	letter-spacing: 0.02em;
 }
 .pn .pn-dd-trigger.empty {
-	background: var(--paper);
-	border-style: dashed;
+	background: color-mix(in srgb, var(--paper-2) 92%, var(--gold) 8%);
 	color: var(--ink-3);
 }
 .pn .pn-dd-trigger:focus-visible {
@@ -1496,10 +1515,15 @@
 	margin-top: 12px;
 }
 
-/* ==== Locked-section screen (gating Phase 1 knockout) ==== */
+/* ==== Locked-section screen (gating Phase 1 knockout) ====
+ * Semantic: "you can't open this yet, finish the upstream first." Switched
+ * from 3px dashed to 3px solid ink + the canonical 5px ink offset shadow,
+ * so it reads as a closed drawer rather than a messy outline. The lock
+ * icon, copy, and progress bar inside already carry the locked signal. */
 .pn .pn-locked {
 	background: var(--paper);
-	border: 3px dashed var(--ink);
+	border: 3px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--ink);
 	padding: 40px 30px;
 	text-align: center;
 	margin-bottom: 22px;
@@ -1716,4 +1740,156 @@
 .pn .pn-tie-warn .teams {
 	font-weight: 700;
 	color: var(--red-deep);
+}
+
+/* ==== 3rd Place modal ====
+ * Quick-view modal for the third-place standings — was previously a sub-view
+ * inside the wizard. Native <dialog> for free a11y (focus trap, ESC, top-layer).
+ *
+ * Animation: fade + slight scale-up on open, mirrored on close. The
+ * @starting-style block defines the "before open" state; the regular
+ * [open] state defines the "open" target. transition-behavior:
+ * allow-discrete lets the transition run across the display:none →
+ * display:block toggle that <dialog>.showModal() performs internally.
+ *
+ * Scrim: backdrop-filter blurs the page behind. Background tint is a
+ * translucent navy ink so the blur reads even on light backgrounds. Blur
+ * intensity isn't animated (expensive on weaker GPUs); only the tint
+ * crossfades. */
+.pn .pn-3rd-modal {
+	border: 3px solid var(--ink);
+	background: var(--paper);
+	box-shadow: 8px 8px 0 var(--ink);
+	padding: 0;
+	max-width: 780px;
+	width: calc(100vw - 56px);
+	max-height: 82vh;
+	color: var(--ink);
+	overflow: visible;
+	/* Animation — 500ms is at the upper-deliberate end of the modal-entry
+	 * range, matching Apple's iOS sheet animation. Reads as "considered
+	 * peek" rather than "snap-open." Earlier attempts were too fast:
+	 * 160ms felt instant, 280ms still brisk, 360ms still slightly snappy.
+	 * 500ms is where the entry registers as a discrete gesture you can
+	 * follow with your eyes. Beyond ~600ms it tips into sluggish. */
+	transition: opacity 500ms ease, transform 500ms ease,
+		overlay 500ms ease allow-discrete,
+		display 500ms ease allow-discrete;
+}
+@starting-style {
+	.pn .pn-3rd-modal[open] {
+		opacity: 0;
+		transform: scale(0.96);
+	}
+}
+.pn .pn-3rd-modal:not([open]) {
+	opacity: 0;
+	transform: scale(0.96);
+	pointer-events: none;
+}
+.pn .pn-3rd-modal::backdrop {
+	background: rgba(14, 29, 64, 0.35);
+	backdrop-filter: blur(6px);
+	-webkit-backdrop-filter: blur(6px);
+	transition: background 500ms ease;
+}
+@starting-style {
+	.pn .pn-3rd-modal[open]::backdrop {
+		background: rgba(14, 29, 64, 0);
+	}
+}
+
+.pn .pn-3rd-modal-inner {
+	display: flex;
+	flex-direction: column;
+	max-height: 82vh;
+}
+.pn .pn-3rd-modal-h {
+	background: var(--ink);
+	color: var(--paper);
+	padding: 10px 12px 10px 18px;
+	display: flex;
+	align-items: center;
+	gap: 14px;
+	border-bottom: 3px solid var(--red);
+}
+.pn .pn-3rd-modal-h h2 {
+	font-family: var(--display);
+	font-size: 15px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	margin: 0;
+	line-height: 1.2;
+	flex: 1;
+	min-width: 0;
+}
+.pn .pn-3rd-modal-h .close {
+	background: transparent;
+	border: 0;
+	color: var(--paper);
+	font-size: 26px;
+	line-height: 1;
+	cursor: pointer;
+	padding: 0 6px;
+	font-family: var(--body);
+	transition: color 120ms ease;
+}
+.pn .pn-3rd-modal-h .close:hover,
+.pn .pn-3rd-modal-h .close:focus-visible {
+	color: var(--gold);
+	outline: none;
+}
+.pn .pn-3rd-modal-body {
+	overflow-y: auto;
+	padding: 16px 18px 18px;
+	background: var(--paper);
+}
+/* Thin scroll wrapper for the standings table — replaces the visual chrome
+ * of the old .pn-stnd card. Just provides horizontal scroll on narrow
+ * viewports where the 11-column table can't shrink any further. */
+.pn .pn-3rd-modal-body .pn-3rd-table-scroll {
+	overflow-x: auto;
+}
+.pn .pn-3rd-modal-body .footnote {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-3);
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	margin: 10px 0 0;
+}
+.pn .pn-3rd-modal-body .empty-row {
+	padding: 24px;
+	text-align: center;
+	font-family: var(--mono);
+	color: var(--ink-3);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+}
+
+/* Mobile: full-screen variant — no border, no offset shadow, no inset. */
+@media (max-width: 699px) {
+	.pn .pn-3rd-modal {
+		width: 100vw;
+		height: 100vh;
+		max-width: 100vw;
+		max-height: 100vh;
+		border: 0;
+		box-shadow: none;
+		margin: 0;
+	}
+	.pn .pn-3rd-modal-inner {
+		max-height: 100vh;
+		height: 100%;
+	}
+	.pn .pn-3rd-modal-h h2 {
+		font-size: 13px;
+	}
+	.pn .pn-3rd-modal::backdrop {
+		/* No blur on mobile — full-screen modal covers everything anyway,
+		 * and backdrop-filter is expensive on lower-end mobile GPUs. */
+		background: rgba(14, 29, 64, 0.45);
+		backdrop-filter: none;
+		-webkit-backdrop-filter: none;
+	}
 }

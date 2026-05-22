@@ -301,3 +301,45 @@ export function computeGroupStandingsMapWithWarnings(
 
 	return { standingsMap, warnings };
 }
+
+/**
+ * Filter tie-warnings down to those that actually affect qualification.
+ *
+ * A tiebreaker warning only *matters* when the tie straddles the qualification
+ * boundary. Ties entirely within qualifying positions (all teams advance
+ * regardless of order) or entirely within non-qualifying positions (all out
+ * regardless of order) don't change outcomes — surfacing those warnings would
+ * falsely alarm the user about ties with no consequence.
+ *
+ * Used by the third-place modal in the predictions wizard: with `qualifyingCount = 8`
+ * a tie at positions 8↔9 is shown (one in, one out), but ties at 1↔2 or 11↔12
+ * are suppressed. Generalises to any "top N of M qualify" scheme.
+ *
+ * Per-group tie warnings are NOT filtered through this — within a group every
+ * tie matters (1st vs 2nd determines the bracket side, 2nd vs 3rd determines
+ * direct vs best-3rd qualification, etc.).
+ *
+ * @param warnings        Tie warnings from {@link applyFifaTiebreakers}.
+ * @param sorted          Standings array in ranked order; tied teams' positions
+ *                        are looked up here.
+ * @param qualifyingCount How many top positions qualify (e.g. 8 for FIFA 2026
+ *                        third-place ranking).
+ * @returns Subset of `warnings` whose tied teams cross the qualifying boundary.
+ */
+export function filterQualificationRelevantWarnings(
+	warnings: TieWarning[],
+	sorted: TeamStanding[],
+	qualifyingCount: number
+): TieWarning[] {
+	return warnings.filter((w) => {
+		// Locate each tied team in the sorted standings. Defensive against
+		// stale warnings whose teams have since been removed from `sorted`.
+		const positions = w.tiedTeams
+			.map((team) => sorted.findIndex((t) => t.team === team))
+			.filter((p) => p >= 0);
+		if (positions.length < 2) return false;
+		const hasQualifier = positions.some((p) => p < qualifyingCount);
+		const hasNonQualifier = positions.some((p) => p >= qualifyingCount);
+		return hasQualifier && hasNonQualifier;
+	});
+}

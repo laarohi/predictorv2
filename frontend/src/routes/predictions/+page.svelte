@@ -39,7 +39,11 @@
 		phase1Countdown,
 		phase2Countdown
 	} from '$stores/phase';
-	import { applyFifaTiebreakers, computeGroupStandingsMapWithWarnings } from '$lib/utils/standings';
+	import {
+		applyFifaTiebreakers,
+		computeGroupStandingsMapWithWarnings,
+		filterQualificationRelevantWarnings
+	} from '$lib/utils/standings';
 	import {
 		initPersistence,
 		hydrateFromStorage,
@@ -129,25 +133,43 @@
 	function prevGroup() {
 		const list = $groupFixtures.map((g) => g.group);
 		if (list.length === 0) return;
-		if (activeGroupPill === 'thirdplace') {
-			activeGroupPill = list[list.length - 1];
-			return;
-		}
 		const idx = list.indexOf(activeGroupPill);
-		// Wrap: leftmost group → 3rd Place
-		activeGroupPill = idx <= 0 ? 'thirdplace' : list[idx - 1];
+		// Cycle A↔L (3rd Place is no longer a sibling sub-view — it lives in
+		// a modal triggered from a separate pill).
+		activeGroupPill = idx <= 0 ? list[list.length - 1] : list[idx - 1];
 	}
 
 	function nextGroup() {
 		const list = $groupFixtures.map((g) => g.group);
 		if (list.length === 0) return;
-		if (activeGroupPill === 'thirdplace') {
-			activeGroupPill = list[0];
-			return;
-		}
 		const idx = list.indexOf(activeGroupPill);
-		// Wrap: rightmost group → 3rd Place
-		activeGroupPill = idx >= list.length - 1 ? 'thirdplace' : list[idx + 1];
+		activeGroupPill = idx >= list.length - 1 ? list[0] : list[idx + 1];
+	}
+
+	// ---- 3rd Place modal -------------------------------------------------
+	// The third-place standings used to be a sub-view of the wizard (selected
+	// via the 'thirdplace' pill in the group nav). It's now a modal dialog —
+	// users want to glance at it quickly without losing their place. The pill
+	// still triggers it; the body of the wizard no longer renders the table.
+	let thirdPlaceModalOpen = false;
+	let thirdPlaceDialog: HTMLDialogElement;
+
+	function openThirdPlace() {
+		thirdPlaceModalOpen = true;
+		thirdPlaceDialog?.showModal();
+	}
+	function closeThirdPlace() {
+		thirdPlaceDialog?.close();
+		// `close` event handler below also sets thirdPlaceModalOpen = false,
+		// so this assignment is defensive (no-op if the event fired first).
+		thirdPlaceModalOpen = false;
+	}
+	// Native <dialog> bubbles a click event from the backdrop pseudo-element
+	// up to the dialog element itself. Inner content has its own event target
+	// (the inner div / descendants), so we can distinguish backdrop clicks by
+	// checking that the event target IS the dialog.
+	function onDialogBackdropClick(e: MouseEvent) {
+		if (e.target === thirdPlaceDialog) closeThirdPlace();
 	}
 
 	// Svelte action: invoke `callback` when a mousedown lands outside `node`.
@@ -332,7 +354,21 @@
 		return applyFifaTiebreakers(thirds, [], new Map(), 'third_place_qualifying');
 	})();
 	$: thirdPlaceStandings = thirdPlaceResult.sorted;
-	$: thirdPlaceWarnings = thirdPlaceResult.warnings;
+	// Only surface ties that actually change qualification (cross the 8↔9
+	// boundary). See filterQualificationRelevantWarnings for the rationale.
+	$: thirdPlaceWarnings = filterQualificationRelevantWarnings(
+		thirdPlaceResult.warnings,
+		thirdPlaceResult.sorted,
+		8
+	);
+	// Set of team names that qualify via the third-place ranking (top 8 of 12).
+	// Per-group standings consult this for position 3 — once every group has
+	// predictions, position 3 resolves to either "qualified" (green) or "out"
+	// (grey) based on whether the team is in this set. Before then, the answer
+	// is undetermined and position 3 stays gold ("tentative / best 3rd match").
+	$: thirdPlaceQualifiedSet = new Set(
+		thirdPlaceStandings.slice(0, 8).map((t) => t.team)
+	);
 
 	// Maximum goals allowed in a single match's score input. Enforced both in
 	// the handler and via clampScoreInput on every keystroke so the user
@@ -747,10 +783,18 @@
 		<div class="pn-ws-only">
 		<section class="pn-wiz-hero">
 			<div class="title-block">
-				<div class="l">
-					{activePhase === 'phase1' ? 'Phase I · Group Stage' : 'Phase II · Knockout'}
+				<!-- Section tabs (Groups / Knockout / Bonus) — navigation within
+				     content, lives on the LEFT where users expect navigation. -->
+				<div class="phase-toggle">
+					<button class:on={activeSection === 'groups'} on:click={() => (activeSection = 'groups')}>Groups</button>
+					<button
+						class:on={activeSection === 'knockout'}
+						class:gated={phase1BracketGated}
+						on:click={() => (activeSection = 'knockout')}
+						title={phase1BracketGated ? 'Complete all group predictions to unlock' : ''}
+					>Knockout</button>
+					<button class:on={activeSection === 'bonus'} on:click={() => (activeSection = 'bonus')}>Bonus</button>
 				</div>
-				<div class="ttl"><em>Predict</em></div>
 			</div>
 			<div class="progress-stack">
 				<div class="big-num" aria-hidden="true">
@@ -774,29 +818,19 @@
 				</div>
 			</div>
 			<div class="toggle-stack">
+				<!-- Phase I/II toggle (only when Phase 2 is active) +
+				     primary commit button. Both are 'phase-context' controls:
+				     the toggle picks which phase, the button commits within it.
+				     RIGHT-aligned because primary CTAs conventionally terminate
+				     the eye-scan at the right edge of the page chrome. -->
 				{#if $isPhase2Active}
 					<div class="phase-toggle">
 						<button class:on={activePhase === 'phase1'} on:click={() => (activePhase = 'phase1')}>Phase I</button>
 						<button class:on={activePhase === 'phase2'} on:click={() => (activePhase = 'phase2')}>Phase II</button>
 					</div>
 				{/if}
-				<div class="phase-toggle">
-					<button class:on={activeSection === 'groups'} on:click={() => (activeSection = 'groups')}>Groups</button>
-					<button
-						class:on={activeSection === 'knockout'}
-						class:gated={phase1BracketGated}
-						on:click={() => (activeSection = 'knockout')}
-						title={phase1BracketGated ? 'Complete all group predictions to unlock' : ''}
-					>Knockout</button>
-					<button class:on={activeSection === 'bonus'} on:click={() => (activeSection = 'bonus')}>Bonus</button>
-				</div>
-				<!-- Hero save button — primary commit action for both phases.
-				     Anchored in the hero (visible at the natural read-position
-				     of the page) rather than floating, so it never overlaps
-				     content cards. State is communicated via the .dirty /
-				     .saving / .success / .error class modifiers. -->
 				<button
-					class="pn-hero-save"
+					class="pn-hero-save pn-hero-save--prominent"
 					class:dirty={(activePhase === 'phase1' ? hasAnyPhase1Unsaved : $hasUnsavedChanges) && saveStatus === 'idle'}
 					class:saving={saveStatus === 'saving'}
 					class:success={saveStatus === 'saved'}
@@ -937,8 +971,9 @@
 						</div>
 						<button
 							class="pn-wiz-gp special"
-							class:active={activeGroupPill === 'thirdplace'}
-							on:click={() => (activeGroupPill = 'thirdplace')}
+							class:active={thirdPlaceModalOpen}
+							on:click={openThirdPlace}
+							aria-haspopup="dialog"
 						>
 							3rd<br />Place
 						</button>
@@ -960,12 +995,9 @@
 									class:done={currentIsComplete && !currentHasTie}
 									class:tied={currentIsComplete && currentHasTie}
 									class:open={groupDropdownOpen}
-									class:special={activeGroupPill === 'thirdplace'}
 									on:click={() => (groupDropdownOpen = !groupDropdownOpen)}
 								>
-									<span class="lbl">
-										{activeGroupPill === 'thirdplace' ? '3rd Place' : `Group ${activeGroupPill || 'A'}`}
-									</span>
+									<span class="lbl">Group {activeGroupPill || 'A'}</span>
 									{#if currentGp}
 										<span class="prog">{currentGp.done}/{currentGp.total}</span>
 									{/if}
@@ -999,8 +1031,9 @@
 							>▶</button>
 							<button
 								class="third-chip"
-								class:active={activeGroupPill === 'thirdplace'}
-								on:click={() => (activeGroupPill = 'thirdplace')}
+								class:active={thirdPlaceModalOpen}
+								on:click={openThirdPlace}
+								aria-haspopup="dialog"
 								aria-label="3rd Place standings"
 							>3rd</button>
 						</div>
@@ -1008,79 +1041,10 @@
 				</section>
 			{/if}
 
-			<!-- Group view -->
-			{#if activeSection === 'groups' && activeGroupPill === 'thirdplace'}
-				<section class="pn-wiz-group">
-					{#if allGroupsComplete && thirdPlaceWarnings.length > 0}
-						<div class="pn-tie-warn">
-							<h4>⚠ Tied teams · alphabetical fallback in effect</h4>
-							{#each thirdPlaceWarnings as w (w.tiedTeams.join('-'))}
-								<p>
-									<span class="teams">{w.tiedTeams.join(', ')}</span>
-									are tied on points, goal difference and goals-for. Third-place teams
-									come from different groups so head-to-head isn't applicable — they're
-									currently ranked alphabetically. Adjust your predicted scores if you want
-									a different team to qualify.
-								</p>
-							{/each}
-						</div>
-					{/if}
-					<div class="pn-stnd">
-						<div class="h">
-							<span>Third-place standings · top 8 advance to R32</span>
-							<span class="live">LIVE</span>
-						</div>
-						<table class="pn-stnd-table">
-							<thead>
-								<tr>
-									<th></th>
-									<th class="c">Grp</th>
-									<th>Team</th>
-									<th class="c">P</th>
-									<th class="c">W</th>
-									<th class="c">D</th>
-									<th class="c">L</th>
-									<th class="c">GF</th>
-									<th class="c">GA</th>
-									<th class="c">GD</th>
-									<th>Pts</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each thirdPlaceStandings as t, i (t.team)}
-									<tr class:qualifies={i < 8}>
-										<td>
-											<span class="pos" class:adv={i < 8} class:out={i >= 8}>{i + 1}</span>
-										</td>
-										<td class="grp">{t.group}</td>
-										<td>
-											<span class="team">
-												<PnFlag code={teamCode(t.team)} w={20} h={14} />
-												<span class="nm-text">{displayTeamName(t.team)}</span>
-											</span>
-										</td>
-										<td class="stat">{t.played}</td>
-										<td class="stat">{t.won}</td>
-										<td class="stat">{t.drawn}</td>
-										<td class="stat">{t.lost}</td>
-										<td class="stat">{t.goalsFor}</td>
-										<td class="stat">{t.goalsAgainst}</td>
-										<td class="stat gd" class:pos={t.goalDifference >= 0} class:neg={t.goalDifference < 0}>
-											{t.goalDifference > 0 ? '+' : ''}{t.goalDifference}
-										</td>
-										<td>{t.points}</td>
-									</tr>
-								{:else}
-									<tr><td colspan="11" style="padding: 24px; text-align: center; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No third-place standings yet — fill in some group predictions</td></tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-					<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 10px;">
-						★ Top 8 third-placed teams (gold rows) qualify for the Round of 32 under FIFA 2026 format
-					</p>
-				</section>
-			{:else if activeSection === 'groups' && selectedGroup}
+			<!-- Group view (the 'thirdplace' sub-view was removed — that content
+			     now lives in the modal at the bottom of this page; see <dialog
+			     class="pn-3rd-modal"> below). -->
+			{#if activeSection === 'groups' && selectedGroup}
 				{@const group = selectedGroup}
 				{@const standings = standingsMap[group.group] ?? []}
 				{@const groupWarnings = groupStandingsWarnings.filter((w) => w.group === group.group)}
@@ -1104,7 +1068,6 @@
 					<div class="pn-stnd">
 						<div class="h">
 							<span>Group {group.group} · Predicted Standings</span>
-							<span class="live">LIVE</span>
 						</div>
 						<table class="pn-stnd-table">
 							<thead>
@@ -1123,9 +1086,18 @@
 							</thead>
 							<tbody>
 								{#each standings as t, i (t.team)}
-									<tr>
+									{@const directQual = i < 2}
+									{@const isThirdSlot = i === 2}
+									{@const thirdQual =
+										isThirdSlot &&
+										allGroupsComplete &&
+										thirdPlaceQualifiedSet.has(t.team)}
+									{@const tentative = isThirdSlot && !allGroupsComplete}
+									{@const qualified = directQual || thirdQual}
+									{@const isOut = !qualified && !tentative}
+									<tr class:qualifies={qualified}>
 										<td>
-											<span class="pos" class:adv={i < 2} class:maybe={i === 2} class:out={i >= 3}>{i + 1}</span>
+											<span class="pos" class:adv={qualified} class:maybe={tentative} class:out={isOut}>{i + 1}</span>
 										</td>
 										<td>
 											<span class="team">
@@ -1149,8 +1121,8 @@
 						</table>
 					</div>
 					<div class="pn-stnd-legend">
-						<span><span class="pip green"></span>Advances (top 2)</span>
-						<span><span class="pip gold"></span>Best 3rd match</span>
+						<span><span class="pip green"></span>Qualified</span>
+						<span><span class="pip gold"></span>Pending best 3rd</span>
 						<span><span class="pip grey"></span>Out</span>
 					</div>
 					</div><!-- /pn-stnd-col -->
@@ -1169,6 +1141,8 @@
 							>
 								{#if editingFixtureId === f.id}
 									<span class="editing-tag">Editing</span>
+								{:else if state === 'empty'}
+									<span class="empty-tag">Pick</span>
 								{/if}
 								<div class="meta">
 									<span>{new Date(f.kickoff).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · {new Date(f.kickoff).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -1294,10 +1268,12 @@
 										{/if}
 									</div>
 									{#if bq.input_type === 'team'}
+										{@const elig = bq.eligible_teams}
+										{@const opts = elig ? teamOptions.filter((o) => elig.includes(o.value)) : teamOptions}
 										<div class="answer-row">
 											<PnDropdown
 												value={answer}
-												options={teamOptions}
+												options={opts}
 												placeholder="— Select a team —"
 												on:change={(e) => setBonusAnswer(bq.id, e.detail)}
 											/>
@@ -1376,6 +1352,8 @@
 							>
 								{#if editingFixtureId === f.id}
 									<span class="editing-tag">Editing</span>
+								{:else if state === 'empty'}
+									<span class="empty-tag">Pick</span>
 								{/if}
 								<div class="meta">
 									<span>{new Date(f.kickoff).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · {new Date(f.kickoff).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -1449,6 +1427,103 @@
 			{/if}
 
 		{/if}
+
+		<!-- Third-place standings modal. Triggered by the gold "3rd Place" pill
+		     in the group nav (both desktop and mobile). Uses native <dialog>
+		     for free a11y (focus trap, ESC-to-close, top-layer hoisting). The
+		     backdrop click handler closes when the user clicks outside the
+		     content (e.target === dialog when the click hits the backdrop).
+		     a11y warnings suppressed because: (1) the click handler exists
+		     specifically to implement the standard backdrop-click-to-dismiss
+		     pattern, which has no keyboard equivalent — ESC-to-close is
+		     already wired by native <dialog>; (2) <dialog> IS an interactive
+		     element when opened via .showModal() but Svelte's linter doesn't
+		     model that. -->
+		<!-- svelte-ignore a11y-click-events-have-key-events -->
+		<!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+		<dialog
+			class="pn-3rd-modal"
+			bind:this={thirdPlaceDialog}
+			on:close={() => (thirdPlaceModalOpen = false)}
+			on:click={onDialogBackdropClick}
+			aria-labelledby="pn-3rd-modal-title"
+		>
+			<div class="pn-3rd-modal-inner">
+				<header class="pn-3rd-modal-h">
+					<h2 id="pn-3rd-modal-title">Third-place standings · top 8 advance to R32</h2>
+					<button class="close" type="button" on:click={closeThirdPlace} aria-label="Close">×</button>
+				</header>
+				<div class="pn-3rd-modal-body">
+					{#if allGroupsComplete && thirdPlaceWarnings.length > 0}
+						<div class="pn-tie-warn">
+							<h4>⚠ Tied teams · alphabetical fallback in effect</h4>
+							{#each thirdPlaceWarnings as w (w.tiedTeams.join('-'))}
+								<p>
+									<span class="teams">{w.tiedTeams.join(', ')}</span>
+									are tied on points, goal difference and goals-for. Third-place teams
+									come from different groups so head-to-head isn't applicable — they're
+									currently ranked alphabetically. Adjust your predicted scores if you want
+									a different team to qualify.
+								</p>
+							{/each}
+						</div>
+					{/if}
+					<!-- Bare table — no .pn-stnd card wrapper (the modal box IS
+					     the card). The thin scroll wrapper lets the 11-col
+					     table scroll horizontally on narrow viewports. -->
+					<div class="pn-3rd-table-scroll">
+						<table class="pn-stnd-table">
+							<thead>
+								<tr>
+									<th></th>
+									<th class="c">Grp</th>
+									<th>Team</th>
+									<th class="c">P</th>
+									<th class="c">W</th>
+									<th class="c">D</th>
+									<th class="c">L</th>
+									<th class="c">GF</th>
+									<th class="c">GA</th>
+									<th class="c">GD</th>
+									<th>Pts</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each thirdPlaceStandings as t, i (t.team)}
+									<tr class:qualifies={i < 8}>
+										<td>
+											<span class="pos" class:adv={i < 8} class:out={i >= 8}>{i + 1}</span>
+										</td>
+										<td class="grp">{t.group}</td>
+										<td>
+											<span class="team">
+												<PnFlag code={teamCode(t.team)} w={20} h={14} />
+												<span class="nm-text">{displayTeamName(t.team)}</span>
+											</span>
+										</td>
+										<td class="stat">{t.played}</td>
+										<td class="stat">{t.won}</td>
+										<td class="stat">{t.drawn}</td>
+										<td class="stat">{t.lost}</td>
+										<td class="stat">{t.goalsFor}</td>
+										<td class="stat">{t.goalsAgainst}</td>
+										<td class="stat gd" class:pos={t.goalDifference >= 0} class:neg={t.goalDifference < 0}>
+											{t.goalDifference > 0 ? '+' : ''}{t.goalDifference}
+										</td>
+										<td>{t.points}</td>
+									</tr>
+								{:else}
+									<tr><td colspan="11" class="empty-row">No third-place standings yet — fill in some group predictions</td></tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+					<p class="footnote">
+						★ Top 8 third-placed teams (gold rows) qualify for the Round of 32 under FIFA 2026 format
+					</p>
+				</div>
+			</div>
+		</dialog>
 	</PnPageShell>
 {/if}
 
