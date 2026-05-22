@@ -6,7 +6,7 @@ fixture_to_read includes score data only for finished matches.
 
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -14,6 +14,13 @@ from app.models.fixture import Fixture, MatchStatus
 from app.models.score import Score
 from app.schemas.fixture import FixtureScore, FixtureRead
 from app.api.fixtures import fixture_to_read
+
+
+def _mock_session() -> AsyncMock:
+    """fixture_to_read takes a session for the phase-aware lock lookup.
+    When the caller passes phase1_locked explicitly, no actual queries
+    happen; the session is still needed for the parameter slot."""
+    return AsyncMock()
 
 
 class TestFixtureScoreSchema:
@@ -145,9 +152,12 @@ class TestFixtureToRead:
 
         return fixture
 
-    def test_finished_fixture_includes_score(self, finished_fixture_with_score):
+    @pytest.mark.asyncio
+    async def test_finished_fixture_includes_score(self, finished_fixture_with_score):
         """Finished fixture should have score data embedded in the response."""
-        result = fixture_to_read(finished_fixture_with_score)
+        result = await fixture_to_read(
+            _mock_session(), finished_fixture_with_score, phase1_locked=False
+        )
 
         assert isinstance(result, FixtureRead)
         assert result.score is not None
@@ -156,31 +166,37 @@ class TestFixtureToRead:
         assert result.score.outcome == "1"
         assert result.status == MatchStatus.FINISHED
 
-    def test_scheduled_fixture_has_no_score(self, scheduled_fixture):
+    @pytest.mark.asyncio
+    async def test_scheduled_fixture_has_no_score(self, scheduled_fixture):
         """Scheduled fixture should not include score data."""
-        result = fixture_to_read(scheduled_fixture)
+        result = await fixture_to_read(
+            _mock_session(), scheduled_fixture, phase1_locked=False
+        )
 
         assert result.score is None
         assert result.status == MatchStatus.SCHEDULED
 
-    def test_live_fixture_includes_score(self, live_fixture_with_score):
+    @pytest.mark.asyncio
+    async def test_live_fixture_includes_score(self, live_fixture_with_score):
         """Live fixture SHOULD include score so the Dashboard can render the
         in-progress scoreline.
 
-        Behaviour changed in feat(live-scores): predictions lock 5 minutes
-        before kickoff, so by the time a match is LIVE everyone's pick is
-        already locked in — there's no "premature result exposure" risk.
-        Exposing the score lets the score_scheduler's Football-Data.org
-        writes flow through to the frontend in real time.
+        Predictions lock before kickoff, so by the time a match is LIVE
+        everyone's pick is already locked in — there's no "premature
+        result exposure" risk. Exposing the score lets the score_scheduler's
+        Football-Data.org writes flow through to the frontend in real time.
         """
-        result = fixture_to_read(live_fixture_with_score)
+        result = await fixture_to_read(
+            _mock_session(), live_fixture_with_score, phase1_locked=False
+        )
 
         assert result.score is not None
         assert result.score.home_score == 1
         assert result.score.away_score == 0
         assert result.status == MatchStatus.LIVE
 
-    def test_finished_fixture_without_score_object(self):
+    @pytest.mark.asyncio
+    async def test_finished_fixture_without_score_object(self):
         """Finished fixture with no Score record should have score=None."""
         fixture = MagicMock(spec=Fixture)
         fixture.id = uuid.uuid4()
@@ -192,15 +208,14 @@ class TestFixtureToRead:
         fixture.match_number = 4
         fixture.status = MatchStatus.FINISHED
         fixture.minute = None
-        fixture.is_locked.return_value = True
-        fixture.time_until_lock.return_value = None
         fixture.score = None
 
-        result = fixture_to_read(fixture)
+        result = await fixture_to_read(_mock_session(), fixture, phase1_locked=False)
 
         assert result.score is None
 
-    def test_score_includes_extra_time_data(self):
+    @pytest.mark.asyncio
+    async def test_score_includes_extra_time_data(self):
         """Should pass through extra time and penalty data."""
         fixture = MagicMock(spec=Fixture)
         fixture.id = uuid.uuid4()
@@ -212,8 +227,6 @@ class TestFixtureToRead:
         fixture.match_number = 49
         fixture.status = MatchStatus.FINISHED
         fixture.minute = None
-        fixture.is_locked.return_value = True
-        fixture.time_until_lock.return_value = None
 
         score = MagicMock(spec=Score)
         score.home_score = 1
@@ -225,7 +238,7 @@ class TestFixtureToRead:
         score.outcome = "1"  # Home won on pens
         fixture.score = score
 
-        result = fixture_to_read(fixture)
+        result = await fixture_to_read(_mock_session(), fixture, phase1_locked=False)
 
         assert result.score is not None
         assert result.score.home_score_et == 1

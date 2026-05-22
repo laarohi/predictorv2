@@ -46,7 +46,7 @@
 				{#if phase === 'phase1'}
 					Group stage and bracket predictions can no longer be changed
 				{:else}
-					Match score predictions lock 5 minutes before each kickoff
+					Match score predictions lock 15 minutes before each kickoff
 				{/if}
 			</p>
 		</div>

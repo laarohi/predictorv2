@@ -81,3 +81,16 @@ def load_tournament_config(path: str | None = None) -> dict[str, Any]:
 def get_tournament_config() -> dict[str, Any]:
     """Get cached tournament configuration."""
     return load_tournament_config()
+
+
+def get_lock_minutes() -> int:
+    """Minutes before kickoff that match-score predictions lock.
+
+    Reads `locking.match_lock_before_kickoff` from the tournament YAML.
+    Falls back to 15 if the key is missing — chosen so a corrupted config
+    fails closed (longer lock window) rather than open.
+    """
+    config = get_tournament_config()
+    locking = config.get("locking") or {}
+    value = locking.get("match_lock_before_kickoff", 15)
+    return int(value)

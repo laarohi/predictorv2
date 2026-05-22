@@ -369,7 +369,7 @@
 				<div class="rule">
 					<div class="pip"></div>
 					<div>
-						<b>Per-match lock · 5 minutes before kickoff</b>
+						<b>Per-match lock · 15 minutes before kickoff</b>
 						Once a match locks you can't change your prediction for it, regardless of phase.
 						The countdown timer in the wizard is your friend.
 					</div>

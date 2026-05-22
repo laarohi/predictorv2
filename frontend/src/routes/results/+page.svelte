@@ -481,7 +481,7 @@
 						<div class="pn-rs-grid">
 							{#each day.items as f (f.id)}
 								{#if matchState(f) === 'open'}
-									<div class="pn-md-card-blocked" aria-disabled="true" title="Predictions are blind until 5 minutes before kickoff">
+									<div class="pn-md-card-blocked" aria-disabled="true" title="Predictions are blind until 15 minutes before kickoff">
 										<PnResultsCard
 											fixture={f}
 											prediction={predFor(f)}
@@ -542,7 +542,7 @@
 						<div class="pn-rs-grid">
 							{#each grp.items as f (f.id)}
 								{#if matchState(f) === 'open'}
-									<div class="pn-md-card-blocked" aria-disabled="true" title="Predictions are blind until 5 minutes before kickoff">
+									<div class="pn-md-card-blocked" aria-disabled="true" title="Predictions are blind until 15 minutes before kickoff">
 										<PnResultsCard
 											fixture={f}
 											prediction={predFor(f)}

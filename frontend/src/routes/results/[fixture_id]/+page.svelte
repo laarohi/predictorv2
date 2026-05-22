@@ -335,7 +335,7 @@
 					<div class="pn-md-blocked">
 						<div class="h">Predictions are blind until lock</div>
 						<div class="b">
-							Community predictions become visible <b>5 minutes before kickoff</b>. Come back when
+							Community predictions become visible <b>15 minutes before kickoff</b>. Come back when
 							the match locks to see the full pool, the score-distribution plot, and the per-match
 							leaderboard.
 						</div>
@@ -444,7 +444,7 @@
 					<div class="pn-md-blocked" style="margin: 14px 12px 0;">
 						<div class="h">Predictions are blind until lock</div>
 						<div class="b">
-							Community predictions become visible <b>5 minutes before kickoff</b>.
+							Community predictions become visible <b>15 minutes before kickoff</b>.
 						</div>
 					</div>
 				{:else}

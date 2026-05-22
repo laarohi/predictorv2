@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
+from app.config import get_lock_minutes
 from app.dependencies import AdminUser, CurrentUser, DbSession, OptionalUser
 from app.models._datetime import utc_now
 from app.models.fixture import Fixture, MatchStatus
@@ -20,7 +21,11 @@ from app.schemas.fixture import (
     FixtureUpdate,
     LockStatus,
 )
-from app.services.locking import get_active_competition
+from app.services.locking import (
+    get_active_competition,
+    get_fixture_lock_view,
+    is_phase1_locked,
+)
 from app.services.standings import (
     get_actual_group_standings,
     get_group_positions,
@@ -29,12 +34,21 @@ from app.services.standings import (
 
 router = APIRouter()
 
-LOCK_MINUTES = 5
 
+async def fixture_to_read(
+    session: DbSession,
+    fixture: Fixture,
+    *,
+    phase1_locked: bool | None = None,
+) -> FixtureRead:
+    """Convert Fixture model to FixtureRead schema.
 
-def fixture_to_read(fixture: Fixture) -> FixtureRead:
-    """Convert Fixture model to FixtureRead schema."""
-    time_until = fixture.time_until_lock(LOCK_MINUTES)
+    Pass `phase1_locked` if you've pre-computed it for this request to
+    avoid a redundant lookup per fixture in list endpoints.
+    """
+    locked, time_until = await get_fixture_lock_view(
+        session, fixture, phase1_locked=phase1_locked
+    )
 
     # Emit score whenever a row exists — covers LIVE / HALFTIME / FINISHED.
     # The score_scheduler writes Score rows for in-play matches too, so the
@@ -61,7 +75,7 @@ def fixture_to_read(fixture: Fixture) -> FixtureRead:
         match_number=fixture.match_number,
         status=fixture.status,
         minute=fixture.minute,
-        is_locked=fixture.is_locked(LOCK_MINUTES),
+        is_locked=locked,
         time_until_lock=int(time_until.total_seconds()) if time_until else None,
         score=score_data,
     )
@@ -72,7 +86,8 @@ async def get_all_fixtures(session: DbSession, _user: OptionalUser) -> list[Fixt
     """Get all fixtures ordered by kickoff time."""
     result = await session.execute(select(Fixture).options(selectinload(Fixture.score)).order_by(Fixture.kickoff, Fixture.match_number))
     fixtures = result.scalars().all()
-    return [fixture_to_read(f) for f in fixtures]
+    phase1_locked = await is_phase1_locked(session)
+    return [await fixture_to_read(session, f, phase1_locked=phase1_locked) for f in fixtures]
 
 
 @router.get("/groups", response_model=list[FixturesByGroup])
@@ -85,6 +100,7 @@ async def get_group_fixtures(session: DbSession, _user: OptionalUser) -> list[Fi
         .order_by(Fixture.group, Fixture.kickoff, Fixture.match_number)
     )
     fixtures = result.scalars().all()
+    phase1_locked = await is_phase1_locked(session)
 
     # Organize by group
     groups: dict[str, list[FixtureRead]] = {}
@@ -92,7 +108,9 @@ async def get_group_fixtures(session: DbSession, _user: OptionalUser) -> list[Fi
         group = fixture.group or "Unknown"
         if group not in groups:
             groups[group] = []
-        groups[group].append(fixture_to_read(fixture))
+        groups[group].append(
+            await fixture_to_read(session, fixture, phase1_locked=phase1_locked)
+        )
 
     return [FixturesByGroup(group=g, fixtures=f) for g, f in sorted(groups.items())]
 
@@ -107,7 +125,11 @@ async def get_knockout_fixtures(session: DbSession, _user: OptionalUser) -> list
         .order_by(Fixture.kickoff, Fixture.match_number)
     )
     fixtures = result.scalars().all()
-    return [fixture_to_read(f) for f in fixtures]
+    # Knockout fixtures aren't affected by phase1_locked, but pass False
+    # explicitly so the helper doesn't query for it.
+    return [
+        await fixture_to_read(session, f, phase1_locked=False) for f in fixtures
+    ]
 
 
 class TeamStandingResponse(BaseModel):
@@ -159,7 +181,9 @@ async def get_actual_knockout_fixtures(
     )
     fixtures = result.scalars().all()
 
-    return [fixture_to_read(f) for f in fixtures]
+    return [
+        await fixture_to_read(session, f, phase1_locked=False) for f in fixtures
+    ]
 
 
 @router.get("/standings/actual", response_model=ActualStandingsResponse)
@@ -201,7 +225,7 @@ async def get_fixture(fixture_id: uuid.UUID, session: DbSession, _user: Optional
     if not fixture:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fixture not found")
 
-    return fixture_to_read(fixture)
+    return await fixture_to_read(session, fixture)
 
 
 @router.get("/{fixture_id}/lock-status", response_model=LockStatus)
@@ -215,13 +239,14 @@ async def get_lock_status(
     if not fixture:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Fixture not found")
 
-    locks_at = fixture.kickoff - timedelta(minutes=LOCK_MINUTES)
+    locks_at = fixture.kickoff - timedelta(minutes=get_lock_minutes())
+    locked, time_remaining = await get_fixture_lock_view(session, fixture)
 
     return LockStatus(
         fixture_id=fixture.id,
-        is_locked=fixture.is_locked(LOCK_MINUTES),
+        is_locked=locked,
         locks_at=locks_at,
-        time_remaining=fixture.time_until_lock(LOCK_MINUTES),
+        time_remaining=time_remaining,
     )
 
 

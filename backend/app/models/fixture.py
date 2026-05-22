@@ -58,13 +58,23 @@ class Fixture(SQLModel, table=True):
     predictions: list["MatchPrediction"] = Relationship(back_populates="fixture")
     score: Optional["Score"] = Relationship(back_populates="fixture")
 
-    def is_locked(self, lock_minutes: int = 5) -> bool:
-        """Check if predictions are locked for this fixture."""
+    def is_locked(self, lock_minutes: int | None = None) -> bool:
+        """Check if predictions are locked for this fixture.
+
+        If `lock_minutes` is None, reads the configured value from the
+        tournament YAML — see `app.config.get_lock_minutes`.
+        """
+        if lock_minutes is None:
+            from app.config import get_lock_minutes
+            lock_minutes = get_lock_minutes()
         lock_time = self.kickoff - timedelta(minutes=lock_minutes)
         return utc_now() >= lock_time
 
-    def time_until_lock(self, lock_minutes: int = 5) -> timedelta | None:
+    def time_until_lock(self, lock_minutes: int | None = None) -> timedelta | None:
         """Get time remaining until predictions lock."""
+        if lock_minutes is None:
+            from app.config import get_lock_minutes
+            lock_minutes = get_lock_minutes()
         lock_time = self.kickoff - timedelta(minutes=lock_minutes)
         remaining = lock_time - utc_now()
         return remaining if remaining.total_seconds() > 0 else None

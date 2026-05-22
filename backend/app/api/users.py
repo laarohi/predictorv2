@@ -14,11 +14,10 @@ from app.models.prediction import MatchPrediction, PredictionPhase, TeamPredicti
 from app.models.score import Score
 from app.models.user import User
 from app.schemas.auth import UserStats
+from app.services.locking import get_fixture_lock_view, is_phase1_locked
 from app.services.profile import calculate_user_stats
 
 router = APIRouter()
-
-LOCK_MINUTES = 5
 
 
 # Response schemas
@@ -125,11 +124,16 @@ async def get_user_predictions(
         .order_by(Fixture.kickoff)
     )
     rows = result.all()
+    phase1_locked = await is_phase1_locked(session)
 
     match_predictions: list[UserMatchPredictionView] = []
     for pred, fixture in rows:
-        # Blind pool: skip if not locked and not finished
-        if not fixture.is_locked(LOCK_MINUTES) and fixture.status != MatchStatus.FINISHED:
+        # Blind pool: skip unless the fixture is locked or finished. For
+        # Phase 1 group fixtures, lock means phase1_deadline has passed.
+        locked, _ = await get_fixture_lock_view(
+            session, fixture, phase1_locked=phase1_locked
+        )
+        if not locked and fixture.status != MatchStatus.FINISHED:
             continue
 
         view = UserMatchPredictionView(
