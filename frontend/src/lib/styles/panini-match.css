@@ -154,8 +154,8 @@
  * Lives in row 1 / column 2 — right side of the top row, paired with the
  * hero on its left. Background matches the hero (navy) so the two read as
  * a continuous masthead band. Pills, total and the head badge are tuned
- * for the dark surface — "pending" states become transparent dashed
- * outlines (the navy shows through), "earned" states stay loud. */
+ * for the dark surface — "pending" states become transparent paper-3
+ * solid outlines (the navy shows through), "earned" states stay loud. */
 .pn .pn-md-score-strip {
 	margin: 0;
 	background: var(--ink);
@@ -203,7 +203,6 @@
 .pn .pn-md-score-strip.tier-open    .head .tier-tag,
 .pn .pn-md-score-strip.tier-live    .head .tier-tag {
 	background: transparent;
-	border-style: dashed;
 }
 
 .pn .pn-md-score-strip .pn-md-bd {
@@ -225,25 +224,25 @@
 }
 .pn .pn-md-score-strip .pn-md-bd .pill.miss {
 	background: transparent;
-	border: 1.5px dashed var(--red);
+	border: 1.5px solid var(--red);
 	color: var(--paper-3);
 }
 .pn .pn-md-score-strip .pn-md-bd .pill.potential {
 	background: transparent;
-	border: 1.5px dashed var(--paper-3);
+	border: 1.5px solid var(--paper-3);
 	color: var(--paper-3);
 }
 .pn .pn-md-score-strip .pn-md-bd .pill.potential .lab { color: var(--paper-3); }
 .pn .pn-md-score-strip .pn-md-bd .pill.none {
 	background: transparent;
-	border: 1.5px dashed var(--paper-3);
+	border: 1.5px solid var(--paper-3);
 	color: var(--paper-3);
 	opacity: 0.55;
 }
 
 /* The total cell — headline on navy. Earned tiers keep their colour fill;
  * pending states drop the ink fill (which would have been navy-on-navy)
- * for a dashed paper outline. */
+ * for a solid paper-3 outline. */
 .pn .pn-md-score-strip .pn-md-bd .total {
 	background: transparent;
 	color: var(--paper);
@@ -257,7 +256,7 @@
 .pn .pn-md-score-strip .pn-md-bd.tier-open    .total,
 .pn .pn-md-score-strip .pn-md-bd.tier-live    .total {
 	background: transparent;
-	border: 2px dashed var(--paper-3);
+	border: 2px solid var(--paper-3);
 	color: var(--paper);
 }
 .pn .pn-md-score-strip .pn-md-bd.tier-locked .total .lab,
@@ -286,9 +285,9 @@
 .pn .pn-md-bd .pill.hit-rarity  { background: var(--gold);  border-color: var(--ink); color: var(--ink); }
 .pn .pn-md-bd .pill.hit-rarity.solo { background: var(--red); border-color: var(--ink); color: var(--paper); }
 .pn .pn-md-bd .pill.miss        { background: var(--paper); border-color: var(--red); color: var(--red); }
-.pn .pn-md-bd .pill.potential   { background: var(--paper); border-color: var(--ink); border-style: dashed; color: var(--ink); }
+.pn .pn-md-bd .pill.potential   { background: var(--paper); border-color: var(--paper-3); color: var(--ink-3); }
 .pn .pn-md-bd .pill.potential .lab { color: var(--ink-3); }
-.pn .pn-md-bd .pill.none        { background: var(--paper-2); border-color: var(--paper-3); color: var(--ink-3); border-style: dashed; opacity: 0.7; }
+.pn .pn-md-bd .pill.none        { background: var(--paper-2); border-color: var(--paper-3); color: var(--ink-3); opacity: 0.7; }
 
 .pn .pn-md-bd .total {
 	background: var(--ink); color: var(--paper);
@@ -315,8 +314,8 @@
 .pn .pn-md-bd.tier-locked  .total,
 .pn .pn-md-bd.tier-open    .total,
 .pn .pn-md-bd.tier-live    .total {
-	background: var(--paper); color: var(--ink);
-	border-color: var(--ink); border-style: dashed;
+	background: color-mix(in srgb, var(--paper) 92%, var(--gold) 8%); color: var(--ink);
+	border-color: var(--ink);
 }
 .pn .pn-md-bd.tier-locked  .total .lab,
 .pn .pn-md-bd.tier-open    .total .lab,
@@ -685,7 +684,7 @@
 }
 .pn .pn-md-tbl thead th.r { text-align: right; }
 .pn .pn-md-tbl thead th.c { text-align: center; }
-.pn .pn-md-tbl tbody tr { border-bottom: 1px dashed var(--paper-3); }
+.pn .pn-md-tbl tbody tr { border-bottom: 1px solid var(--paper-3); }
 .pn .pn-md-tbl tbody tr:last-child { border-bottom: 0; }
 .pn .pn-md-tbl tbody tr.you {
 	background: rgba(212,154,46,0.12);
@@ -721,7 +720,7 @@
 }
 .pn .pn-md-tbl tr.row-exact   td.pick .pick-chip { background: var(--green); color: var(--paper); border-color: var(--green); }
 .pn .pn-md-tbl tr.row-outcome td.pick .pick-chip { background: var(--gold);  color: var(--ink); }
-.pn .pn-md-tbl tr.row-miss    td.pick .pick-chip { background: var(--paper); color: var(--ink-3); border-style: dashed; }
+.pn .pn-md-tbl tr.row-miss    td.pick .pick-chip { background: var(--paper); color: var(--ink-3); border-color: var(--paper-3); }
 
 .pn .pn-md-tbl td.tag-c { text-align: center; width: 88px; }
 .pn .pn-md-tbl td.tag-c .tg {
@@ -732,7 +731,7 @@
 }
 .pn .pn-md-tbl tr.row-exact   .tg { background: var(--green); color: var(--paper); border-color: var(--green); }
 .pn .pn-md-tbl tr.row-outcome .tg { background: var(--gold);  color: var(--ink); }
-.pn .pn-md-tbl tr.row-miss    .tg { background: var(--paper); color: var(--ink-3); border-style: dashed; }
+.pn .pn-md-tbl tr.row-miss    .tg { background: var(--paper); color: var(--ink-3); border-color: var(--paper-3); }
 .pn .pn-md-tbl tr.row-solo    .tg::after { content: " ★"; }
 
 .pn .pn-md-tbl td.rare-c {
@@ -917,7 +916,7 @@
 	letter-spacing: 0.10em; color: var(--paper-3);
 	text-transform: uppercase; text-align: center;
 	padding-top: 4px;
-	border-top: 1px dashed rgba(255,255,255,0.12);
+	border-top: 1px solid rgba(255,255,255,0.12);
 	margin-top: 6px;
 }
 .pn .pn-mm-summary .meta-line b { color: var(--paper); font-family: var(--display); }
@@ -951,7 +950,7 @@
 .pn .pn-mm-score.tier-miss    .head .tier-tag { background: var(--paper); color: var(--red); border-color: var(--red); }
 .pn .pn-mm-score.tier-locked  .head .tier-tag,
 .pn .pn-mm-score.tier-open    .head .tier-tag,
-.pn .pn-mm-score.tier-live    .head .tier-tag { background: var(--paper); color: var(--ink); border-style: dashed; }
+.pn .pn-mm-score.tier-live    .head .tier-tag { background: var(--paper); color: var(--ink-3); border-color: var(--paper-3); }
 
 .pn .pn-mm-score .body {
 	display: grid;
@@ -980,9 +979,9 @@
 .pn .pn-mm-score .pill.hit-rarity  { background: var(--gold);  border-color: var(--ink); color: var(--ink); }
 .pn .pn-mm-score .pill.hit-rarity.solo { background: var(--red); border-color: var(--ink); color: var(--paper); }
 .pn .pn-mm-score .pill.miss        { background: var(--paper); border-color: var(--red); color: var(--red); }
-.pn .pn-mm-score .pill.potential   { background: var(--paper); border-color: var(--ink); border-style: dashed; color: var(--ink); }
+.pn .pn-mm-score .pill.potential   { background: var(--paper); border-color: var(--paper-3); color: var(--ink-3); }
 .pn .pn-mm-score .pill.potential .lab { color: var(--ink-3); }
-.pn .pn-mm-score .pill.none        { background: var(--paper-2); border-color: var(--paper-3); color: var(--ink-3); border-style: dashed; opacity: 0.7; }
+.pn .pn-mm-score .pill.none        { background: var(--paper-2); border-color: var(--paper-3); color: var(--ink-3); opacity: 0.7; }
 .pn .pn-mm-score .total {
 	background: var(--ink); color: var(--paper);
 	padding: 6px 10px 7px;
@@ -1006,8 +1005,8 @@
 .pn .pn-mm-score.tier-locked  .total,
 .pn .pn-mm-score.tier-open    .total,
 .pn .pn-mm-score.tier-live    .total {
-	background: var(--paper); color: var(--ink);
-	border-color: var(--ink); border-style: dashed;
+	background: color-mix(in srgb, var(--paper) 92%, var(--gold) 8%); color: var(--ink);
+	border-color: var(--ink);
 }
 
 /* ----- Mobile plate (bubble grid wrapper) ----- */
@@ -1192,7 +1191,7 @@
 }
 .pn .pn-mm-tbl thead th.r { text-align: right; }
 .pn .pn-mm-tbl thead th.c { text-align: center; }
-.pn .pn-mm-tbl tbody tr { border-bottom: 1px dashed var(--paper-3); }
+.pn .pn-mm-tbl tbody tr { border-bottom: 1px solid var(--paper-3); }
 .pn .pn-mm-tbl tbody tr:last-child { border-bottom: 0; }
 .pn .pn-mm-tbl tbody td { padding: 7px 8px; vertical-align: middle; }
 .pn .pn-mm-tbl td.rk {
@@ -1217,7 +1216,7 @@
 }
 .pn .pn-mm-tbl tr.row-exact   .pick-chip { background: var(--green); color: var(--paper); border-color: var(--green); }
 .pn .pn-mm-tbl tr.row-outcome .pick-chip { background: var(--gold);  color: var(--ink); }
-.pn .pn-mm-tbl tr.row-miss    .pick-chip { background: var(--paper); color: var(--ink-3); border-style: dashed; }
+.pn .pn-mm-tbl tr.row-miss    .pick-chip { background: var(--paper); color: var(--ink-3); border-color: var(--paper-3); }
 .pn .pn-mm-tbl td.pts-c {
 	text-align: right;
 	font-family: var(--display); font-size: 14px;
@@ -1252,9 +1251,14 @@
  * BLOCKED state — shown when a match is still 'open' (before lock) and we
  * therefore can't fetch community predictions. Matches the blind-pool rule.
  * ========================================================================= */
+/* Blind-pool blocked screen — shown when match is still 'open' (before lock)
+ * and community predictions can't be revealed. Swapped 3px dashed ink for
+ * 3px solid ink + canonical 5px ink shadow so it reads as a sealed envelope
+ * rather than a dashed cordon. Headline + copy inside carry the meaning. */
 .pn .pn-md-blocked {
 	background: var(--paper);
-	border: 3px dashed var(--ink);
+	border: 3px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--ink);
 	padding: 28px 20px;
 	text-align: center;
 	margin-top: 18px;

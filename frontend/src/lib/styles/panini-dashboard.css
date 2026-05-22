@@ -168,7 +168,7 @@
 	padding: 12px 0;
 }
 .pn .pn-bcast + .pn-bcast {
-	border-top: 2px dashed var(--paper-3);
+	border-top: 2px solid var(--paper-3);
 	margin-top: 6px;
 	padding-top: 16px;
 }
@@ -322,7 +322,7 @@
 	align-items: center;
 	padding: 10px 0;
 }
-.pn .pn-rival .row + .row { border-top: 1.5px dashed var(--paper-3); }
+.pn .pn-rival .row + .row { border-top: 1.5px solid var(--paper-3); }
 .pn .pn-rival .row.you {
 	background: rgba(212, 154, 46, 0.15);
 	margin: 0 -16px;
@@ -524,7 +524,7 @@
 .pn .pn-fix-table th.r { text-align: right; }
 .pn .pn-fix-table td {
 	padding: 14px 16px;
-	border-bottom: 1px dashed var(--paper-3);
+	border-bottom: 1px solid var(--paper-3);
 	vertical-align: middle;
 }
 .pn .pn-fix-table tr:nth-child(even) td { background: rgba(0, 0, 0, 0.02); }
@@ -748,7 +748,7 @@
 .pn .pn-m-live .pick {
 	grid-column: 1 / -1;
 	background: var(--paper-2);
-	border-top: 2px dashed var(--paper-3);
+	border-top: 2px solid var(--paper-3);
 	padding: 8px 12px;
 	display: flex;
 	justify-content: space-between;
@@ -908,7 +908,7 @@
 	gap: 10px;
 	align-items: center;
 	padding: 10px 12px;
-	border-bottom: 1.5px dashed var(--paper-3);
+	border-bottom: 1.5px solid var(--paper-3);
 }
 .pn .pn-m-fix-row:last-child { border-bottom: 0; }
 .pn .pn-m-fix-row .time {

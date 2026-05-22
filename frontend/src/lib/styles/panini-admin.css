@@ -150,7 +150,8 @@
 /* Auto-computed suggestion chip on bonus admin rows. Clickable button
    that pre-fills the manual input with the auto-derived answer so the
    admin can review + click Save. Sits below the question label so it
-   doesn't crowd the row. */
+   doesn't crowd the row. Uses solid gold border (was dashed); hover
+   promotes it to a filled gold chip to signal "click to apply." */
 .pn .pn-ad-computed {
 	display: inline-flex;
 	align-items: center;
@@ -158,7 +159,7 @@
 	margin-top: 6px;
 	padding: 3px 8px;
 	background: var(--paper-2);
-	border: 1.5px dashed var(--gold);
+	border: 1.5px solid var(--gold);
 	font-family: var(--mono);
 	font-size: 10px;
 	letter-spacing: 0.06em;
@@ -170,7 +171,6 @@
 .pn .pn-ad-computed:hover {
 	background: var(--gold);
 	color: var(--ink);
-	border-style: solid;
 }
 .pn .pn-ad-computed .lbl {
 	color: var(--gold);

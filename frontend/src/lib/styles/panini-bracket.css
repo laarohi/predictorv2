@@ -123,16 +123,25 @@
 	box-shadow: 3px 3px 0 var(--ink);
 	overflow: hidden;
 }
+/* Match row sizing — tuned to fit the longest displayTeamName output
+ * ("NETHERLANDS" / "SWITZERLAND" / "NEW ZEALAND", 11 chars uppercase)
+ * inside an R32 cell at the 1280px viewport floor. Numbers calibrated:
+ *   - R32 cell width @1280px viewport ≈ 113px (grid 1.1fr × 8 + 1.5fr).
+ *   - Inner content after 8px side padding = ~97px.
+ *   - Flag 14px + gap 6px = ~20px → ~77px text room.
+ *   - Archivo Black uppercase @10px fits "NETHERLANDS" in ~75-78px.
+ * Wider viewports automatically get more breathing room — the constraint
+ * is the safety floor, not typical desktop. */
 .pn .pn-bm .row {
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	padding: 6px 10px;
+	padding: 6px 8px;
 	gap: 6px;
 	font-family: var(--display);
-	font-size: 12px;
+	font-size: 10px;
 	text-transform: uppercase;
-	letter-spacing: 0.02em;
+	letter-spacing: 0;
 	cursor: pointer;
 	user-select: none;
 	min-height: 28px;
@@ -141,17 +150,16 @@
 .pn .pn-bm.locked .row {
 	cursor: default;
 }
+/* Winner row — gold fill + ink text is the only differentiator.
+ * Previously also had a red ▸ marker and font-weight: 700; both were
+ * removed because Archivo Black only ships at weight 900, so the 700
+ * request triggered browser synth-bold which widened the rendered text
+ * by a few pixels per character and caused long winner names
+ * ("SWITZERLAND", "NETHERLANDS") to truncate with ellipsis. Consistent
+ * stroke weight across rows keeps the text room consistent. */
 .pn .pn-bm .row.pred {
 	background: var(--gold);
 	color: var(--ink);
-	position: relative;
-	font-weight: 700;
-}
-.pn .pn-bm .row.pred::before {
-	content: '▸';
-	color: var(--red);
-	margin-right: -2px;
-	font-size: 10px;
 }
 .pn .pn-bm .row.lose-pred {
 	color: var(--ink-3);
@@ -186,9 +194,14 @@
 	min-height: 20px;
 	gap: 4px;
 }
+/* Unresolved bracket slot — teams TBD until upstream match resolves.
+ * Was 2px dashed paper-3; now 2px solid paper-3 with a faint paper-2 fill.
+ * Recedes against filled bracket cells (which keep their ink border + shadow)
+ * without dashed perimeter noise. The centered "TBD" label below carries
+ * the empty signal. */
 .pn .pn-bm.tbd {
-	background: rgba(255, 255, 255, 0.05);
-	border: 2px dashed var(--paper-3);
+	background: var(--paper-2);
+	border: 2px solid var(--paper-3);
 	box-shadow: none;
 	min-height: 56px;
 	position: relative;
@@ -221,14 +234,15 @@
 }
 .pn .pn-bm.final .row {
 	padding: 10px 12px;
-	font-size: 15px;
+	font-size: 13px;
 	min-height: 36px;
 	gap: 10px;
-	letter-spacing: 0.04em;
+	letter-spacing: 0.02em;
 }
-.pn .pn-bm.final .row.pred {
-	font-weight: 800;
-}
+/* Final-card winner row inherits the gold-fill + ink treatment from the
+ * generic .row.pred rule above. No font-weight override here either —
+ * synth-bold on Archivo Black would widen the text and risk truncating
+ * long centerpiece names like "Netherlands". */
 .pn .pn-bm.final.empty {
 	display: grid;
 	place-items: center;
@@ -462,7 +476,7 @@
 	gap: 12px;
 	padding: 8px 14px;
 	background: var(--paper-2);
-	border-bottom: 1.5px dashed var(--paper-3);
+	border-bottom: 1.5px solid var(--paper-3);
 	font-family: var(--display);
 	font-size: 13px;
 	letter-spacing: 0.04em;

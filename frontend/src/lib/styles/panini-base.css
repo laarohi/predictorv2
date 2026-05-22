@@ -10,7 +10,13 @@
 	--paper-3: #dfd4ba;
 	--ink: #0e1d40;
 	--ink-2: #514a3d;
-	--ink-3: #8a826f;
+	/* --ink-3 is the "subtle metadata" tier (date stamps, hint copy, save-row
+	 * labels, table secondary cells). Was #8a826f which measured ~2.97:1 on
+	 * paper — below WCAG AA. Darkened to #6e6754 (~4.2:1) so captions read
+	 * cleanly at 10–12px without losing their muted recessed quality.
+	 * If a future site-wide change wants more presence here, #5d5746
+	 * (~5.2:1, comfortable AA) is the next stop. */
+	--ink-3: #6e6754;
 	--red: #c8281f;
 	--red-deep: #8a1610;
 	--navy: #1a3168;
@@ -46,7 +52,11 @@
 	opacity: 0.5;
 }
 
-/* ===== DESKTOP MASTHEAD ===== */
+/* ===== DESKTOP MASTHEAD =====
+ * z-index: 4 (one above .pn-strip's 3) so the avatar dropdown menu, which
+ * is anchored inside the masthead's stacking context, can paint over the
+ * sub-strip below it. Without this, the strip — a later sibling at the
+ * same z-index — would cover the menu. */
 .pn-mast {
 	position: relative;
 	background: var(--ink);
@@ -56,7 +66,7 @@
 	align-items: center;
 	padding: 16px 28px;
 	gap: 28px;
-	z-index: 3;
+	z-index: 4;
 	border-bottom: 4px solid var(--red);
 }
 .pn-mast .logo {
@@ -131,6 +141,7 @@
 	letter-spacing: 0.10em;
 	text-transform: uppercase;
 	color: var(--paper-3);
+	position: relative;
 }
 .pn-mast .user .av {
 	width: 36px;
@@ -142,6 +153,70 @@
 	font-family: var(--display);
 	font-size: 18px;
 	transform: rotate(3deg);
+	/* Resets so the <button> picks up the sticker styling without browser
+	 * defaults intruding. */
+	border: 0;
+	padding: 0;
+	cursor: pointer;
+	font-weight: inherit;
+	line-height: 1;
+}
+.pn-mast .user .av:hover,
+.pn-mast .user .av[aria-expanded='true'] {
+	background: var(--gold);
+}
+.pn-mast .user .av:focus-visible {
+	outline: 2px solid var(--red);
+	outline-offset: 3px;
+}
+
+/* Account menu — sticker-style dropdown anchored under the avatar.
+ * Sits upright (no tilt) since it's a card-class container; only the
+ * avatar trigger above it carries the small decorative rotation. */
+.pn-mast .user-menu {
+	position: absolute;
+	top: calc(100% + 12px);
+	right: 0;
+	min-width: 180px;
+	background: var(--paper);
+	border: 2px solid var(--ink);
+	box-shadow: 4px 4px 0 var(--ink);
+	display: flex;
+	flex-direction: column;
+	z-index: 100;
+}
+.pn-mast .user-menu-item {
+	display: block;
+	width: 100%;
+	text-align: left;
+	padding: 11px 16px 12px;
+	font-family: var(--display);
+	font-size: 13px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--ink);
+	background: var(--paper);
+	border: 0;
+	border-bottom: 1px solid var(--paper-3);
+	cursor: pointer;
+	text-decoration: none;
+}
+.pn-mast .user-menu-item:last-child {
+	border-bottom: 0;
+}
+.pn-mast .user-menu-item:hover {
+	background: var(--paper-2);
+}
+.pn-mast .user-menu-item:focus-visible {
+	outline: 2px solid var(--red);
+	outline-offset: -3px;
+}
+.pn-mast .user-menu-item.danger {
+	color: var(--red);
+}
+.pn-mast .user-menu-item.danger:hover {
+	background: var(--red);
+	color: var(--paper);
 }
 
 /* Red sub-strip (live + lock + you) */
@@ -177,9 +252,14 @@
 	margin-left: auto;
 }
 
-/* ===== Page padding ===== */
+/* ===== Page padding =====
+ * Top padding is tighter (14px) than the sides/bottom (28px) — the masthead
+ * already provides visual breathing room above; doubling it with body padding
+ * felt loose across every page. Bottom is still 28px so content doesn't crash
+ * into the fixed-bottom mobile nav (with PnPageShell extending it to 80px on
+ * mobile to clear the tab bar). */
 .pn-body {
-	padding: 28px;
+	padding: 14px 28px 28px 28px;
 	position: relative;
 	z-index: 2;
 }

@@ -19,15 +19,18 @@ export function isPlaceholderTeam(name: string | null | undefined): boolean {
 }
 
 // Shorter display strings for countries whose canonical names overflow
-// tight UI surfaces (the target is ≤11 chars). Names not in this map
-// render unchanged, so adding/removing entries is safe.
+// tight UI surfaces (the target is ≤11 chars — the desktop bracket cell
+// budget at the 1280px viewport floor). Names not in this map render
+// unchanged, so adding/removing entries is safe.
 const SHORT_NAMES: Record<string, string> = {
 	'Bosnia-Herzegovina': 'Bosnia',
 	'Cape Verde Islands': 'Cape Verde',
 	'United States': 'USA',
 	'Saudi Arabia': 'S. Arabia',
 	'South Africa': 'S. Africa',
-	'South Korea': 'S. Korea'
+	'South Korea': 'S. Korea',
+	'Czech Republic': 'Czechia',
+	"Côte d'Ivoire": 'Ivory Coast'
 };
 
 /**

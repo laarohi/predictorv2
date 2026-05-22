@@ -5,6 +5,7 @@
 	// trophy card used at the centre of the desktop wall chart.
 	import PnFlag from './PnFlag.svelte';
 	import { teamCode } from '$lib/utils/teamCodes';
+	import { displayTeamName } from '$lib/utils/teamName';
 
 	export let homeTeam: string | null = null;
 	export let awayTeam: string | null = null;
@@ -19,11 +20,12 @@
 	$: pickedAway = awayTeam !== null && winner === awayTeam;
 	$: anyTeam = !!(homeTeam || awayTeam);
 
-	// 3-letter codes keep the cards a fixed visual width regardless of
-	// which teams advance — so card layout is determined at render time,
-	// not at content time. Final card stays full-name (it has the room).
-	$: homeCode = homeTeam ? teamCode(homeTeam) : '—';
-	$: awayCode = awayTeam ? teamCode(awayTeam) : '—';
+	// Full display names everywhere (with SHORT_NAMES mapping applied so
+	// long ones like "Czech Republic" → "Czechia" fit). Mobile's swipeable
+	// one-round-at-a-time layout gives cards 120-150px width — more than
+	// enough room for "Netherlands" at the compact 11px font.
+	$: homeLabel = homeTeam ? displayTeamName(homeTeam) : '—';
+	$: awayLabel = awayTeam ? displayTeamName(awayTeam) : '—';
 
 	function clickHome() {
 		if (locked || !homeTeam) return;
@@ -56,7 +58,7 @@
 			>
 				<span class="nm">
 					<PnFlag code={teamCode(homeTeam ?? '???')} w={18} h={12} />
-					<span class="nm-text">{homeCode}</span>
+					<span class="nm-text">{homeLabel}</span>
 				</span>
 			</button>
 			<button
@@ -69,7 +71,7 @@
 			>
 				<span class="nm">
 					<PnFlag code={teamCode(awayTeam ?? '???')} w={18} h={12} />
-					<span class="nm-text">{awayCode}</span>
+					<span class="nm-text">{awayLabel}</span>
 				</span>
 			</button>
 		</div>
@@ -90,7 +92,7 @@
 				{#if homeTeam}
 					<PnFlag code={teamCode(homeTeam)} w={compact ? 13 : 14} h={compact ? 9 : 10} />
 				{/if}
-				<span class="nm-text">{homeCode}</span>
+				<span class="nm-text">{homeLabel}</span>
 			</span>
 		</button>
 		<button
@@ -105,7 +107,7 @@
 				{#if awayTeam}
 					<PnFlag code={teamCode(awayTeam)} w={compact ? 13 : 14} h={compact ? 9 : 10} />
 				{/if}
-				<span class="nm-text">{awayCode}</span>
+				<span class="nm-text">{awayLabel}</span>
 			</span>
 		</button>
 	</div>

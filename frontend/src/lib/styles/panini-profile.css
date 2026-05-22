@@ -256,7 +256,7 @@
 	color: var(--ink-3);
 	text-transform: uppercase;
 	padding-top: 6px;
-	border-top: 1px dashed var(--paper-3);
+	border-top: 1px solid var(--paper-3);
 	display: flex;
 	justify-content: space-between;
 }

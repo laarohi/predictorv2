@@ -114,7 +114,7 @@
 .pn .pn-lb-table th.c { text-align: center; }
 .pn .pn-lb-table td {
 	padding: 13px 14px;
-	border-bottom: 1px dashed var(--paper-3);
+	border-bottom: 1px solid var(--paper-3);
 	vertical-align: middle;
 }
 .pn .pn-lb-table tr.you td { background: rgba(212, 154, 46, 0.18); }

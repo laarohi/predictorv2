@@ -227,7 +227,7 @@ export function computeBreakdown(
 		}
 		totalLabel = isFinished ? 'Banked' : 'If FT now';
 	} else {
-		// Locked / open / live-without-pick → "potential" pills, dashed
+		// Locked / open / live-without-pick → "potential" pills (ghost paper-3 outline)
 		outcomePill = { state: 'potential', pts: config.outcome_points, lab: 'Outcome' };
 		scorePill = { state: 'potential', pts: config.exact_points, lab: 'Exact' };
 		if (wantRarity && projectedBonus > 0) {

@@ -267,7 +267,7 @@
 	color: var(--ink-3);
 	margin: 14px 0 8px;
 	padding-bottom: 4px;
-	border-bottom: 1.5px dashed var(--paper-3);
+	border-bottom: 1.5px solid var(--paper-3);
 }
 .pn .pn-rl-bonus-cat:first-child { margin-top: 0; }
 .pn .pn-rl-bonus-list {
