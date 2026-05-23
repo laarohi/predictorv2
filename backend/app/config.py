@@ -41,6 +41,13 @@ class Settings(BaseSettings):
     # Tournament config
     tournament_config_path: str = "config/worldcup2026.yml"
 
+    # Resend (transactional email).
+    # `resend_api_key` blank disables email sending entirely; the email
+    # service treats this as a no-op and returns a sentinel rather than
+    # erroring, so dev/test environments without a key still boot cleanly.
+    resend_api_key: str = ""
+    email_from: str = "The Predictor <predictor@laarohi.xyz>"
+
     # CORS - stored as string, parsed via computed property
     cors_origins_str: str = "http://localhost:5173,http://localhost:3000"
 

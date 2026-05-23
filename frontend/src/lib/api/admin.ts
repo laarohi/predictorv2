@@ -149,3 +149,14 @@ export interface UserHistoryResponse {
 export async function getUserAuditHistory(userId: string): Promise<UserHistoryResponse> {
 	return api.get<UserHistoryResponse>(`/admin/users/${userId}/history`);
 }
+
+export interface TestReceiptResponse {
+	status: 'sent' | 'skipped';
+	message_id: string | null;
+	sent_to: string;
+	subject: string;
+}
+
+export async function sendPhase1TestReceipt(): Promise<TestReceiptResponse> {
+	return api.post<TestReceiptResponse>('/admin/receipts/test/phase1');
+}

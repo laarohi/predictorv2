@@ -22,8 +22,10 @@ from app.services.bonus import (
     fetch_competition_teams,
     get_questions as get_bonus_questions,
 )
+from app.services.email import EmailSendError, send_email
 from app.services.external_scores import get_score_provider, ExternalScore
 from app.services.leaderboard import invalidate_cache
+from app.services.receipts import build_phase1_receipt
 from app.services.score_sync import sync_scores_once
 
 
@@ -676,4 +678,51 @@ async def get_user_audit_history(
             prediction_count=prediction_count or 0,
         ),
         events=[e.to_dict() for e in events],
+    )
+
+
+class TestReceiptResponse(BaseModel):
+    """Result of a test-receipt send. Returns the Resend message id so the
+    admin can correlate against their Resend dashboard if anything's
+    weird (e.g. the email lands in spam — they can check the dashboard's
+    delivery log)."""
+
+    status: str  # "sent" | "skipped" (api key blank)
+    message_id: str | None
+    sent_to: str
+    subject: str
+
+
+@router.post("/receipts/test/phase1", response_model=TestReceiptResponse)
+async def send_phase1_test_receipt(
+    session: DbSession,
+    admin: AdminUser,
+) -> TestReceiptResponse:
+    """Send the admin a copy of their own Phase 1 receipt — for previewing
+    the email format and verifying Resend wiring before the real deadline.
+
+    Always sends to the calling admin's own email. Does not write to any
+    idempotency table — the admin can fire repeatedly to iterate on the
+    template. The actual production trigger (the scheduler tick that
+    fires at phase1_deadline) is separate and will be wired later.
+    """
+    receipt = await build_phase1_receipt(session, admin)
+    try:
+        result = await send_email(
+            to=admin.email,
+            subject=receipt.subject,
+            html=receipt.html,
+            text=receipt.text,
+        )
+    except EmailSendError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Email send failed: {e}",
+        )
+
+    return TestReceiptResponse(
+        status="skipped" if not result.ok else "sent",
+        message_id=result.message_id,
+        sent_to=admin.email,
+        subject=receipt.subject,
     )

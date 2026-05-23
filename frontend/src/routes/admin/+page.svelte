@@ -22,10 +22,12 @@
 		toggleUserPaid,
 		getPaidLocal,
 		syncScores,
+		sendPhase1TestReceipt,
 		type AdminStats,
 		type CompetitionAdminView,
 		type UserAdminView,
-		type SyncScoresResponse
+		type SyncScoresResponse,
+		type TestReceiptResponse
 	} from '$lib/api/admin';
 	import { listBonusAnswers, setBonusAnswer, type BonusAnswerView } from '$api/bonus';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
@@ -55,6 +57,24 @@
 	let syncResult: SyncScoresResponse | null = null;
 	let syncedAt: Date | null = null;
 	let syncError: string | null = null;
+
+	// Email — test receipt to self
+	let sendingReceipt = false;
+	let receiptResult: TestReceiptResponse | null = null;
+	let receiptError: string | null = null;
+
+	async function handleSendTestReceipt() {
+		sendingReceipt = true;
+		receiptError = null;
+		receiptResult = null;
+		try {
+			receiptResult = await sendPhase1TestReceipt();
+		} catch (e) {
+			receiptError = e instanceof Error ? e.message : 'Failed to send test receipt';
+		} finally {
+			sendingReceipt = false;
+		}
+	}
 
 	let userSearch = '';
 	let togglingUserId: string | null = null;
@@ -379,6 +399,37 @@
 					</p>
 					<button class="pn-btn gold" type="button" on:click={handleSyncScores} disabled={syncing}>
 						{syncing ? 'Syncing…' : 'Sync scores now'}
+					</button>
+				</div>
+			</section>
+
+			<!-- Email -->
+			<section class="pn-pf-section">
+				<div class="h"><span>Email</span><span class="right">Resend · predictor@laarohi.xyz</span></div>
+				<div class="body">
+					{#if receiptError}
+						<div class="pn-pf-alert error" style="margin-bottom: 12px;">{receiptError}</div>
+					{/if}
+					{#if receiptResult}
+						<div class="pn-ad-syncresult">
+							{#if receiptResult.status === 'sent'}
+								<div>Sent to <b>{receiptResult.sent_to}</b></div>
+								<div class="pills">
+									<span class="pn-tag got">delivered</span>
+									<span class="pn-tag" style="font-family: var(--mono);">id: {receiptResult.message_id}</span>
+								</div>
+								<div style="margin-top: 8px; font-size: 11px; color: var(--ink-3);">Subject: {receiptResult.subject}</div>
+							{:else}
+								<div>Skipped — <code>RESEND_API_KEY</code> not set</div>
+							{/if}
+						</div>
+					{/if}
+					<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.06em; margin-bottom: 12px;">
+						Sends YOUR Phase 1 receipt to YOUR email — for previewing the format. Doesn't affect other users.
+						Run before the real deadline to validate Resend, DKIM/SPF/DMARC, and Gmail inbox placement.
+					</p>
+					<button class="pn-btn navy" type="button" on:click={handleSendTestReceipt} disabled={sendingReceipt}>
+						{sendingReceipt ? 'Sending…' : 'Send test receipt to me'}
 					</button>
 				</div>
 			</section>
