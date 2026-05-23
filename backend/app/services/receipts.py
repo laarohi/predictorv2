@@ -21,6 +21,7 @@ Email HTML rules of the road (followed throughout):
 
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -29,10 +30,31 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.models.bonus import BonusPrediction
+from app.models.competition import Competition
+from app.models.email_send import EmailSend
 from app.models.fixture import Fixture
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.user import User
+from app.config import get_settings
 from app.services.bonus import get_questions as get_bonus_questions
+from app.services.email import EMAIL_SKIPPED, EmailSendError, send_email
+
+logger = logging.getLogger(__name__)
+
+DEADLINE_KIND_PHASE_1 = "phase1"
+
+
+def _parse_allowlist(raw: str) -> set[str] | None:
+    """Parse EMAIL_TO_ALLOWLIST into a normalised set of addresses.
+
+    Returns None when the allowlist is blank (production "send to
+    everyone" mode). Returns an empty set if the value is set but
+    contains no usable entries — which means "send to nobody",
+    intentionally distinguished so we can log that case loudly.
+    """
+    if not raw.strip():
+        return None
+    return {e.strip().lower() for e in raw.split(",") if e.strip()}
 
 # Panini colours, baked in (CSS variables don't work in email).
 PAPER = "#f1ebde"
@@ -434,3 +456,128 @@ def _esc(s: str | None) -> str:
         .replace(">", "&gt;")
         .replace('"', "&quot;")
     )
+
+
+# ── batch send ─────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True, slots=True)
+class BatchSendResult:
+    """Counts from one batch invocation. Useful for scheduler logging."""
+
+    sent: int = 0
+    skipped_already_sent: int = 0
+    skipped_no_predictions: int = 0
+    skipped_no_api_key: int = 0
+    skipped_not_in_allowlist: int = 0
+    failed: int = 0
+
+
+async def send_phase1_receipts(
+    session: AsyncSession, competition: Competition
+) -> BatchSendResult:
+    """Send Phase 1 receipts to every active user with at least one
+    prediction in this competition, skipping anyone already recorded
+    in `email_sends` for (this user, this competition, "phase1").
+
+    Designed to be called repeatedly — the idempotency table makes
+    duplicate invocations safe. Transient send failures (5xx, network)
+    don't write a row, so the next invocation retries them.
+
+    Per-user commits: each successful send commits its own
+    idempotency row before moving on. That way a crash mid-batch
+    preserves the "user N was already sent" state and the next tick
+    picks up from user N+1.
+    """
+    # All active users — ordered by id for deterministic iteration order.
+    users_result = await session.execute(
+        select(User).where(User.is_active == True).order_by(User.id)
+    )
+    users = list(users_result.scalars().all())
+
+    # Pre-load idempotency rows for this competition+kind in one query
+    # so we don't do an N+1 SELECT inside the loop.
+    sent_result = await session.execute(
+        select(EmailSend.user_id)
+        .where(EmailSend.competition_id == competition.id)
+        .where(EmailSend.deadline_kind == DEADLINE_KIND_PHASE_1)
+    )
+    already_sent_user_ids = {row for row in sent_result.scalars().all()}
+
+    allowlist = _parse_allowlist(get_settings().email_to_allowlist)
+    if allowlist is not None:
+        logger.warning(
+            "send_phase1_receipts: EMAIL_TO_ALLOWLIST is active — sends "
+            "restricted to %d address(es)",
+            len(allowlist),
+        )
+
+    counts = {
+        "sent": 0,
+        "skipped_already_sent": 0,
+        "skipped_no_predictions": 0,
+        "skipped_no_api_key": 0,
+        "skipped_not_in_allowlist": 0,
+        "failed": 0,
+    }
+
+    for user in users:
+        if user.id in already_sent_user_ids:
+            counts["skipped_already_sent"] += 1
+            continue
+
+        # Allowlist gate (live-fire test safety). Checked BEFORE building
+        # the receipt to avoid burning a DB query per skipped user.
+        if allowlist is not None and user.email.lower() not in allowlist:
+            counts["skipped_not_in_allowlist"] += 1
+            continue
+
+        receipt = await build_phase1_receipt(session, user)
+        # Skip users with no predictions — "you didn't submit anything"
+        # emails feel passive-aggressive in a friend-group context.
+        # The summary line is the cheapest way to detect this.
+        if "0 group · 0 bracket · 0 bonus" in receipt.text:
+            counts["skipped_no_predictions"] += 1
+            continue
+
+        try:
+            result = await send_email(
+                to=user.email,
+                subject=receipt.subject,
+                html=receipt.html,
+                text=receipt.text,
+            )
+        except EmailSendError as e:
+            # Permanent failure (4xx) or retries exhausted. Log loud
+            # and move on — no idempotency row written, so next tick
+            # retries (which for permanent failures means more loud
+            # logs until admin fixes the root cause).
+            logger.error(
+                "send_phase1_receipts failed for user_id=%s email=%s: %s",
+                user.id, user.email, e,
+            )
+            counts["failed"] += 1
+            continue
+
+        if result.message_id == EMAIL_SKIPPED:
+            # API key blank — abort the whole batch. Sending to one
+            # user but not others would be inconsistent, and there's
+            # nothing for the scheduler to recover from later (the
+            # next tick will hit the same blank key).
+            counts["skipped_no_api_key"] += 1
+            logger.warning("send_phase1_receipts: RESEND_API_KEY blank, aborting batch")
+            break
+
+        # Successful send → write idempotency row, commit per-user.
+        session.add(
+            EmailSend(
+                user_id=user.id,
+                competition_id=competition.id,
+                deadline_kind=DEADLINE_KIND_PHASE_1,
+                resend_message_id=result.message_id,
+            )
+        )
+        await session.commit()
+        counts["sent"] += 1
+
+    return BatchSendResult(**counts)

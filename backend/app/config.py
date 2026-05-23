@@ -47,6 +47,13 @@ class Settings(BaseSettings):
     # erroring, so dev/test environments without a key still boot cleanly.
     resend_api_key: str = ""
     email_from: str = "The Predictor <predictor@laarohi.xyz>"
+    # Safety belt for live-fire tests of the deadline batch sender.
+    # Comma-separated allowlist of recipient addresses; when set,
+    # batch sends skip anyone not in the list (with a logged count).
+    # Blank (default) means send to everyone — production behavior.
+    # Set on a staging environment to prevent accidentally emailing
+    # real users from a cloned DB.
+    email_to_allowlist: str = ""
 
     # CORS - stored as string, parsed via computed property
     cors_origins_str: str = "http://localhost:5173,http://localhost:3000"

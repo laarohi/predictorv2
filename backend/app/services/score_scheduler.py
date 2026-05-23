@@ -20,6 +20,9 @@ from contextlib import asynccontextmanager
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import get_settings
+from app.models._datetime import utc_now
+from app.services.locking import get_active_competition
+from app.services.receipts import send_phase1_receipts
 from app.services.score_sync import has_active_or_imminent_match, sync_scores_once
 from app.services.snapshots import take_daily_snapshots
 
@@ -43,19 +46,28 @@ async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> No
     """One iteration of the loop. Wraps each tick in its own session so a
     failure on one tick can't poison subsequent ticks.
 
-    Each tick does two things:
+    Each tick does three things:
       (a) Take today's leaderboard snapshot if not already taken (idempotent
           per-user-per-day, cheap no-op after the first call of the day).
-      (b) If a match is live or imminent, sync scores from Football-Data.
+      (b) Send Phase 1 receipt emails to any users who haven't received
+          one yet, but only if the competition's phase1_deadline has
+          passed. Idempotent via the email_sends table — duplicate
+          ticks won't re-send.
+      (c) If a match is live or imminent, sync scores from Football-Data.
 
-    Snapshot taking is gated by its own try/except so a snapshot failure
-    can't break the live-score path.
+    Each side-task has its own try/except so a failure in one can't break
+    the others.
     """
     async with session_factory() as session:
         try:
             await take_daily_snapshots(session)
         except Exception:  # noqa: BLE001
             logger.exception("score_scheduler: snapshot tick failed")
+
+        try:
+            await _maybe_send_phase1_receipts(session)
+        except Exception:  # noqa: BLE001
+            logger.exception("score_scheduler: phase1 receipt tick failed")
 
         if not await has_active_or_imminent_match(session):
             return
@@ -69,6 +81,39 @@ async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> No
                 result.synced,
                 result.updated,
             )
+
+
+async def _maybe_send_phase1_receipts(session: AsyncSession) -> None:
+    """Gate the receipt send on the deadline having passed.
+
+    Three conditions all need to be true:
+      - There is an active competition.
+      - It has a phase1_deadline set.
+      - That deadline is in the past.
+
+    If all three hold, call send_phase1_receipts. The batch function
+    is itself idempotent (skips users already in email_sends), so
+    calling it on every tick after the deadline is harmless — it'll
+    no-op once everyone's been sent.
+    """
+    competition = await get_active_competition(session)
+    if not competition or not competition.phase1_deadline:
+        return
+    if utc_now() < competition.phase1_deadline:
+        return
+
+    result = await send_phase1_receipts(session, competition)
+    # Only log when we actually did something — chatty logs would
+    # spam every minute forever once the deadline passes.
+    if result.sent or result.failed:
+        logger.info(
+            "score_scheduler: phase1 receipts — sent=%d failed=%d "
+            "skipped_already_sent=%d skipped_no_predictions=%d "
+            "skipped_no_api_key=%d skipped_not_in_allowlist=%d",
+            result.sent, result.failed,
+            result.skipped_already_sent, result.skipped_no_predictions,
+            result.skipped_no_api_key, result.skipped_not_in_allowlist,
+        )
 
 
 async def run_scheduler_loop(

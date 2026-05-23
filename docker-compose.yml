@@ -36,6 +36,9 @@ services:
       # Resend (transactional email). RESEND_API_KEY blank disables sending.
       - RESEND_API_KEY=${RESEND_API_KEY:-}
       - EMAIL_FROM=${EMAIL_FROM:-The Predictor <predictor@laarohi.xyz>}
+      # Comma-separated allowlist for batch sends. Blank = send to all.
+      # Set during live-fire tests to avoid emailing seeded test users.
+      - EMAIL_TO_ALLOWLIST=${EMAIL_TO_ALLOWLIST:-}
     volumes:
       - ./backend/app:/app/app
       - ./backend/scripts:/app/scripts
