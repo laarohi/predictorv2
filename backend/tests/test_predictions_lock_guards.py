@@ -158,6 +158,54 @@ class TestUpdateMatchPredictionGuards:
         assert "locked for this match" in exc.value.detail.lower()
 
 
+class TestPredictionPhaseDerivation:
+    """Regression: match-prediction phase must derive from fixture.stage,
+    NOT from the global get_current_phase. Otherwise a group-stage
+    prediction inserted while Phase 2 is globally active gets tagged
+    PHASE_2 — and then disappears from any view filtered by
+    'phase == PHASE_1' (audit log, receipt email)."""
+
+    @pytest.mark.asyncio
+    @patch("app.api.predictions.is_phase1_locked", new_callable=AsyncMock)
+    @patch("app.api.predictions.get_current_phase", new_callable=AsyncMock)
+    async def test_group_fixture_insert_tags_phase_1_even_if_global_is_phase_2(
+        self, mock_phase, mock_phase1_locked
+    ):
+        """The bug scenario: Phase 2 is globally active, user saves a
+        group prediction — must still be tagged PHASE_1 (group fixtures
+        are structurally Phase 1, regardless of global state)."""
+        mock_phase.return_value = PredictionPhase.PHASE_2  # global says PHASE_2…
+        mock_phase1_locked.return_value = False
+        fixture = _group_fixture()
+        session = _session_with_fixture(fixture)
+        session.refresh = AsyncMock()
+
+        # Capture what gets passed to session.add to verify the phase tag.
+        added_predictions: list[MatchPrediction] = []
+        original_add = session.add
+
+        def capture_add(obj):
+            if isinstance(obj, MatchPrediction):
+                added_predictions.append(obj)
+            original_add(obj)
+
+        session.add = capture_add
+
+        await update_match_prediction(
+            fixture_id=fixture.id,
+            prediction_data=MatchPredictionUpdate(home_score=2, away_score=1),
+            session=session,
+            current_user=_user(),
+            ctx=_ctx(),
+        )
+
+        # The newly-inserted prediction must carry PHASE_1 because the
+        # fixture is a group fixture — the global PHASE_2 value must NOT
+        # leak into the row.
+        assert len(added_predictions) == 1
+        assert added_predictions[0].phase == PredictionPhase.PHASE_1
+
+
 class TestBatchUpdatePredictionsGuards:
     """Batch endpoint silently skips locked fixtures (keeps the bulk-save UX
     of partial success), but the new Phase 1 check must also cause skipping."""

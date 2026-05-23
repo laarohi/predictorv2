@@ -202,7 +202,15 @@ async def update_match_prediction(
     )
     prediction = result.scalar_one_or_none()
 
-    current_phase = await get_current_phase(session)
+    # A match prediction's `phase` is determined by the fixture's stage —
+    # group fixtures are Phase 1, knockout fixtures are Phase 2. Do NOT
+    # derive from `get_current_phase` (the global "what UI is active"
+    # flag) — that would tag group-match predictions PHASE_2 if the
+    # global state was already Phase 2 when the user saved, which then
+    # excludes them from Phase 1 audit and receipt views.
+    prediction_phase = (
+        PredictionPhase.PHASE_1 if fixture.stage == "group" else PredictionPhase.PHASE_2
+    )
 
     if prediction:
         old_values = snapshot_match(prediction)
@@ -226,7 +234,7 @@ async def update_match_prediction(
             fixture_id=fixture_id,
             home_score=prediction_data.home_score,
             away_score=prediction_data.away_score,
-            phase=current_phase,
+            phase=prediction_phase,
         )
         session.add(prediction)
         # Flush so prediction.id is populated for the history row's entity_id.
@@ -271,7 +279,6 @@ async def batch_update_predictions(
 ) -> list[MatchPredictionRead]:
     """Batch update multiple match predictions."""
     results = []
-    current_phase = await get_current_phase(session)
     phase1_locked = await is_phase1_locked(session)
 
     for pred_data in predictions_data:
@@ -289,6 +296,12 @@ async def batch_update_predictions(
         # Per-match lock.
         if check_fixture_locked(fixture):
             continue  # Skip locked fixtures
+
+        # Derive phase from the fixture, not from global state — see the
+        # corresponding note in update_match_prediction.
+        prediction_phase = (
+            PredictionPhase.PHASE_1 if fixture.stage == "group" else PredictionPhase.PHASE_2
+        )
 
         # Get existing prediction or create new
         result = await session.execute(
@@ -321,7 +334,7 @@ async def batch_update_predictions(
                 fixture_id=pred_data.fixture_id,
                 home_score=pred_data.home_score,
                 away_score=pred_data.away_score,
-                phase=current_phase,
+                phase=prediction_phase,
             )
             session.add(prediction)
             # Flush so prediction.id is set before we record the history row.
