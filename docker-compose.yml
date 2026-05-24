@@ -39,6 +39,9 @@ services:
       # Comma-separated allowlist for batch sends. Blank = send to all.
       # Set during live-fire tests to avoid emailing seeded test users.
       - EMAIL_TO_ALLOWLIST=${EMAIL_TO_ALLOWLIST:-}
+      # Public frontend URL — used as the base for links in outbound
+      # emails (magic-link login, etc.). Override in production .env.
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:5173}
     volumes:
       - ./backend/app:/app/app
       - ./backend/scripts:/app/scripts

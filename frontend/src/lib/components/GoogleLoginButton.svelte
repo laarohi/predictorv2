@@ -44,8 +44,10 @@
 		font-size: 13px;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
-		background: var(--paper);
-		color: var(--ink);
+		/* Panini navy — keeps the Google action visually distinct from
+		 * the gold magic-link button while staying in the brand palette. */
+		background: var(--navy);
+		color: var(--paper);
 		border: 2px solid var(--ink);
 		cursor: pointer;
 		box-shadow: 3px 3px 0 var(--ink);

@@ -5,6 +5,7 @@ from datetime import timedelta
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from fastapi_sso.sso.google import GoogleSSO
+from pydantic import BaseModel, EmailStr
 from sqlmodel import select
 
 from app.config import get_settings
@@ -17,6 +18,18 @@ from app.dependencies import (
 )
 from app.models.user import AuthProvider, User
 from app.schemas.auth import PasswordChange, Token, UserCreate, UserLogin, UserRead, UserStats
+from app.services.email import EmailSendError
+from app.services.magic_link import (
+    MagicLinkError,
+    RateLimited,
+    TokenAlreadyUsed,
+    TokenExpired,
+    TokenInvalid,
+    UnknownEmail,
+    UserInactive,
+    create_magic_link,
+    verify_magic_link,
+)
 from app.services.profile import calculate_user_stats
 
 router = APIRouter()
@@ -215,3 +228,103 @@ async def change_password(
 async def get_user_stats(current_user: CurrentUser, session: DbSession) -> UserStats:
     """Get profile statistics for the current user."""
     return await calculate_user_stats(session, current_user.id)
+
+
+# ── Magic-link login ────────────────────────────────────────────────────────
+
+
+class MagicLinkRequest(BaseModel):
+    """Payload for requesting a magic-link email."""
+
+    email: EmailStr
+
+
+class MagicLinkRequestResponse(BaseModel):
+    """Same shape regardless of outcome — UI just shows a generic
+    'check your inbox' message. Specific errors (unknown email,
+    rate limited) come back as HTTP 4xx with detail."""
+
+    status: str  # always "sent" on success
+
+
+class MagicLinkVerifyRequest(BaseModel):
+    """Payload for redeeming a magic-link token."""
+
+    token: str
+
+
+@router.post("/magic-link/request", response_model=MagicLinkRequestResponse)
+async def request_magic_link(
+    payload: MagicLinkRequest, session: DbSession
+) -> MagicLinkRequestResponse:
+    """Generate a one-time login token and email it to the user.
+
+    Returns 200 on success. Specific failures map to:
+      - 404: unknown email
+      - 403: account inactive
+      - 429: rate limited
+      - 502: email send failure (Resend permanent error)
+    """
+    try:
+        await create_magic_link(session, payload.email)
+    except UnknownEmail:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No account found for this email",
+        )
+    except UserInactive:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is inactive",
+        )
+    except RateLimited:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login link requests — try again in a few minutes",
+        )
+    except EmailSendError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Could not send the login email — please try again",
+        )
+    return MagicLinkRequestResponse(status="sent")
+
+
+@router.post("/magic-link/verify", response_model=Token)
+async def verify_magic_link_endpoint(
+    payload: MagicLinkVerifyRequest, session: DbSession
+) -> Token:
+    """Validate the token and issue a JWT — same shape as /login."""
+    try:
+        user = await verify_magic_link(session, payload.token)
+    except TokenInvalid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login link is invalid",
+        )
+    except TokenExpired:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login link has expired — please request a new one",
+        )
+    except TokenAlreadyUsed:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Login link has already been used — please request a new one",
+        )
+    except UserInactive:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is inactive",
+        )
+    except MagicLinkError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e) or "Login failed",
+        )
+
+    access_token = create_access_token(
+        user_id=str(user.id),
+        expires_delta=timedelta(minutes=get_settings().jwt_access_token_expire_minutes),
+    )
+    return Token(access_token=access_token)

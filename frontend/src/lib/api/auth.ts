@@ -28,3 +28,13 @@ export async function changePassword(data: PasswordChange): Promise<{ message: s
 export async function getUserStats(): Promise<UserStats> {
 	return api.get<UserStats>('/auth/me/stats');
 }
+
+// Magic-link login
+
+export async function requestMagicLink(email: string): Promise<{ status: string }> {
+	return api.post<{ status: string }>('/auth/magic-link/request', { email });
+}
+
+export async function verifyMagicLink(token: string): Promise<Token> {
+	return api.post<Token>('/auth/magic-link/verify', { token });
+}

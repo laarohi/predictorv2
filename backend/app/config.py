@@ -55,6 +55,12 @@ class Settings(BaseSettings):
     # real users from a cloned DB.
     email_to_allowlist: str = ""
 
+    # Public-facing base URL for the frontend — used to construct
+    # links in outbound emails (magic-link login etc.). No trailing
+    # slash. Defaults to localhost dev so things work out of the box;
+    # production must override via env.
+    public_base_url: str = "http://localhost:5173"
+
     # CORS - stored as string, parsed via computed property
     cors_origins_str: str = "http://localhost:5173,http://localhost:3000"
 
