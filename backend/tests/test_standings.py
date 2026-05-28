@@ -551,16 +551,20 @@ def test_apply_fifa_tiebreakers_h2h_partially_resolves_three_way_tie() -> None:
     assert warnings[0]["context"] == "group_standings"
 
 
-def test_apply_fifa_tiebreakers_no_h2h_matches_falls_straight_to_alphabetical() -> None:
-    """When group_matches is None (e.g. cross-group third-place sort), the
-    H2H steps are skipped entirely — any overall tie resolves alphabetically."""
+def test_apply_fifa_tiebreakers_no_h2h_and_no_rankings_falls_to_alphabetical() -> None:
+    """When group_matches is None (cross-group sort) AND FIFA Rankings cover
+    none of the tied teams, the chain falls through to alphabetical with a
+    warning. Pins the last-resort behaviour."""
     teams = [
         _stand("Wales",   "A", points=3, gd=0, gf=1),
         _stand("Senegal", "B", points=3, gd=0, gf=1),
         _stand("Iran",    "C", points=3, gd=0, gf=1),
     ]
     sorted_teams, warnings = _apply_fifa_tiebreakers(
-        teams, group_matches=None, context="third_place_qualifying"
+        teams,
+        group_matches=None,
+        context="third_place_qualifying",
+        fifa_rankings=[],  # force the alphabetical fallback
     )
     assert [t["team"] for t in sorted_teams] == ["Iran", "Senegal", "Wales"]
     assert len(warnings) == 1
@@ -595,3 +599,284 @@ async def test_qualifying_third_place_with_warnings_at_8_9_boundary(
     tp_warnings = [w for w in warnings if w["context"] == "third_place_qualifying"]
     assert len(tp_warnings) == 1
     assert len(tp_warnings[0]["tied_teams"]) == 12
+
+
+# ---------------------------------------------------------------------------
+# FIFA Article 13 chain — H2H priority, descent through step 2, FIFA Rankings
+#
+# These tests pin the *order* of the chain, which is what diverges from FIFA's
+# regulations in the original implementation. The chain per Article 13:
+#
+#   Step 1 (only among teams equal on POINTS):
+#     a) H2H points
+#     b) H2H goal difference
+#     c) H2H goals scored
+#   Step 2 (if subset still tied):
+#     re-apply a-c to the still-tied subset's mutual matches, then:
+#     d) overall goal difference
+#     e) overall goals scored
+#     f) fair-play conduct  ← we don't track; emit warning, skip
+#   Step 3:
+#     g) FIFA Ranking (most recent)
+#     h) FIFA Ranking (preceding editions)
+#   Final fallback: alphabetical (with the warning already emitted).
+# ---------------------------------------------------------------------------
+
+
+def test_h2h_beats_overall_gd_when_equal_on_points() -> None:
+    """Article 13 Step 1: teams equal on POINTS go to H2H BEFORE overall GD.
+
+    Regression for the chain-ordering bug: the original implementation
+    sorted by overall (points, GD, GF) first, which let a team with worse
+    H2H but better padded overall GD climb above the H2H winner.
+
+    Scenario: Argentina beat Brazil 1-0 in their direct match. Both ended
+    on 6 points. Brazil ran up the score against a weaker opponent so
+    has overall GD +5 vs Argentina's 0. FIFA's rule: Argentina wins the
+    tie because they beat Brazil head-to-head.
+    """
+    teams = [
+        _stand("Argentina", "A", points=6, gd=0, gf=2),
+        _stand("Brazil",    "A", points=6, gd=5, gf=6),
+    ]
+    matches = [_h2h("Argentina", "Brazil", 1, 0)]
+
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams,
+        group_matches=matches,
+        context="group_standings",
+        fifa_rankings=["France", "Argentina", "Brazil"],
+    )
+    assert [t["team"] for t in sorted_teams] == ["Argentina", "Brazil"]
+    # Clean H2H separation — no chain descent, no warning.
+    assert warnings == []
+
+
+def test_h2h_breaks_three_way_tie_even_with_asymmetric_overall_gd() -> None:
+    """A 3-way tie on points where overall GD is wildly asymmetric — H2H
+    is still the first criterion.
+
+    A beat B, B beat C, A beat C. Overall GDs constructed to disagree:
+    A=+1, B=+3, C=-4 (B padded against a 4th, weaker team). FIFA order
+    by H2H pts: A=6, B=3, C=0 → A, B, C. Buggy chain (overall GD first)
+    would give B, A, C.
+    """
+    teams = [
+        _stand("A", "A", points=6, gd=+1, gf=4),
+        _stand("B", "A", points=6, gd=+3, gf=5),
+        _stand("C", "A", points=6, gd=-4, gf=1),
+    ]
+    matches = [
+        _h2h("A", "B", 1, 0),
+        _h2h("B", "C", 1, 0),
+        _h2h("A", "C", 1, 0),
+    ]
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams,
+        group_matches=matches,
+        context="group_standings",
+        fifa_rankings=[],
+    )
+    assert [t["team"] for t in sorted_teams] == ["A", "B", "C"]
+    assert warnings == []
+
+
+def test_chain_descends_to_step_2_overall_stats_when_h2h_ties() -> None:
+    """When H2H steps a-c can't separate equal-on-points teams, descend
+    to step 2 d (overall GD), e (overall GF), then f (fair-play, skip
+    with warning), then step 3 g (FIFA Ranking).
+
+    Scenario: A and B both 6 pts, drew 1-1 (equal H2H pts/GD/GF).
+    Overall GD differs: A=+4, B=+1 → A wins on overall GD (step 2 d).
+    Step 2 was reached but not exhausted — no warning required.
+    """
+    teams = [
+        _stand("A", "A", points=6, gd=4, gf=5),
+        _stand("B", "A", points=6, gd=1, gf=3),
+    ]
+    matches = [_h2h("A", "B", 1, 1)]
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams,
+        group_matches=matches,
+        context="group_standings",
+        fifa_rankings=[],
+    )
+    assert [t["team"] for t in sorted_teams] == ["A", "B"]
+    # Step 2 d resolved it cleanly — no fair-play tier reached, no warning.
+    assert warnings == []
+
+
+def test_fair_play_tier_emits_warning_then_fifa_rankings_resolve() -> None:
+    """When chain reaches the fair-play (conduct) criterion — which we don't
+    track — emit a warning and proceed to FIFA Rankings.
+
+    Scenario: A and B identical on H2H + overall GD + overall GF. Step 2
+    f would consult fair-play; we can't, so warn. Step 3 g consults FIFA
+    Rankings: "Upper" is listed above "Lower" → Upper ranks higher.
+    """
+    teams = [
+        _stand("Lower", "A", points=6, gd=2, gf=4),
+        _stand("Upper", "A", points=6, gd=2, gf=4),
+    ]
+    matches = [_h2h("Upper", "Lower", 1, 1)]
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams,
+        group_matches=matches,
+        context="group_standings",
+        fifa_rankings=["Upper", "Lower"],
+    )
+    assert [t["team"] for t in sorted_teams] == ["Upper", "Lower"]
+    assert len(warnings) == 1
+    assert warnings[0]["tied_teams"] == ["Lower", "Upper"]  # alphabetized
+    assert warnings[0]["context"] == "group_standings"
+
+
+def test_fifa_rankings_listed_team_ranks_above_unlisted() -> None:
+    """When FIFA Rankings cover one tied team but not the other, the
+    listed team ranks above. (Defensive: rankings YAML may not yet cover
+    every WC qualifier; this lets the chain do something sensible until
+    the rankings list is completed.)
+
+    Non-coincidental: Aardvark sorts alphabetically BEFORE Belgium, so
+    "listed ranks above unlisted" must come from rankings, not alphabetical.
+    """
+    teams = [
+        _stand("Aardvark", "A", points=6, gd=2, gf=4),  # unlisted
+        _stand("Belgium",  "A", points=6, gd=2, gf=4),  # listed
+    ]
+    matches = [_h2h("Aardvark", "Belgium", 1, 1)]
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams,
+        group_matches=matches,
+        context="group_standings",
+        fifa_rankings=["France", "Belgium"],
+    )
+    assert [t["team"] for t in sorted_teams] == ["Belgium", "Aardvark"]
+    assert len(warnings) == 1
+
+
+def test_alphabetical_fallback_when_neither_team_in_fifa_rankings() -> None:
+    """Last resort: if FIFA Rankings cover neither team, fall to
+    alphabetical (with the fair-play warning already emitted)."""
+    teams = [
+        _stand("Yankland", "A", points=6, gd=2, gf=4),
+        _stand("Zedland",  "A", points=6, gd=2, gf=4),
+    ]
+    matches = [_h2h("Yankland", "Zedland", 1, 1)]
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams,
+        group_matches=matches,
+        context="group_standings",
+        fifa_rankings=["France", "Brazil"],  # neither tied team listed
+    )
+    assert [t["team"] for t in sorted_teams] == ["Yankland", "Zedland"]
+    assert len(warnings) == 1
+
+
+def test_step_2_descends_monotonically_does_not_restart() -> None:
+    """Article 13 Step 2 progression d→e→f does not restart back at H2H.
+
+    Scenario: 3 teams tied on points and on H2H (all three drew each
+    other 1-1). Overall GD separates A (+5) from {B, C} (both 0).
+    Overall GF: B=5, C=3 → B above C. The "does not restart" clause
+    means that after step 2 d separates A, {B, C} continues at step 2 e
+    (not back at step 1). Same answer here either way; this pins the
+    progression so future changes can't introduce a back-edge.
+    """
+    teams = [
+        _stand("A", "A", points=6, gd=+5, gf=7),
+        _stand("B", "A", points=6, gd= 0, gf=5),
+        _stand("C", "A", points=6, gd= 0, gf=3),
+    ]
+    matches = [
+        _h2h("A", "B", 1, 1),
+        _h2h("B", "C", 1, 1),
+        _h2h("A", "C", 1, 1),
+    ]
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams,
+        group_matches=matches,
+        context="group_standings",
+        fifa_rankings=[],
+    )
+    # A separates via step 2 d. B vs C separates via step 2 e. No fair-
+    # play tier reached for either, so no warnings.
+    assert [t["team"] for t in sorted_teams] == ["A", "B", "C"]
+    assert warnings == []
+
+
+def test_third_place_uses_fifa_rankings_after_overall_stats_tie() -> None:
+    """Article 13 third-placed-teams chain has NO H2H step (different
+    groups never met). Order is overall pts → overall GD → overall GF
+    → fair-play (warn, skip) → FIFA Rankings → alphabetical.
+
+    Non-coincidental: Zambia sorts alphabetically AFTER Brazil, so a
+    "Zambia ranks above Brazil" result must come from FIFA Rankings.
+    """
+    teams = [
+        _stand("Brazil", "C", points=3, gd=0, gf=2),
+        _stand("Zambia", "B", points=3, gd=0, gf=2),
+    ]
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams,
+        group_matches=None,  # cross-group → no H2H
+        context="third_place_qualifying",
+        fifa_rankings=["Zambia", "Brazil"],  # Zambia ranked above
+    )
+    assert [t["team"] for t in sorted_teams] == ["Zambia", "Brazil"]
+    assert len(warnings) == 1
+    assert warnings[0]["context"] == "third_place_qualifying"
+
+
+def test_full_chain_resolves_four_way_zero_zero_group_via_fifa_rankings() -> None:
+    """Real-world flavour test: a 4-team group where every match is 0-0.
+
+    Non-coincidental: rankings deliberately disagree with alphabetical
+    order so the final order proves FIFA Rankings drove the resolution.
+    """
+    teams = [
+        _stand("Argentina", "A", points=3, gd=0, gf=0),
+        _stand("Belgium",   "A", points=3, gd=0, gf=0),
+        _stand("Croatia",   "A", points=3, gd=0, gf=0),
+        _stand("Denmark",   "A", points=3, gd=0, gf=0),
+    ]
+    matches = [
+        _h2h("Argentina", "Belgium", 0, 0),
+        _h2h("Argentina", "Croatia", 0, 0),
+        _h2h("Argentina", "Denmark", 0, 0),
+        _h2h("Belgium",   "Croatia", 0, 0),
+        _h2h("Belgium",   "Denmark", 0, 0),
+        _h2h("Croatia",   "Denmark", 0, 0),
+    ]
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams,
+        group_matches=matches,
+        context="group_standings",
+        # Reverse-alphabetical rankings prove the resolver consulted them.
+        fifa_rankings=["Denmark", "Croatia", "Belgium", "Argentina"],
+    )
+    assert [t["team"] for t in sorted_teams] == [
+        "Denmark", "Croatia", "Belgium", "Argentina",
+    ]
+    assert len(warnings) == 1
+    assert warnings[0]["tied_teams"] == ["Argentina", "Belgium", "Croatia", "Denmark"]
+
+
+def test_apply_fifa_tiebreakers_defaults_to_alphabetical_when_rankings_omitted() -> None:
+    """When `fifa_rankings` is omitted, the helper treats it as empty and
+    falls through to alphabetical — production callers should resolve
+    rankings from the DB via `_resolve_fifa_rankings(session)` and pass
+    them in explicitly."""
+    teams = [
+        _stand("Argentina", "A", points=6, gd=2, gf=4),
+        _stand("Spain",     "A", points=6, gd=2, gf=4),
+    ]
+    matches = [_h2h("Argentina", "Spain", 1, 1)]
+    sorted_teams, warnings = _apply_fifa_tiebreakers(
+        teams,
+        group_matches=matches,
+        context="group_standings",
+        # fifa_rankings omitted → empty → alphabetical
+    )
+    assert [t["team"] for t in sorted_teams] == ["Argentina", "Spain"]
+    assert len(warnings) == 1
