@@ -49,6 +49,12 @@ services:
       - ./backend/data:/app/data
       - ./backend/alembic:/app/alembic
       - ./config:/app/config
+      # Read-only mounts for golden-source assets that the backend tests
+      # locate via parent-walk from /app/tests (see _find_file in
+      # test_third_place_mapping.py): the Wikipedia HTML snapshot used to
+      # validate the R32 mapping, and the canonical thirdPlaceMapping.json.
+      - ./docs:/app/docs:ro
+      - ./frontend/src/lib/config:/app/frontend/src/lib/config:ro
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
