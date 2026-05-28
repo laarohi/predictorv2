@@ -3,6 +3,7 @@
 from app.models.bonus import BonusAnswer, BonusPrediction
 from app.models.competition import Competition
 from app.models.email_send import EmailSend
+from app.models.fifa_ranking import FifaRanking
 from app.models.fixture import Fixture, MatchStatus
 from app.models.leaderboard_snapshot import LeaderboardSnapshot
 from app.models.magic_link import MagicLinkToken
@@ -25,6 +26,7 @@ __all__ = [
     "BonusPredictionHistory",
     "Competition",
     "EmailSend",
+    "FifaRanking",
     "Fixture",
     "MatchStatus",
     "LeaderboardSnapshot",

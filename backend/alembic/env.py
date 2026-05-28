@@ -17,6 +17,7 @@ from app.models import (  # noqa: F401
     BonusAnswer,
     BonusPrediction,
     Competition,
+    FifaRanking,
     Fixture,
     LeaderboardSnapshot,
     MatchPrediction,
