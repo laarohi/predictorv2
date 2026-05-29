@@ -2,7 +2,7 @@
  * MUST come before @tailwind directives: postcss-import / Tailwind's built-in import
  * handler drops @import rules that don't appear before all other at-rules. */
 @import './lib/styles/panini-base.css';
-@import './lib/styles/panini-dashboard.css';
+@import './lib/styles/panini-dashboard-v4.css';
 @import './lib/styles/panini-leaderboard.css';
 @import './lib/styles/panini-wizard.css';
 @import './lib/styles/panini-bracket.css';
@@ -21,6 +21,20 @@
 @layer base {
 	html {
 		font-family: 'DM Sans', system-ui, sans-serif;
+	}
+
+	/* Page background — Panini navy ink. Prevents black bands from showing
+	 * through in landscape mobile / iPad split-view / iOS safe-area gaps
+	 * where the .pn container or page chrome doesn't fully cover the
+	 * viewport. Cream-paper content sits on top via .pn's own background;
+	 * auth pages cover with their own .auth-bg gradient.
+	 *
+	 * !important is required because DaisyUI's `predictor` theme (set via
+	 * data-theme="predictor" on <html>) ships base-100: #0A0E13 which
+	 * applies through DaisyUI's own theming rules with higher cascade
+	 * priority than this @layer base rule. */
+	html, body {
+		background-color: #0e1d40 !important;
 	}
 
 	/* Display headings use Bebas Neue */

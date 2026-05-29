@@ -77,7 +77,11 @@
 		</div>
 	{/if}
 {:else if !anyTeam}
-	<div class="pn-bm tbd"></div>
+	<!-- The .compact class must be applied here too so the mobile-only
+	     .pn-bm.tbd.compact min-height rule (in panini-bracket.css) takes
+	     effect — without it, mobile TBD cards stay at the desktop 56px
+	     and fill their fixed slot with no centering room. -->
+	<div class="pn-bm tbd" class:compact></div>
 {:else}
 	<div class="pn-bm" class:locked class:compact>
 		<button

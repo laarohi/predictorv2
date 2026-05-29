@@ -37,6 +37,18 @@ export async function getAgreements(fixtureIds?: string[]): Promise<FixtureAgree
 
 // ---- Bracket exposure (replaces stubBracketExposure) ----
 
+export interface StageCellResponse {
+	n: number;
+	of: number;
+	pts: number;
+	teams: string[];
+}
+
+export interface StageRowResponse {
+	earned: StageCellResponse;
+	available: StageCellResponse;
+}
+
 export interface BracketExposureResponse {
 	points_available: number;
 	picks_locked: number;
@@ -45,6 +57,14 @@ export interface BracketExposureResponse {
 	final_winner: string | null;
 	/** The other finalist; null if not predicted or only the winner is set. */
 	final_opponent: string | null;
+	/** v1 per-stage alive picks (round_of_16 .. winner) — count of user picks that
+	 * actually made it to or past that stage. */
+	alive_per_stage?: Record<string, number>;
+	/** Per-stage team-count denominator (16, 8, 4, 2, 1). */
+	teams_per_stage?: Record<string, number>;
+	/** v4 per-stage breakdown — drives DwScoringJourney. Each stage gets
+	 * an earned + available cell with progressive denominators. */
+	per_stage?: Record<string, StageRowResponse>;
 }
 
 export async function getBracketExposure(

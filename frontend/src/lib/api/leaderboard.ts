@@ -65,3 +65,51 @@ export async function getSteepestClimbers(
 ): Promise<SteepestClimbersResponse> {
 	return api.get<SteepestClimbersResponse>(`/leaderboard/climbers?days=${days}&limit=${limit}`);
 }
+
+// ---- Tournament winner pickers (post-competition) ---------------------------
+export interface TournamentWinnerPickers {
+	actual_winner: string | null;
+	phase1_picker_count: number;
+	phase2_picker_count: number;
+	total_phase1_predictors: number;
+	total_phase2_predictors: number;
+}
+
+export async function getTournamentWinnerPickers(): Promise<TournamentWinnerPickers> {
+	return api.get<TournamentWinnerPickers>('/leaderboard/tournament-winner');
+}
+
+// ---- Personal highlights (post-competition retrospective) -------------------
+export interface StreakHighlight {
+	count: number;
+	fixture_ids: string[];
+}
+export interface ClimbHighlight {
+	places: number;
+	captured_date: string;
+	from_position: number;
+	to_position: number;
+}
+export interface ContrarianHighlight {
+	fixture_id: string;
+	home_team: string;
+	away_team: string;
+	actual_score: string;
+	user_pick: string;
+	agrees_exact: number;
+	total: number;
+}
+export interface PhaseHighlight {
+	phase: 'phase_1' | 'phase_2';
+	points: number;
+}
+export interface MyHighlights {
+	best_exact_streak: StreakHighlight | null;
+	biggest_climb: ClimbHighlight | null;
+	most_contrarian_correct: ContrarianHighlight | null;
+	best_phase: PhaseHighlight | null;
+}
+
+export async function getMyHighlights(): Promise<MyHighlights> {
+	return api.get<MyHighlights>('/leaderboard/me/highlights');
+}

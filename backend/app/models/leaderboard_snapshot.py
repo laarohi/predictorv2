@@ -38,6 +38,12 @@ class LeaderboardSnapshot(SQLModel, table=True):
     position: int
     # Total points across all phases at the moment of capture.
     total_points: int
+    # Count of exact-score predictions correct as of the snapshot. Feeds the
+    # KPI row's day-over-day delta on the dashboard ("Exact 6 (+1)").
+    exact_scores: int = Field(default=0)
+    # Count of outcome (1/X/2) predictions correct as of the snapshot. Same
+    # purpose as exact_scores — drives the KPI delta brackets.
+    correct_outcomes: int = Field(default=0)
 
     # The wall-clock UTC date this snapshot represents. Used for uniqueness
     # so we never end up with two snapshots for the same user on the same

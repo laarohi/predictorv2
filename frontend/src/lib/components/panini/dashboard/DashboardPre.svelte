@@ -1,0 +1,264 @@
+<script lang="ts">
+	/**
+	 * Phase 1 — Pre-tournament dashboard (v4).
+	 *
+	 * Layout:
+	 *   1. Unsaved-predictions alert (gold, when there are local but un-saved
+	 *      prediction edits — TODO: wire to unsavedPersistence store)
+	 *   2. Funnel hero (countdown to Phase 1 lock + progress bar + CTA)
+	 *   3. 3-col equal: scoring peek · structure peek · player roster
+	 *
+	 * The roster currently shows whatever rows the leaderboard exposes. A
+	 * future backend endpoint that lists registered users with their
+	 * prediction-count progress would let us show the full ~30-player
+	 * roster the design calls for; until then we pad with the current user
+	 * so the layout doesn't collapse on first paint.
+	 */
+	import { onMount } from 'svelte';
+	import PnPageShell from '$components/panini/PnPageShell.svelte';
+	import DwAlert from './widgets/DwAlert.svelte';
+	import DwFunnelHero from './widgets/DwFunnelHero.svelte';
+	import DwPeek from './widgets/DwPeek.svelte';
+	import DwRoster from './widgets/DwRoster.svelte';
+
+	import { user } from '$stores/auth';
+	import { fetchAllFixtures, fixtures } from '$stores/fixtures';
+	import {
+		fetchMatchPredictions,
+		fetchBracketPredictions,
+		predictionsByFixture,
+		workingBracketPrediction
+	} from '$stores/predictions';
+	import {
+		phase1Deadline,
+		currentTime
+	} from '$stores/phase';
+	import { getRoster, type RosterResponse } from '$api/users';
+	import { getBonusQuestions, getMyBonusPredictions } from '$api/bonus';
+	import { countBracketSlotsFilled, BRACKET_TOTAL_SLOTS } from '$lib/utils/bracketProgress';
+
+	let rosterResp: RosterResponse | null = null;
+	// Bonus questions + the user's saved bonus answers come from two separate
+	// endpoints (questions are config-driven, answers are per-user). We store
+	// the counts only — the dashboard never renders the question prompts, so
+	// holding the full payloads in memory would be wasteful.
+	let bonusQuestionsCount: number | null = null;
+	let bonusFilled = 0;
+
+	onMount(async () => {
+		fetchAllFixtures();
+		fetchMatchPredictions();
+		fetchBracketPredictions();
+		try {
+			rosterResp = await getRoster();
+		} catch {
+			rosterResp = null;
+		}
+		try {
+			const [questions, preds] = await Promise.all([
+				getBonusQuestions(),
+				getMyBonusPredictions()
+			]);
+			bonusQuestionsCount = questions.length;
+			// A saved bonus prediction with an empty `answer` shouldn't count
+			// as filled — the wizard's own logic uses the Map size only, but
+			// the backend echo can include skipped entries; defensive trim.
+			bonusFilled = preds.filter((p) => p.answer && p.answer.length > 0).length;
+		} catch {
+			bonusQuestionsCount = null;
+		}
+	});
+
+	$: groupFixtures = $fixtures.filter((f) => f.stage === 'group');
+	// FIFA 2026 has 72 group matches (12 groups × 6 each). The `|| 72`
+	// fallback only matters during the first paint before fixtures arrive
+	// — after that the live value rules.
+	$: totalGroupMatches = groupFixtures.length || 72;
+	$: filledGroup = groupFixtures.filter((f) => $predictionsByFixture.has(f.id)).length;
+
+	// Bracket: 63 KO slots; reused from the same helper the wizard uses, so
+	// the dashboard's "you're 88% there" and the wizard's progress bar can
+	// never disagree by construction.
+	$: bracketSlotsFilled = countBracketSlotsFilled($workingBracketPrediction).done;
+
+	// Bonus question count is dynamic — config can add/remove questions
+	// without a code change. While the bonus fetch is in flight we fall back
+	// to the known YAML count of 10 so the hero doesn't read 72/72 (which
+	// would look like the user has finished when they haven't).
+	$: totalBonusQuestions = bonusQuestionsCount ?? 10;
+
+	$: overallTotal = totalGroupMatches + BRACKET_TOTAL_SLOTS + totalBonusQuestions;
+	$: overallFilled = filledGroup + bracketSlotsFilled + bonusFilled;
+
+	$: countdown = (() => {
+		if (!$phase1Deadline) return { d: 0, h: 0, m: 0, s: 0 };
+		const target = new Date($phase1Deadline).getTime();
+		const diff = target - $currentTime.getTime();
+		if (diff <= 0) return { d: 0, h: 0, m: 0, s: 0 };
+		const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+		const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+		const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+		const s = Math.floor((diff % (1000 * 60)) / 1000);
+		return { d, h, m, s };
+	})();
+
+	// Roster comes from the public /users/roster endpoint (returns ALL active
+	// registered users, alphabetical). Until it loads we fall back to a
+	// single-row "you" placeholder so the layout doesn't collapse.
+	$: rosterRows = (() => {
+		if (rosterResp) {
+			return rosterResp.entries.map((e, i) => ({
+				position: String(i + 1).padStart(2, '0'),
+				name: e.name,
+				handle: e.is_current_user
+					? 'YOU'
+					: `@${e.name.split(' ')[0].toLowerCase()}`,
+				filled: e.match_predictions_filled + e.bracket_picks_filled,
+				total: overallTotal,
+				isCurrentUser: e.is_current_user
+			}));
+		}
+		if ($user) {
+			return [
+				{
+					position: '01',
+					name: $user.name ?? 'You',
+					handle: 'YOU',
+					filled: overallFilled,
+					total: overallTotal,
+					isCurrentUser: true
+				}
+			];
+		}
+		return [];
+	})();
+
+	$: playerCount = rosterResp?.total_active_users ?? rosterRows.length;
+	$: stripLock = $phase1Deadline
+		? `<b>Phase 1 locks</b> · ${countdown.d}d ${countdown.h}h ${countdown.m}m`
+		: null;
+
+	// Hero greeting + state-aware lede.
+	// First name only — "Welcome back, Luke" reads warmer than the full
+	// name. Same split(' ')[0] convention the roster handles use above.
+	// Greeting flips on whether the user has any picks yet: 0 picks means
+	// they're effectively new to the prediction flow even if they've
+	// logged in before.
+	$: firstName = $user?.name?.split(' ')[0] ?? 'predictor';
+	$: heroGreeting = overallFilled === 0 ? 'Welcome' : 'Welcome back';
+	$: heroTitleHtml = `${heroGreeting}, <em>${firstName}</em>.`;
+	$: heroLede =
+		overallFilled === overallTotal
+			? "You're all set, no edits after the start of the tournament — so any last tweaks, get them in now."
+			: `The World Cup is back bigger than ever and so is the CxF Predictaa, ${overallTotal} picks to make before the start of the tournament, let's get cracking.`;
+</script>
+
+<svelte:head>
+	<title>Predictor — Sign up &amp; predict</title>
+</svelte:head>
+
+<PnPageShell lockLabel={stripLock}>
+	<div class="pn-dash-v4">
+		{#if overallFilled < overallTotal && overallFilled > 0}
+			<DwAlert
+				variant="gold"
+				title={`${overallTotal - overallFilled} predictions still to fill`}
+				meta="Lock in before the whistle · <b>switch devices &amp; partial drafts are gone</b>"
+				ctaLabel="Open predictions →"
+				ctaHref="/predictions"
+			/>
+		{/if}
+
+		<DwFunnelHero
+			label="Phase 1 — Predictions due"
+			titleHtml={heroTitleHtml}
+			lede={heroLede}
+			{countdown}
+			progressLabel="Overall progress"
+			progressValue={overallFilled}
+			progressTotal={overallTotal}
+			progressUnit="picks"
+			ctaLabel="Open predictions"
+			ctaHref="/predictions"
+			teasers={[
+				{ label: 'Group matches', value: String(filledGroup), outOf: String(totalGroupMatches) },
+				{ label: 'Bracket picks', value: String(bracketSlotsFilled), outOf: String(BRACKET_TOTAL_SLOTS) },
+				{ label: 'Bonus questions', value: String(bonusFilled), outOf: String(totalBonusQuestions) }
+			]}
+		/>
+
+		<section class="pn-dash-cols">
+			<div class="col">
+				<DwPeek
+					mode="rules"
+					title="How"
+					titleEm="points work"
+					meta="phase 1"
+					rules={[
+						{
+							pts: '+5',
+							ptsUnit: 'pts',
+							ptsTone: 'gold',
+							name: 'Correct outcome',
+							desc: 'Right side (1/X/2) — even if the scoreline is off. The bread-and-butter payout, per match.'
+						},
+						{
+							pts: '+10',
+							ptsUnit: 'pts',
+							ptsTone: 'green',
+							name: 'Exact-score bonus',
+							desc: 'Stacks on top of the outcome — 15 pts on a match where you nail both goals.'
+						},
+						{
+							pts: '+0–10',
+							ptsUnit: 'pts',
+							ptsTone: 'red',
+							name: 'Rarity bonus',
+							desc: 'Picks the room mostly missed pay more. Consensus picks earn nothing extra.'
+						},
+						{
+							pts: '10–150',
+							ptsUnit: 'pts',
+							ptsTone: 'navy',
+							name: 'Bracket advance',
+							desc: 'Each team reaching its predicted round, scaling from R32 (10) up to Winner (150).'
+						}
+					]}
+					footLabel="Read full rules →"
+					footHref="/rules"
+				/>
+			</div>
+			<div class="col">
+				<DwPeek
+					mode="items"
+					title="Tournament"
+					titleEm="structure"
+					meta="vol. I"
+					items={[
+						{
+							ix: '01',
+							name: 'Phase I — Pre-tournament',
+							desc: 'All 48 group match scores, your knockout bracket, and 9 bonus picks. Locks at first kickoff.',
+							value: 'full reward'
+						},
+						{
+							ix: '02',
+							name: 'Phase II — Re-pick the bracket',
+							desc: 'After groups, refresh your bracket with real teams. You also predict the scoreline of each knockout match — each one locks 15 minutes before kickoff.',
+							value: 'per-stage'
+						}
+					]}
+					footLabel="Read full rules →"
+					footHref="/rules"
+				/>
+			</div>
+			<div class="col">
+				<DwRoster
+					title={`★ Players · ${playerCount} ${playerCount === 1 ? 'player' : 'of 30'}`}
+					meta={playerCount >= 30 ? 'waitlist at 30' : 'registration open'}
+					rows={rosterRows}
+				/>
+			</div>
+		</section>
+	</div>
+</PnPageShell>

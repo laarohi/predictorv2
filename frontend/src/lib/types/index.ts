@@ -301,6 +301,18 @@ export interface PhaseStatus {
 	phase2_bracket_locked: boolean;
 }
 
+/**
+ * UX-level competition phase. Derived from PhaseStatus + fixture state in
+ * frontend/src/lib/stores/phase.ts. Drives which Dashboard*.svelte renders
+ * on the landing page and which phase-aware widgets appear.
+ */
+export type UxPhase =
+	| 'pre_tournament'
+	| 'group_stage'
+	| 'between_phases'
+	| 'knockout_stage'
+	| 'post_competition';
+
 // Bracket configuration types
 /** Maps group winner positions (e.g., "1A") to third-place positions (e.g., "3E") */
 export type ThirdPlaceMatchup = Record<string, string>;

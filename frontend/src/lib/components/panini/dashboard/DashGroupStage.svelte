@@ -1,0 +1,365 @@
+<script lang="ts">
+	/**
+	 * Phase 2 — Group Stage dashboard (v4).
+	 *
+	 * Layout (top-down):
+	 *   1. KPI row (rank, total, exact, outcomes, trajectory sparkline)
+	 *   2. Group summary strip (per-group point totals, 12 cells)
+	 *   3. 3-col grid:
+	 *        a. Past 24h — finished match cards (oldest → newest)
+	 *        b. Upcoming 24h — live + upcoming match cards
+	 *        c. Top 5 leaderboard + pinned "you" row
+	 *
+	 * All data is real where available; we fall back to defensible empty
+	 * states (no widgets render fake numbers in production).
+	 */
+	import { onMount } from 'svelte';
+	import PnPageShell from '$components/panini/PnPageShell.svelte';
+	import DwKpiRow from './widgets/DwKpiRow.svelte';
+	import DwGroupSummaryStrip from './widgets/DwGroupSummaryStrip.svelte';
+	import DwMatchTable, { type MatchTableRow, type PtsVariant } from './widgets/DwMatchTable.svelte';
+	import DwTop5 from './widgets/DwTop5.svelte';
+
+	import { user } from '$stores/auth';
+	import { fetchAllFixtures, fixtures } from '$stores/fixtures';
+	import {
+		fetchLeaderboard,
+		currentUserPosition,
+		leaderboard,
+		totalParticipants
+	} from '$stores/leaderboard';
+	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
+	import { getMyRankTrajectory, type RankTrajectoryResponse } from '$api/leaderboard';
+	import { teamCode } from '$lib/utils/teamCodes';
+	import type { Fixture } from '$types';
+
+	let trajectoryData: RankTrajectoryResponse | null = null;
+
+	onMount(async () => {
+		fetchAllFixtures();
+		fetchLeaderboard();
+		fetchMatchPredictions();
+		try {
+			trajectoryData = await getMyRankTrajectory(7);
+		} catch {
+			trajectoryData = null;
+		}
+	});
+
+	// ---- Scoring constants (kept in sync with config/worldcup2026.yml) ----
+	const POINTS_PER_OUTCOME = 5;
+	const POINTS_PER_EXACT_BONUS = 10;
+	const POINTS_PER_EXACT_TOTAL = POINTS_PER_OUTCOME + POINTS_PER_EXACT_BONUS;
+
+	// ---- Helpers ----------------------------------------------------------
+	function ordinal(n: number): string {
+		if (n % 100 >= 11 && n % 100 <= 13) return 'th';
+		switch (n % 10) {
+			case 1: return 'st';
+			case 2: return 'nd';
+			case 3: return 'rd';
+			default: return 'th';
+		}
+	}
+	function outcomeOf(home: number, away: number): '1' | 'X' | '2' {
+		if (home > away) return '1';
+		if (home < away) return '2';
+		return 'X';
+	}
+	function pickResult(
+		f: Fixture
+	): 'exact' | 'outc' | 'miss' | null {
+		if (f.status !== 'finished' || !f.score) return null;
+		const p = $predictionsByFixture.get(f.id);
+		if (!p) return null;
+		const fh = f.score.home_score;
+		const fa = f.score.away_score;
+		if (p.home_score === fh && p.away_score === fa) return 'exact';
+		if (outcomeOf(p.home_score, p.away_score) === outcomeOf(fh, fa)) return 'outc';
+		return 'miss';
+	}
+	function pointsFor(result: ReturnType<typeof pickResult>): number {
+		if (result === 'exact') return POINTS_PER_EXACT_TOTAL;
+		if (result === 'outc') return POINTS_PER_OUTCOME;
+		return 0;
+	}
+	function pickTuple(f: Fixture): [number, number] | null {
+		const p = $predictionsByFixture.get(f.id);
+		if (!p) return null;
+		return [p.home_score, p.away_score];
+	}
+	function scoreTuple(f: Fixture): [number, number] | null {
+		if (!f.score) return null;
+		return [f.score.home_score, f.score.away_score];
+	}
+
+	// Generic pick classifier — used for both finished (actual) and live
+	// (projected) match-card colourings.
+	function classifyPick(
+		score: [number, number] | null,
+		pick: [number, number] | null
+	): 'exact' | 'outc' | 'miss' | null {
+		if (!score || !pick) return null;
+		if (pick[0] === score[0] && pick[1] === score[1]) return 'exact';
+		if (outcomeOf(pick[0], pick[1]) === outcomeOf(score[0], score[1])) return 'outc';
+		return 'miss';
+	}
+
+	function pointsForResult(r: 'exact' | 'outc' | 'miss' | null): string {
+		if (r === 'exact') return `+${POINTS_PER_EXACT_TOTAL}`;
+		if (r === 'outc')  return `+${POINTS_PER_OUTCOME}`;
+		return '0';
+	}
+
+	// ---- buildRow — drive DwMatchTable from a Fixture --------------------
+	// Single source of truth that translates each fixture's runtime state
+	// into the row shape the table widget consumes. The widget is purely
+	// presentational; every status string, pill colour, and CTA choice
+	// originates here.
+	function buildRow(f: Fixture): MatchTableRow {
+		const score = scoreTuple(f);
+		const pick = pickTuple(f);
+		const id = f.id;
+		const home = teamCode(f.home_team);
+		const away = teamCode(f.away_team);
+		const grpLabel = f.group ?? '?';
+		const navigate = () => (window.location.href = `/match/${id}`);
+
+		if (f.status === 'finished') {
+			const result = classifyPick(score, pick);
+			return {
+				id, kind: 'finished',
+				statusText: 'FT', statusVariant: 'ft',
+				grpLabel, home, away, score, pick, pickResult: result,
+				pointsText: pointsForResult(result),
+				pointsVariant: (result ?? 'miss') as PtsVariant,
+				onClick: navigate
+			};
+		}
+		if (f.status === 'live' || f.status === 'halftime') {
+			const projected = classifyPick(score, pick);
+			const showPending = pick !== null && projected !== null;
+			return {
+				id, kind: 'live',
+				statusText: String(f.minute ?? 0),
+				statusVariant: 'live',
+				grpLabel, home, away, score, pick, pickResult: null,
+				pointsText: showPending ? pointsForResult(projected) : null,
+				pointsVariant: showPending ? (`pending-${projected}` as PtsVariant) : '',
+				onClick: navigate
+			};
+		}
+		// Upcoming. Status cell stays empty (countdown was dropped per UX
+		// feedback). The CTA in the points column carries the call-to-
+		// action signal; the score chip's "VS" carries the not-yet-played
+		// signal. Anything time-related lives on /predictions and the
+		// site's masthead strip.
+		const lockedNow = f.is_locked;
+		const cta = lockedNow ? undefined : (pick ? 'edit' : 'pick') as 'edit' | 'pick' | undefined;
+		return {
+			id, kind: 'upcoming',
+			statusText: '',
+			statusVariant: 'cd',
+			grpLabel, home, away, score, pick, pickResult: null,
+			pointsText: cta ? null : '—',
+			pointsVariant: 'dash',
+			cta,
+			ctaHref: '/predictions',
+			onClick: navigate
+		};
+	}
+
+	// ---- Past 4 / Upcoming 4 (fixed-count windows) -------------------------
+	// The previous 24h-window filter let the cards' total height swing with
+	// kickoff schedules — handy during a busy match day, awkward to design
+	// against. Fixed counts (4 each) give the columns a constant height so
+	// the rest of the layout can be laid out around them.
+	//
+	// Live games keep showing up in the upcoming column until they're
+	// finished (their kickoff is in the past but their status isn't
+	// FINISHED yet), which is why we sort upcoming by kickoff ascending
+	// AFTER filtering — live matches sit naturally at the top because their
+	// kickoff timestamp is the earliest of the still-running set.
+	// Bumped from 4 to 5 in lockstep with the DwMatchTable targetRows={5}
+	// prop below — supply (fixtures fetched) and demand (row slots
+	// rendered) must match or the table renders padding rows at the
+	// bottom. Same number flows through the trajectory KPI's
+	// "Last N matches" label and the pastExact/pastOutc deltas.
+	const PAST_SHOW = 5;
+	const UPCOMING_SHOW = 5;
+
+	$: pastFinished = $fixtures
+		.filter((f) => f.stage === 'group' && f.status === 'finished')
+		.sort((a, b) => new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime())
+		.slice(0, PAST_SHOW);
+
+	$: pastTotalPts = pastFinished.reduce((acc, f) => acc + pointsFor(pickResult(f)), 0);
+
+	$: upcoming = $fixtures
+		.filter((f) => f.stage === 'group')
+		.filter(
+			(f) =>
+				f.status === 'live' ||
+				f.status === 'halftime' ||
+				f.status === 'scheduled'
+		)
+		.sort((a, b) => new Date(a.kickoff).getTime() - new Date(b.kickoff).getTime())
+		.slice(0, UPCOMING_SHOW);
+
+	$: upcomingLive = upcoming.filter((f) => f.status === 'live' || f.status === 'halftime').length;
+
+	// ---- Per-group point totals ------------------------------------------
+	$: groupBreakdown = (() => {
+		const map = new Map<string, number>();
+		for (const f of $fixtures) {
+			if (f.stage !== 'group' || !f.group) continue;
+			if (f.status !== 'finished') continue;
+			map.set(f.group, (map.get(f.group) ?? 0) + pointsFor(pickResult(f)));
+		}
+		const groups = Array.from({ length: 12 }, (_, i) =>
+			String.fromCharCode('A'.charCodeAt(0) + i)
+		);
+		return groups.map((g) => ({ group: g, points: map.get(g) ?? 0 }));
+	})();
+
+	// ---- KPI values (real backend data) -----------------------------------
+	$: rank = $currentUserPosition?.position ?? null;
+	$: rankOf = $totalParticipants || $leaderboard.length || 0;
+	$: rankDelta = ($currentUserPosition?.movement ?? 0);
+	$: total = $currentUserPosition?.total_points ?? 0;
+	$: totalDelta = pastTotalPts;
+	$: exactCount = $currentUserPosition?.exact_scores ?? 0;
+	$: exactOf = $currentUserPosition?.breakdown?.total_predictions ?? 0;
+	$: correctOutcomes = $currentUserPosition?.correct_outcomes ?? 0;
+	$: rarityPts = $currentUserPosition?.breakdown?.hybrid_bonus_points ?? 0;
+
+	// Compute outcome / exact gains from the past 4 finished matches
+	$: pastExact = pastFinished.filter((f) => pickResult(f) === 'exact').length;
+	$: pastOutc = pastFinished.filter((f) => {
+		const r = pickResult(f);
+		return r === 'exact' || r === 'outc';
+	}).length;
+
+	$: trajectoryRanks = trajectoryData?.points.map((p) => p.position) ?? [];
+
+	// ---- Standings rows + you ---------------------------------------------
+	// 5 visible rows total: 5 top when user is in the top 5, OR 4 top + 1
+	// pinned `you` row when the user is outside. Keeping the total fixed
+	// makes the standings card the same height regardless of where the
+	// user sits on the leaderboard — which preserves the card-bottom
+	// alignment with the 5-row match tables alongside.
+	// Hint is empty for top rows — the "X exact · Y outc" detail is busy
+	// chrome for what is primarily a rank-and-points readout. The widget
+	// hides the hint line when it's empty, so each row collapses to a
+	// single line.
+	$: topFive = $leaderboard.slice(0, youRow ? 4 : 5).map((e) => ({
+		userId: e.user_id,
+		position: e.position,
+		name: e.user_name,
+		hint: '',
+		points: e.total_points,
+		isCurrentUser: e.user_id === $user?.id
+	}));
+
+	$: youRow = (() => {
+		const me = $currentUserPosition;
+		if (!me) return null;
+		// Threshold matches the visible row count (5) — pin the user row
+		// at the bottom only when they're outside the top 5.
+		if (me.position <= 5) return null;
+		return {
+			userId: me.user_id,
+			position: me.position,
+			name: me.user_name,
+			hint: '',
+			points: me.total_points,
+			isCurrentUser: true
+		};
+	})();
+
+	// ---- Strip labels (legacy chrome — kept while we have PnStrip) ---------
+	$: stripYou = rank
+		? `<b>You</b> · ${rank}${ordinal(rank)} of ${rankOf} · ${total} pts${rankDelta !== 0 ? ` · ${rankDelta > 0 ? '▲' : '▼'}${Math.abs(rankDelta)}` : ''}`
+		: null;
+	$: nextLockFixture = upcoming.find((f) => f.status === 'scheduled');
+	$: stripLock = nextLockFixture
+		? `<b>Next lock</b> ${teamCode(nextLockFixture.home_team)}–${teamCode(nextLockFixture.away_team)}`
+		: null;
+	$: stripLive = (() => {
+		const f = upcoming.find((x) => x.status === 'live' || x.status === 'halftime');
+		if (!f || !f.score) return null;
+		return `<b>LIVE</b> · ${teamCode(f.home_team)} ${f.score.home_score}–${f.score.away_score} ${teamCode(f.away_team)} · ${f.minute ?? 0}′`;
+	})();
+</script>
+
+<svelte:head>
+	<title>Dashboard — Group stage</title>
+</svelte:head>
+
+<PnPageShell liveLabel={stripLive} lockLabel={stripLock} youLabel={stripYou}>
+	<div class="pn-dash-v4">
+		<DwKpiRow
+			{rank}
+			{rankOf}
+			{rankDelta}
+			{total}
+			{totalDelta}
+			exact={exactCount}
+			{exactOf}
+			exactDelta={pastExact}
+			outcomes={correctOutcomes}
+			outcomesOf={exactOf}
+			outcomesDelta={pastOutc}
+			rarity={rarityPts}
+			rarityShareOf={total}
+			trajectory={trajectoryRanks}
+			trajectoryMaxRank={rankOf || 30}
+			trajectoryTodayPts={pastTotalPts}
+			trajectoryNowLabel={`Last ${PAST_SHOW}`}
+		/>
+
+		<DwGroupSummaryStrip groups={groupBreakdown} />
+
+		<section class="pn-dash-cols spectator">
+			<div class="col">
+				<div class="pn-sec-h">
+					<span class="ttl"><span class="pip"></span> Recent matches</span>
+					<span class="meta">{pastFinished.length} matches · <b>+{pastTotalPts} pts</b></span>
+				</div>
+				<DwMatchTable
+					groupColumnLabel="Grp"
+					rows={pastFinished.map(buildRow)}
+					emptyText="No matches finished yet."
+					targetRows={5}
+				/>
+			</div>
+
+			<div class="col">
+				<div class="pn-sec-h">
+					<span class="ttl">
+						<span class="pip" class:red={upcomingLive > 0}></span>
+						Upcoming matches
+					</span>
+					<span class="meta">
+						{upcoming.length} matches{#if upcomingLive > 0} · <b>{upcomingLive} live</b>{/if}
+					</span>
+				</div>
+				<DwMatchTable
+					groupColumnLabel="Grp"
+					rows={upcoming.map(buildRow)}
+					emptyText="No upcoming matches."
+					targetRows={5}
+				/>
+			</div>
+
+			<div class="col">
+				<DwTop5
+					title="Standings"
+					subtitle={`of ${rankOf || $leaderboard.length} players`}
+					rows={topFive}
+					you={youRow}
+				/>
+			</div>
+		</section>
+	</div>
+</PnPageShell>

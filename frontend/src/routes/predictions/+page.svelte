@@ -44,6 +44,7 @@
 		computeGroupStandingsMapWithWarnings,
 		filterQualificationRelevantWarnings
 	} from '$lib/utils/standings';
+	import { countBracketSlotsFilled } from '$lib/utils/bracketProgress';
 	import {
 		initPersistence,
 		hydrateFromStorage,
@@ -473,10 +474,13 @@
 			if (!teams) return;
 			for (const t of teams) if (t) out.push({ team: t, stage, group_position: null });
 		};
+		// Stored stage values are singular to match scoring + fixture-side
+		// convention (`Fixture.stage = "quarter_final"`). The plural field
+		// names on `BracketPrediction` are a frontend display convention only.
 		push('round_of_32', b.round_of_32);
 		push('round_of_16', b.round_of_16);
-		push('quarter_finals', b.quarter_finals);
-		push('semi_finals', b.semi_finals);
+		push('quarter_final', b.quarter_finals);
+		push('semi_final', b.semi_finals);
 		push('final', b.final);
 		if (b.winner) out.push({ team: b.winner, stage: 'winner', group_position: null });
 		return out;
@@ -658,17 +662,6 @@
 	// + 2 F + 1 W = 63 advancement picks total. Phase 2 bracket skips R32
 	// (actual standings already determined R32) so totals 31 — we only use
 	// this helper for Phase 1 progress.
-	function countBracketSlotsFilled(b: BracketPrediction | null): { done: number; total: number } {
-		const total = 63;
-		if (!b) return { done: 0, total };
-		let done = 0;
-		for (const arr of [b.round_of_32, b.round_of_16, b.quarter_finals, b.semi_finals, b.final]) {
-			for (const t of arr || []) if (t) done++;
-		}
-		if (b.winner) done++;
-		return { done, total };
-	}
-
 	// ---- Bonus questions (real backend) ----------------------------------
 
 	let bonusQuestions: import('$api/bonus').BonusQuestion[] = [];
@@ -758,25 +751,30 @@
 {#if $isAuthenticated}
 	<PnPageShell>
 		{#if restorationBanner}
-			<div class="pn-restore-banner" transition:fade={{ duration: 400 }}>
-				<div class="content">
-					<span class="icon">✦</span>
-					<div class="text">
-						<b>Drafts restored from your last session.</b>
-						{#if restorationBanner.matchCount > 0}
-							{restorationBanner.matchCount} unsaved match
-							{restorationBanner.matchCount === 1 ? 'pick' : 'picks'}{#if restorationBanner.bracketPhase1Restored || restorationBanner.bracketPhase2Restored},{/if}
-						{/if}
-						{#if restorationBanner.bracketPhase1Restored}
-							Phase I bracket{#if restorationBanner.bracketPhase2Restored},{/if}
-						{/if}
-						{#if restorationBanner.bracketPhase2Restored}
-							Phase II bracket
-						{/if}
-						— remember to press Save when you're done.
+			<!-- Mobile: .pn-restore-banner-wrap provides a navy halo around
+			     the cream banner sticker so it sits in a navy context that
+			     matches the hero below. On desktop the wrap is invisible. -->
+			<div class="pn-restore-banner-wrap" transition:fade={{ duration: 400 }}>
+				<div class="pn-restore-banner">
+					<div class="content">
+						<span class="icon">✦</span>
+						<div class="text">
+							<b>Drafts restored from your last session.</b>
+							{#if restorationBanner.matchCount > 0}
+								{restorationBanner.matchCount} unsaved match
+								{restorationBanner.matchCount === 1 ? 'pick' : 'picks'}{#if restorationBanner.bracketPhase1Restored || restorationBanner.bracketPhase2Restored},{/if}
+							{/if}
+							{#if restorationBanner.bracketPhase1Restored}
+								Phase I bracket{#if restorationBanner.bracketPhase2Restored},{/if}
+							{/if}
+							{#if restorationBanner.bracketPhase2Restored}
+								Phase II bracket
+							{/if}
+							— remember to press Save when you're done.
+						</div>
 					</div>
+					<button class="dismiss" aria-label="Dismiss" on:click={() => (restorationBanner = null)}>×</button>
 				</div>
-				<button class="dismiss" aria-label="Dismiss" on:click={() => (restorationBanner = null)}>×</button>
 			</div>
 		{/if}
 		<!-- Hero / progress / phase toggle — DESKTOP (≥700px) -->
@@ -1122,7 +1120,6 @@
 					</div>
 					<div class="pn-stnd-legend">
 						<span><span class="pip green"></span>Qualified</span>
-						<span><span class="pip gold"></span>Pending best 3rd</span>
 						<span><span class="pip grey"></span>Out</span>
 					</div>
 					</div><!-- /pn-stnd-col -->

@@ -75,14 +75,16 @@
 	gap: 12px;
 }
 .pn-mast .crest {
-	width: 38px;
+	min-width: 38px;
 	height: 38px;
+	padding: 0 8px;
 	background: var(--red);
 	display: grid;
 	place-items: center;
 	font-family: var(--display);
-	font-size: 22px;
+	font-size: 18px;
 	line-height: 1;
+	letter-spacing: 0.01em;
 	color: var(--paper);
 	transform: rotate(-4deg);
 	box-shadow: 4px 4px 0 var(--paper);
@@ -93,6 +95,9 @@
 	line-height: 1;
 	letter-spacing: -0.01em;
 	text-transform: uppercase;
+}
+.pn-mast .logo-name .aa {
+	color: var(--gold);
 }
 .pn-mast .logo-vol {
 	font-family: var(--mono);
@@ -219,6 +224,37 @@
 	color: var(--paper);
 }
 
+/* ===== Compact masthead — 700-1099px (iPhone landscape / small windowed) =====
+ * The desktop masthead's intrinsic width (logo + 5 nav items + admin +
+ * user widget + gaps + side padding) lands around 1000px at default
+ * sizes — wider than iPhone landscape viewports (~874-932px) and even
+ * some narrow laptop windows. The full masthead overflows, forcing the
+ * document wider than viewport and leaving the cream content area
+ * sitting in only ~70% of the screen.
+ *
+ * Fix: in the 700-1099px range, drop the wordmark ("PREDICTAA" + Vol
+ * subtitle) — leave just the CxF crest — and drop the user-name label
+ * next to the avatar. Also tighten the nav-item padding slightly. Saves
+ * ~300px of horizontal real estate, comfortably fits 700px+.
+ *
+ * Above 1100px, the full masthead returns. Below 700px, the mobile
+ * bottom-nav layout takes over (the .desktop-only wrapper is hidden). */
+@media (min-width: 700px) and (max-width: 1099px) {
+	/* Hide wordmark + volume — the .crest stays visible as the only logo */
+	.pn-mast .logo > div:not(.crest) {
+		display: none;
+	}
+	/* Hide the user-name span — keep just the avatar button (which remains
+	 * the dropdown trigger for the account menu) */
+	.pn-mast .user > span {
+		display: none;
+	}
+	/* Tighter nav padding — gives a few px of buffer at the 700px floor */
+	.pn-mast .nav a {
+		padding: 8px 12px;
+	}
+}
+
 /* Red sub-strip (live + lock + you) */
 .pn-strip {
 	background: var(--red);
@@ -257,11 +293,32 @@
  * already provides visual breathing room above; doubling it with body padding
  * felt loose across every page. Bottom is still 28px so content doesn't crash
  * into the fixed-bottom mobile nav (with PnPageShell extending it to 80px on
- * mobile to clear the tab bar). */
+ * mobile to clear the tab bar).
+ *
+ * Mobile reduces horizontal padding (28→20) — at 375px the desktop 28px on
+ * each side eats 15% of viewport width which compounds on top of any page-
+ * specific horizontal padding (e.g. .pn-dash-v4's 3px). 20px keeps a
+ * comfortable mobile gutter for bare text/form content (Predictions
+ * wizard, Profile, auth screens) without being heavy. */
 .pn-body {
-	padding: 14px 28px 28px 28px;
+	/* Body horizontal padding exposed as a CSS variable so every "escape
+	 * the body padding" negative-margin trick across the app (wizard hero,
+	 * match-page hero, results hero, bracket scroller, restore banner) can
+	 * reference it instead of hard-coding -28px. Without this, changing
+	 * the body padding silently mis-aligns every full-bleed hero — that
+	 * was the navy-strip-on-the-right bug on mobile when body padding
+	 * dropped to 20px while hero margins still pulled -28px. */
+	--pn-body-pad-x: 28px;
+	--pn-body-neg-x: -28px;
+	padding: 14px var(--pn-body-pad-x) 28px;
 	position: relative;
 	z-index: 2;
+}
+@media (max-width: 900px) {
+	.pn-body {
+		--pn-body-pad-x: 20px;
+		--pn-body-neg-x: -20px;
+	}
 }
 
 /* ===== Section banner ===== */

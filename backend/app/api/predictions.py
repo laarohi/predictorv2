@@ -86,6 +86,22 @@ class BonusPredictionBatch(BaseModel):
     predictions: list[BonusPredictionUpdate]
 
 
+class StageCellResponse(BaseModel):
+    """One earned/available cell on the Scoring Journey grid."""
+
+    n: int
+    of: int
+    pts: int
+    teams: list[str]
+
+
+class StageRowResponse(BaseModel):
+    """One row of the Scoring Journey (a single KO destination stage)."""
+
+    earned: StageCellResponse
+    available: StageCellResponse
+
+
 class BracketExposureResponse(BaseModel):
     """How many bracket points the calling user still has on the line."""
 
@@ -96,6 +112,18 @@ class BracketExposureResponse(BaseModel):
     # client-side from team names via teamCodes.ts).
     final_winner: str | None
     final_opponent: str | None
+    # Per-stage alive counts for the legacy DwBracketAlive widget.
+    # alive_per_stage[stage] = count of user's picks at that stage that
+    # are teams that actually made it to (or past) that stage.
+    # teams_per_stage[stage] = total teams competing at that stage
+    # (denominator for the dashboard table). Stages: round_of_16,
+    # quarter_final, semi_final, final, winner.
+    alive_per_stage: dict[str, int] = {}
+    teams_per_stage: dict[str, int] = {}
+    # v4 per-stage breakdown — drives DwScoringJourney. Each stage gets
+    # an `earned` + `available` cell with progressive denominators (the
+    # `of` field). See services/bracket_exposure.py for the algorithm.
+    per_stage: dict[str, StageRowResponse] = {}
 
 
 class FixtureAgreement(BaseModel):
@@ -407,13 +435,15 @@ async def get_bracket_predictions(
     if not predictions:
         return None
 
-    # Organize predictions into bracket structure
+    # Organize predictions into bracket structure. Stored stage values are
+    # singular (matching Fixture.stage + scoring); the BracketPrediction
+    # response fields are plural for QF/SF as a frontend display convention.
     group_winners: dict[str, list[str]] = {}
     stages: dict[str, list[str]] = {
         "round_of_32": [],
         "round_of_16": [],
-        "quarter_finals": [],
-        "semi_finals": [],
+        "quarter_final": [],
+        "semi_final": [],
         "final": [],
     }
     winner = ""
@@ -431,8 +461,8 @@ async def get_bracket_predictions(
         group_winners=group_winners,
         round_of_32=stages["round_of_32"],
         round_of_16=stages["round_of_16"],
-        quarter_finals=stages["quarter_finals"],
-        semi_finals=stages["semi_finals"],
+        quarter_finals=stages["quarter_final"],
+        semi_finals=stages["semi_final"],
         final=stages["final"],
         winner=winner,
     )
@@ -757,20 +787,39 @@ async def get_bracket_exposure(
 ) -> BracketExposureResponse:
     """How many bracket points the calling user still has on the line.
 
-    Replaces stubBracketExposure on the dashboard. Currently returns the
-    MAXIMUM exposure (sum of stage points for all picks, assuming none of
-    the teams have been eliminated). When match results start coming in,
-    this can subtract picks whose team was knocked out — that's a deferred
-    follow-up tied to live-scores wiring.
+    Used by the DwBracketAlive widget on the KO dashboard. Returns both
+    the maximum exposure (points still in play) and per-stage alive
+    counts (how many user picks at each stage are teams that actually
+    made it there based on finished match results).
     """
     phase_enum = PredictionPhase.PHASE_2 if phase == "phase_2" else PredictionPhase.PHASE_1
     result = await compute_bracket_exposure(session, current_user.id, phase_enum)
+    per_stage_response = {
+        stage: StageRowResponse(
+            earned=StageCellResponse(
+                n=row.earned.n,
+                of=row.earned.of,
+                pts=row.earned.pts,
+                teams=row.earned.teams,
+            ),
+            available=StageCellResponse(
+                n=row.available.n,
+                of=row.available.of,
+                pts=row.available.pts,
+                teams=row.available.teams,
+            ),
+        )
+        for stage, row in result.per_stage.items()
+    }
     return BracketExposureResponse(
         points_available=result.points_available,
         picks_locked=result.picks_locked,
         picks_total=result.picks_total,
         final_winner=result.final_winner,
         final_opponent=result.final_opponent,
+        alive_per_stage=result.alive_per_stage,
+        teams_per_stage=result.teams_per_stage,
+        per_stage=per_stage_response,
     )
 
 

@@ -3,12 +3,32 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { isAuthenticated, user, logout, initAuth } from '$stores/auth';
-	import { fetchPhaseStatus } from '$stores/phase';
+	import { fetchPhaseStatus, uxPhaseOverride } from '$stores/phase';
+	import PnDevPhasePill from '$components/panini/PnDevPhasePill.svelte';
+	import type { UxPhase } from '$types';
 
 	let hasLoadedPhase = false;
 
+	// Dev-only: seed uxPhaseOverride from ?uxPhase=... once on mount so each
+	// phase's dashboard can be visually QA'd without mutating backend data.
+	// The PnDevPhasePill component (below) lets you cycle phases interactively
+	// after the initial load. Production builds never read the param.
+	const VALID_UX_PHASES = new Set<UxPhase>([
+		'pre_tournament',
+		'group_stage',
+		'between_phases',
+		'knockout_stage',
+		'post_competition'
+	]);
+
 	onMount(() => {
 		initAuth();
+		if (import.meta.env.DEV) {
+			const param = $page.url.searchParams.get('uxPhase');
+			if (param && VALID_UX_PHASES.has(param as UxPhase)) {
+				uxPhaseOverride.set(param as UxPhase);
+			}
+		}
 	});
 
 	// Fetch phase status when user becomes authenticated
@@ -46,6 +66,10 @@
 		(r) => currentPath === r || (r !== '/' && currentPath.startsWith(r))
 	);
 </script>
+
+{#if import.meta.env.DEV && $isAuthenticated}
+	<PnDevPhasePill />
+{/if}
 
 {#if usesPanini}
 	<!-- Panini route: page provides its own chrome via PnPageShell. We keep

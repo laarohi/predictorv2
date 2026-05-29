@@ -1,0 +1,2467 @@
+/* =========================================================================
+ * panini-dashboard-v4.css
+ *
+ * Phase-aware dashboard atoms (v4). Every selector is .pn-scoped, so the
+ * styles only activate inside the Panini shell. CSS variables come from
+ * panini-base.css.
+ *
+ * Loaded after panini-dashboard.css — the older v3 KPI / pod / fix-table
+ * selectors stay live for any consumer that still references them, but
+ * dashboards built from these atoms read the v4 rules exclusively.
+ * ========================================================================= */
+
+/* ============================================================
+ * SHARED — section headers + day labels + 3-col grid
+ * ============================================================ */
+.pn .pn-sec-h {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	margin-bottom: 10px;
+	padding-bottom: 6px;
+	border-bottom: 2px solid var(--ink);
+}
+.pn .pn-sec-h .ttl {
+	font-family: var(--display);
+	font-size: 18px;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	line-height: 1;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+.pn .pn-sec-h .ttl em {
+	color: var(--red);
+	font-style: normal;
+}
+.pn .pn-sec-h .ttl .pip {
+	width: 8px;
+	height: 8px;
+	background: var(--gold);
+	border-radius: 50%;
+	display: inline-block;
+}
+.pn .pn-sec-h .ttl .pip.red {
+	background: var(--red);
+	animation: pn-blink 1.2s steps(2) infinite;
+}
+.pn .pn-sec-h .meta {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+.pn .pn-sec-h .meta b {
+	color: var(--ink);
+}
+
+.pn .pn-dash-cols {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	gap: 18px;
+	align-items: stretch;
+	margin-bottom: 18px;
+}
+.pn .pn-dash-cols.two { grid-template-columns: 1fr 1fr; }
+.pn .pn-dash-cols.two-thirds { grid-template-columns: 2fr 1fr; }
+.pn .pn-dash-cols.between { grid-template-columns: 1.4fr 1fr; }
+/* Spectator dashboards (Group + KO): two equal match-tables on the left
+ * (37.5% each) + a narrower 25% leaderboard column on the right.
+ * Replaces the previous equal 1:1:1 split so the data-heavy tables get
+ * the room they need without crowding the Top 5 panel.
+ *
+ * `align-items: start` overrides the parent grid's `stretch` so each
+ * .col takes its natural height. That keeps the standings column free
+ * to extend below the match-table cards (for the "See full standings"
+ * link) without dragging the match cols' contents down with empty
+ * space at the bottom. Card-bottom alignment between standings and
+ * match tables is handled by matching row min-heights — see
+ * `.pn-top5 .row` and `.mtab-row` below. */
+.pn .pn-dash-cols.spectator {
+	grid-template-columns: 3fr 3fr 2fr;
+	align-items: start;
+}
+.pn .pn-dash-cols .col {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.pn .pn-dash-cols .col .cards {
+	/* The new .mtab component owns its own border + sticker shadow,
+	 * so this wrapper just gives the column flex-grow behaviour. */
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	flex: 1;
+}
+.pn .pn-grow {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+}
+
+/* ============================================================
+ * KPI ROW (v4) — 5 stickers + arrow-delta badges + sparkline cell
+ *
+ * Chrome (background / border / sticker shadow / padding / min-height)
+ * mirrors the legacy .pn-kpi atom in panini-dashboard.css. The v4 ruleset
+ * adds the arrow-delta topline, the trajectory variant, and the breakdown
+ * foot. The original Claude-design v4 source used `.pn-kpi.v3` as a
+ * modifier ON TOP of the legacy class — we keep both rulesets self-
+ * contained here so v4 dashboards never need to compose the two.
+ * ============================================================ */
+.pn .pn-kpi-row-v4 {
+	display: grid;
+	/* Desktop: 6 cells in a single row (Rank · Total · Trajectory ·
+	 * Outcomes · Exact · Rarity bonus). Mobile collapses to 3 cells
+	 * across × 2 rows via the breakpoint below — source order maps
+	 * cleanly so the mobile rows read [Rank, Total, Trajectory] then
+	 * [Outcomes, Exact, Rarity]. The Trajectory sparkline scales to
+	 * 100% via .spark-wrap svg, so the narrow 1/6-width cell still
+	 * hosts it cleanly. */
+	grid-template-columns: repeat(6, 1fr);
+	gap: 14px;
+	/* Section gap below the KPI row (KPI → Groups strip). Bumped 14→22
+	 * alongside the KPI height increase so the row feels separated from
+	 * the strip below rather than crowded against it. */
+	margin-bottom: 22px;
+}
+.pn .pn-kpi-v4 {
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--ink);
+	padding: 10px 16px 10px;
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	/* Min-height bumped 100→140 to use the dashboard's spare vertical
+	 * space and give the KPI numerals more visual weight. The value font
+	 * (.v below) is also bumped 54→62 so the numeral still dominates
+	 * the cell rather than floating in extra whitespace. */
+	min-height: 140px;
+	min-width: 0;
+}
+.pn .pn-kpi-v4 .l {
+	/* Stat label ("Rank", "Total", "Exact", …). Scaled to 11px to track
+	 * the overall size reduction, but the weight 600 + --ink-2 contrast
+	 * + 0.16em tracking keep it readable as a section title rather than
+	 * a caption. */
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--ink-2);
+	font-weight: 600;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 0;
+}
+.pn .pn-kpi-v4 .l .pip {
+	width: 8px;
+	height: 8px;
+	border-radius: 50%;
+	background: var(--gold);
+	display: inline-block;
+	flex-shrink: 0;
+}
+.pn .pn-kpi-v4 .l .pip.red { background: var(--red); }
+.pn .pn-kpi-v4 .l .pip.green { background: var(--green); }
+.pn .pn-kpi-v4 .topline {
+	display: flex;
+	align-items: baseline;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.pn .pn-kpi-v4 .v {
+	font-family: var(--display);
+	/* Bumped 54→62 to track the card's min-height bump (100→140). Keeps
+	 * the value as the dominant payload of the cell. */
+	font-size: 62px;
+	line-height: 0.88;
+	letter-spacing: -0.025em;
+	color: var(--ink);
+	display: flex;
+	align-items: baseline;
+	gap: 4px;
+}
+.pn .pn-kpi-v4 .v .red { color: var(--red); }
+.pn .pn-kpi-v4 .v .green { color: var(--green); }
+.pn .pn-kpi-v4 .v .gold { color: var(--gold); }
+.pn .pn-kpi-v4 .v .sm {
+	/* Small inline modifier on the value — used both for the denominator
+	 * (e.g. "/24") and the unit (e.g. "pts" on the TOTAL cell). 16px
+	 * keeps it readable next to the 54px numeral without overpowering. */
+	font-size: 16px;
+	color: var(--ink-3);
+	letter-spacing: 0;
+}
+.pn .pn-kpi-v4 .v .sm.unit {
+	/* "pts" inline next to the number. Tighter tracking + slight left
+	 * margin so it reads as a unit attached to the number, not a
+	 * separate token. */
+	color: var(--ink-2);
+	margin-left: 4px;
+	letter-spacing: 0.04em;
+	font-family: var(--mono);
+	font-weight: 600;
+	text-transform: uppercase;
+	font-size: 14px;
+}
+.pn .pn-kpi-v4 .delta {
+	font-family: var(--mono);
+	/* 0.75× scale alongside the value — 17px keeps the badge readable
+	 * next to the 54px numeral without inflating the topline. */
+	font-size: 17px;
+	letter-spacing: -0.01em;
+	font-weight: 700;
+	line-height: 1;
+	padding: 4px 8px 3px;
+	border: 2px solid var(--ink);
+	background: var(--paper);
+	color: var(--ink);
+	white-space: nowrap;
+	align-self: center;
+	position: relative;
+	top: -6px;
+}
+.pn .pn-kpi-v4 .delta.up {
+	background: var(--green);
+	color: var(--paper);
+	border-color: var(--green);
+}
+.pn .pn-kpi-v4 .delta.dn {
+	background: var(--red);
+	color: var(--paper);
+	border-color: var(--red);
+}
+.pn .pn-kpi-v4 .delta.zero {
+	background: var(--paper-2);
+	color: var(--ink-3);
+}
+.pn .pn-kpi-v4 .sub {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	color: var(--ink-3);
+	margin-top: 4px;
+}
+.pn .pn-kpi-v4 .sub b {
+	color: var(--ink);
+	font-weight: 600;
+}
+
+/* trajectory variant — sparkline cell uses a tighter top/bottom padding
+ * and a sparkline scaled to the 140px min-height of the parent card. */
+.pn .pn-kpi-v4.trajectory {
+	padding-top: 8px;
+	padding-bottom: 8px;
+}
+.pn .pn-kpi-v4.trajectory .spark-wrap {
+	width: 100%;
+	height: 62px;
+}
+.pn .pn-kpi-v4.trajectory .spark-wrap svg {
+	width: 100%;
+	height: 62px;
+}
+.pn .pn-kpi-v4.trajectory .trj-sub {
+	margin-top: 2px;
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.06em;
+	color: var(--ink-3);
+	text-transform: uppercase;
+	text-align: right;
+}
+.pn .pn-kpi-v4.trajectory .trj-sub .now {
+	font-family: var(--display);
+	font-size: 12px;
+	letter-spacing: -0.01em;
+	color: var(--green);
+	font-style: normal;
+	margin-left: 2px;
+}
+
+.pn .pn-kpi-foot {
+	display: flex;
+	justify-content: flex-end;
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	margin-top: -2px;
+	margin-bottom: 18px;
+	padding-right: 4px;
+}
+.pn .pn-kpi-foot a {
+	color: var(--ink);
+	border-bottom: 1px solid var(--ink);
+	text-decoration: none;
+	padding-bottom: 1px;
+	cursor: pointer;
+}
+
+/* ============================================================
+ * MATCH TABLE (.mtab) — designed in Claude Design / Match Table.html
+ *
+ * One sticker-shadowed bordered container; five fixed grid columns:
+ *   [Status 60px] [Grp 28px] [Match 1fr] [Pick 64px] [Points 64px]
+ *
+ * The container holds an ink-bg header row + N data rows separated by
+ * dashed paper-3 dividers. Live rows tint background red and grow a
+ * 4px red rail on their left edge. Points column doubles as the action
+ * column for upcoming matches (Edit / Pick CTAs).
+ *
+ * Column widths are slightly tighter than the source design (which
+ * targeted a 980px single column) so each table fits inside the
+ * dashboard's ~450px 1/3-grid slot without horizontal scroll.
+ * ============================================================ */
+/* `.mtab` is the grid container that drives column sizing. Each column
+ * is `minmax(min-content, 1fr)` — every column gets an equal 1fr share
+ * of available space, but no column shrinks below its own min-content
+ * (so wide content like the MATCH cell expands and the other columns
+ * absorb the squeeze instead of overflowing).
+ *
+ * Each `.mtab` is its own grid, so two tables (e.g. Past + Upcoming)
+ * compute their column widths independently. `.no-status` drops the
+ * Status column entirely for upcoming-only tables — N goes from 5→4
+ * and PICK/POINTS shift left.
+ *
+ * Horizontal padding lives here (not on rows) so the subgrid tracks
+ * defined in this container are inherited cleanly by each row — rows
+ * with their own horizontal padding would break subgrid alignment. */
+.pn .mtab {
+	display: grid;
+	grid-template-columns: repeat(5, minmax(min-content, 1fr));
+	column-gap: 12px;
+	padding: 0 12px;
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 4px 4px 0 var(--ink);
+	/* Clip the row negative-margin overflow at the .mtab border so head /
+	 * row backgrounds don't bleed past the corners. */
+	overflow: hidden;
+}
+.pn .mtab.no-status {
+	grid-template-columns: repeat(4, minmax(min-content, 1fr));
+}
+
+/* Head + rows are subgrid items spanning the full table width. They
+ * inherit `.mtab`'s 5 column tracks so cells in any row align with the
+ * header and with cells in every other row. The negative horizontal
+ * margin + matching internal padding extends each row's
+ * background/border to the outer edges of `.mtab` (past the parent's
+ * padding) while keeping cell placement aligned to the subgrid. */
+.pn .mtab-head,
+.pn .mtab-row {
+	display: grid;
+	grid-template-columns: subgrid;
+	grid-column: 1 / -1;
+	align-items: center;
+}
+
+.pn .mtab-head {
+	background: var(--ink);
+	color: var(--paper-3);
+	margin: 0 -12px;
+	padding: 7px 12px 6px;
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+.pn .mtab-head .c-grp,
+.pn .mtab-head .c-pick,
+.pn .mtab-head .c-pts { text-align: center; }
+.pn .mtab-head .c-match { padding-left: 2px; text-align: center; }
+
+.pn .mtab-row {
+	margin: 0 -12px;
+	padding: 7px 12px;
+	border-top: 1px dashed var(--paper-3);
+	position: relative;
+	min-height: 48px;
+	cursor: pointer;
+	transition: background 0.12s ease;
+}
+/* Padding rows — drawn purely to even out side-by-side table heights.
+ * Same min-height + dashed top border as real rows, but no content,
+ * no hover state, no interaction. */
+.pn .mtab-row.pad {
+	cursor: default;
+	pointer-events: none;
+}
+.pn .mtab-row.pad:hover { background: transparent; }
+.pn .mtab-row:hover { background: var(--paper-2); }
+.pn .mtab-row.live { background: rgba(200, 40, 31, 0.06); }
+.pn .mtab-row.live::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 4px;
+	background: var(--red);
+}
+
+.pn .mtab-empty {
+	grid-column: 1 / -1;
+	margin: 0 -12px;
+	padding: 20px 12px;
+	text-align: center;
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	border-top: 1px dashed var(--paper-3);
+}
+
+/* ---- Status cell --------------------------------------------------- */
+.pn .mtab .status {
+	display: inline-flex;
+	align-items: baseline;
+	gap: 1px;
+	font-family: var(--mono);
+	font-size: 13px;
+	letter-spacing: 0.04em;
+	color: var(--ink-3);
+	white-space: nowrap;
+	justify-self: center;
+}
+.pn .mtab .status.ft {
+	font-family: var(--display);
+	font-size: 15px;
+	letter-spacing: 0.06em;
+	color: var(--ink-3);
+}
+.pn .mtab .status.live {
+	font-family: var(--display);
+	font-size: 16px;
+	color: var(--red);
+	letter-spacing: -0.01em;
+	align-items: center;
+}
+.pn .mtab .status.live::before {
+	content: '';
+	width: 9px;
+	height: 9px;
+	background: var(--red);
+	border-radius: 50%;
+	margin-right: 6px;
+	animation: pn-blink 1.2s steps(2) infinite;
+}
+.pn .mtab .status.live .tick {
+	font-family: var(--display);
+	color: var(--red);
+}
+/* Countdown / .cd variants intentionally removed — upcoming rows now
+ * render an empty Status cell. The CTA in the Points column and the VS
+ * pill in the Score chip carry the not-yet-played signal. */
+
+/* ---- Group chip (single letter or "R16"/"QF") ---------------------- */
+.pn .mtab .grp {
+	display: inline-grid;
+	place-items: center;
+	width: 28px;
+	height: 26px;
+	background: var(--paper-2);
+	border: 1.5px solid var(--ink);
+	font-family: var(--display);
+	font-size: 14px;
+	line-height: 1;
+	color: var(--ink);
+	justify-self: center;
+}
+.pn .mtab .grp.ko {
+	font-size: 11px;
+	letter-spacing: 0.02em;
+	width: auto;
+	min-width: 28px;
+	padding: 0 5px;
+}
+
+/* ---- Match cell — flex-centred so teams hug the score chip --------- */
+.pn .mtab .c-match {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-width: 0;
+}
+.pn .mtab .team {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	font-family: var(--display);
+	font-size: 15px;
+	color: var(--ink);
+	flex: none;
+}
+
+/* Score chip (single inline pill containing "2–1" or "VS"). */
+.pn .mtab .sc {
+	display: inline-flex;
+	align-items: center;
+	font-family: var(--display);
+	font-size: 16px;
+	line-height: 1;
+	letter-spacing: -0.01em;
+	background: var(--ink);
+	color: var(--paper);
+	padding: 4px 8px 3px;
+	gap: 2px;
+	white-space: nowrap;
+	box-shadow: 2px 2px 0 var(--ink);
+}
+.pn .mtab .sc .dash {
+	font-size: 12px;
+	opacity: 0.7;
+	margin: 0 1px;
+}
+.pn .mtab .sc.live {
+	background: var(--red);
+	box-shadow: 2px 2px 0 var(--red);
+}
+.pn .mtab .sc.vs {
+	background: var(--paper);
+	color: var(--ink-2);
+	border: 1.5px solid var(--ink);
+	box-shadow: none;
+	padding: 3px 9px 2px;
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.14em;
+}
+
+/* ---- Pick cell — color-coded pill (or dashed empty) --------------- */
+.pn .mtab .c-pick {
+	display: flex;
+	justify-content: center;
+}
+.pn .mtab .pick {
+	display: inline-flex;
+	align-items: center;
+	padding: 3px 8px 2px;
+	font-family: var(--display);
+	font-size: 14px;
+	line-height: 1;
+	letter-spacing: -0.01em;
+	background: var(--paper);
+	color: var(--ink);
+	border: 2px solid var(--ink-2);
+	gap: 2px;
+	white-space: nowrap;
+}
+.pn .mtab .pick .dash {
+	font-size: 11px;
+	opacity: 0.55;
+	margin: 0 1px;
+}
+.pn .mtab .pick.empty {
+	color: var(--paper-3);
+	border-style: dashed;
+	border-color: var(--paper-3);
+	font-family: var(--mono);
+	font-size: 15px;
+}
+.pn .mtab .pick.exact {
+	background: var(--green);
+	color: var(--paper);
+	border-color: var(--green);
+}
+.pn .mtab .pick.outc {
+	background: var(--gold);
+	color: var(--ink);
+	border-color: var(--ink);
+}
+.pn .mtab .pick.miss {
+	background: var(--paper);
+	color: var(--red);
+	border-color: var(--red);
+	text-decoration: line-through;
+	text-decoration-thickness: 1.5px;
+}
+
+/* ---- Points cell — rotated sticker badge + Pick/Edit CTAs ---------- */
+.pn .mtab .c-pts {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+}
+.pn .mtab .pts {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px 9px 3px;
+	font-family: var(--display);
+	font-size: 15px;
+	line-height: 1;
+	letter-spacing: -0.01em;
+	background: var(--paper);
+	color: var(--ink);
+	border: 2px solid var(--ink);
+	box-shadow: 2px 2px 0 var(--ink);
+	white-space: nowrap;
+	transform: rotate(-1.5deg);
+	min-width: 32px;
+	justify-content: center;
+}
+.pn .mtab .pts.exact {
+	background: var(--green);
+	color: var(--paper);
+	border-color: var(--green);
+}
+.pn .mtab .pts.outc {
+	background: var(--gold);
+	color: var(--ink);
+}
+.pn .mtab .pts.miss {
+	background: var(--paper);
+	color: var(--red);
+	border-color: var(--red);
+	box-shadow: 2px 2px 0 var(--red);
+}
+.pn .mtab .pts.pending {
+	gap: 5px;
+	padding-left: 8px;
+}
+.pn .mtab .pts.pending::before {
+	content: '';
+	width: 7px;
+	height: 7px;
+	border-radius: 50%;
+	background: currentColor;
+	animation: pn-blink 1.2s steps(2) infinite;
+	flex-shrink: 0;
+}
+.pn .mtab .pts.dash {
+	background: none;
+	border: none;
+	box-shadow: none;
+	transform: none;
+	color: var(--paper-3);
+	font-family: var(--mono);
+	font-size: 16px;
+}
+
+.pn .mtab .cta {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 5px 10px 4px;
+	font-family: var(--display);
+	font-size: 12px;
+	line-height: 1;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	border: 2px solid var(--ink);
+	cursor: pointer;
+	box-shadow: 2px 2px 0 var(--ink);
+	white-space: nowrap;
+	text-decoration: none;
+}
+.pn .mtab .cta.primary {
+	background: var(--gold);
+	color: var(--ink);
+}
+.pn .mtab .cta.primary::after { content: '→'; font-size: 12px; }
+.pn .mtab .cta.secondary {
+	background: var(--paper);
+	color: var(--ink-2);
+	border-color: var(--ink-3);
+	box-shadow: 2px 2px 0 var(--ink-3);
+}
+.pn .mtab .cta.secondary::after { content: '✎'; font-size: 13px; }
+
+/* ============================================================
+ * TOP-5 compact leaderboard column
+ * ============================================================ */
+.pn .pn-top5 {
+	display: flex;
+	flex-direction: column;
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--ink);
+}
+/* Internal column-labels header — same padding/font as `.mtab-head` so
+ * the standings card matches the match-table card height at every
+ * viewport. Grid columns mirror the row layout below (28px rank · 1fr
+ * name · auto points) so each label sits over its column. */
+.pn .pn-top5 .head {
+	display: grid;
+	grid-template-columns: 28px 1fr auto;
+	gap: 12px;
+	background: var(--ink);
+	color: var(--paper-3);
+	padding: 7px 16px 6px;
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+.pn .pn-top5 .head .c-pos,
+.pn .pn-top5 .head .c-pts { text-align: center; }
+.pn .pn-top5 .head .c-nm { text-align: center; padding-left: 2px; }
+.pn .pn-top5 .row {
+	display: grid;
+	grid-template-columns: 28px 1fr auto;
+	gap: 12px;
+	align-items: center;
+	padding: 11px 16px;
+	border-bottom: 1px dashed var(--paper-3);
+	/* Match the match-table row min-height (48px desktop / 44px mobile)
+	 * so 4 standings rows naturally equal the height of 4 match rows —
+	 * card bottoms align without flex stretching. */
+	min-height: 48px;
+	box-sizing: border-box;
+}
+.pn .pn-top5 .row:last-child { border-bottom: 0; }
+.pn .pn-top5 .row.gold { background: rgba(212, 154, 46, 0.18); }
+.pn .pn-top5 .row.you {
+	background: var(--red);
+	color: var(--paper);
+}
+.pn .pn-top5 .row.you .pos { color: var(--paper); }
+.pn .pn-top5 .row.you .h { color: rgba(255, 255, 255, 0.7); }
+.pn .pn-top5 .row.you-pinned {
+	margin-top: auto;
+	border-top: 2px dashed var(--ink);
+}
+.pn .pn-top5 .row .pos {
+	font-family: var(--display);
+	font-size: 20px;
+	line-height: 1;
+	text-align: center;
+	color: var(--ink-3);
+}
+.pn .pn-top5 .row.gold .pos { color: var(--red); }
+.pn .pn-top5 .row .nm {
+	font-family: var(--display);
+	font-size: 14px;
+	text-transform: uppercase;
+	letter-spacing: 0.01em;
+}
+.pn .pn-top5 .row .h {
+	display: block;
+	font-family: var(--mono);
+	font-size: 10px;
+	color: var(--ink-3);
+	margin-top: 2px;
+	letter-spacing: 0.04em;
+	text-transform: lowercase;
+	font-weight: 400;
+}
+.pn .pn-top5 .row .pts {
+	font-family: var(--display);
+	font-size: 18px;
+	line-height: 1;
+}
+.pn .pn-top5-foot {
+	margin-top: 10px;
+	text-align: right;
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+.pn .pn-top5-foot a {
+	color: var(--ink);
+	border-bottom: 1px solid var(--ink);
+	text-decoration: none;
+	padding-bottom: 1px;
+}
+
+/* ============================================================
+ * ALERT — gold (unsaved) / red (urgent)
+ * ============================================================ */
+.pn .pn-alert-v4 {
+	background: var(--paper);
+	border: 3px solid var(--gold);
+	box-shadow: 5px 5px 0 var(--ink);
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	gap: 18px;
+	align-items: center;
+	padding: 12px 18px 12px 16px;
+	margin-bottom: 18px;
+	position: relative;
+}
+.pn .pn-alert-v4::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	width: 6px;
+	background: var(--gold);
+}
+.pn .pn-alert-v4.red { border-color: var(--red); }
+.pn .pn-alert-v4.red::before { background: var(--red); }
+.pn .pn-alert-v4 .ico {
+	width: 42px;
+	height: 42px;
+	border: 2.5px solid var(--ink);
+	background: var(--gold);
+	color: var(--ink);
+	display: grid;
+	place-items: center;
+	font-family: var(--display);
+	font-size: 22px;
+	box-shadow: 3px 3px 0 var(--ink);
+	flex-shrink: 0;
+}
+.pn .pn-alert-v4.red .ico {
+	background: var(--red);
+	color: var(--paper);
+}
+.pn .pn-alert-v4 .copy {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.pn .pn-alert-v4 .ttl {
+	font-family: var(--display);
+	font-size: 16px;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	line-height: 1;
+}
+.pn .pn-alert-v4.red .ttl { color: var(--red); }
+.pn .pn-alert-v4 .meta {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	color: var(--ink-3);
+}
+.pn .pn-alert-v4 .meta b { color: var(--ink); }
+
+/* ============================================================
+ * HERO (funnel)
+ * ============================================================ */
+.pn .pn-hero-v4 {
+	background: var(--ink);
+	color: var(--paper);
+	border: 3px solid var(--ink);
+	box-shadow: 8px 8px 0 var(--red);
+	padding: 28px 32px 26px;
+	margin-bottom: 22px;
+	position: relative;
+	overflow: hidden;
+}
+.pn .pn-hero-v4::after {
+	content: '';
+	position: absolute;
+	right: -40px;
+	top: -40px;
+	width: 200px;
+	height: 200px;
+	background-image: repeating-linear-gradient(45deg, transparent 0 14px, rgba(212, 154, 46, 0.18) 14px 16px);
+	pointer-events: none;
+}
+.pn .pn-hero-v4 .hero-row {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 32px;
+	align-items: end;
+	position: relative;
+	z-index: 1;
+}
+.pn .pn-hero-v4 .label {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--gold);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+.pn .pn-hero-v4 .label .pip {
+	width: 8px;
+	height: 8px;
+	background: var(--red);
+	border-radius: 50%;
+}
+.pn .pn-hero-v4 h1 {
+	font-family: var(--display);
+	font-size: 44px;
+	line-height: 0.95;
+	letter-spacing: -0.015em;
+	text-transform: uppercase;
+	margin: 0 0 6px;
+	color: var(--paper);
+}
+.pn .pn-hero-v4 h1 em {
+	color: var(--gold);
+	font-style: normal;
+}
+.pn .pn-hero-v4 .lede {
+	font-family: var(--mono);
+	font-size: 12px;
+	letter-spacing: 0.06em;
+	color: var(--paper-3);
+	max-width: 460px;
+	line-height: 1.5;
+	margin-top: 10px;
+}
+.pn .pn-hero-v4 .clock {
+	display: flex;
+	gap: 6px;
+	position: relative;
+	z-index: 1;
+}
+.pn .pn-hero-v4 .clock .digit {
+	background: var(--paper);
+	color: var(--ink);
+	padding: 14px 12px 10px;
+	font-family: var(--display);
+	font-size: 44px;
+	line-height: 1;
+	min-width: 56px;
+	text-align: center;
+	border: 2.5px solid var(--ink);
+	box-shadow: 3px 3px 0 var(--gold);
+}
+.pn .pn-hero-v4 .clock .digit .u {
+	display: block;
+	margin-top: 6px;
+	font-family: var(--mono);
+	font-size: 9px;
+	color: var(--ink-3);
+	letter-spacing: 0.12em;
+}
+.pn .pn-hero-v4 .progress-block {
+	margin-top: 22px;
+	position: relative;
+	z-index: 1;
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 24px;
+	align-items: end;
+}
+.pn .pn-hero-v4 .bar-h {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	margin-bottom: 6px;
+}
+.pn .pn-hero-v4 .bar-h .l {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--paper-3);
+}
+.pn .pn-hero-v4 .bar-h .v {
+	font-family: var(--display);
+	font-size: 24px;
+	letter-spacing: -0.01em;
+}
+.pn .pn-hero-v4 .bar-h .v em {
+	color: var(--gold);
+	font-style: normal;
+}
+.pn .pn-hero-v4 .bar-h .v .small {
+	color: var(--paper-3);
+	font-size: 16px;
+	font-family: var(--display);
+}
+.pn .pn-hero-v4 .bar {
+	height: 14px;
+	background: rgba(255, 255, 255, 0.1);
+	border: 2px solid var(--paper);
+	position: relative;
+}
+.pn .pn-hero-v4 .bar .fill {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	background: var(--gold);
+	background-image: repeating-linear-gradient(135deg, var(--gold) 0 6px, #b9831f 6px 8px);
+}
+.pn .pn-hero-v4 .cta {
+	background: var(--red);
+	color: var(--paper);
+	border: 2.5px solid var(--paper);
+	padding: 14px 22px 12px;
+	font-family: var(--display);
+	font-size: 17px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	box-shadow: 4px 4px 0 var(--gold);
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	gap: 10px;
+	white-space: nowrap;
+	text-decoration: none;
+}
+.pn .pn-hero-v4 .teaser-row {
+	display: grid;
+	grid-template-columns: 1fr 1fr 1fr;
+	gap: 16px;
+	margin-top: 16px;
+	position: relative;
+	z-index: 1;
+}
+.pn .pn-hero-v4 .teaser {
+	background: rgba(255, 255, 255, 0.06);
+	border: 1.5px solid var(--gold);
+	padding: 10px 14px;
+}
+.pn .pn-hero-v4 .teaser .l {
+	font-family: var(--mono);
+	font-size: 9px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--gold);
+}
+.pn .pn-hero-v4 .teaser .v {
+	font-family: var(--display);
+	font-size: 22px;
+	line-height: 1;
+	color: var(--paper);
+	margin-top: 4px;
+	letter-spacing: -0.01em;
+}
+.pn .pn-hero-v4 .teaser .v em {
+	color: var(--gold);
+	font-style: normal;
+}
+.pn .pn-hero-v4 .teaser .v .small {
+	font-size: 13px;
+	color: var(--paper-3);
+}
+
+/* ============================================================
+ * PEEK (rules / structure)
+ * ============================================================ */
+.pn .pn-peek {
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--ink);
+	padding: 18px 20px;
+	display: flex;
+	flex-direction: column;
+	position: relative;
+	/* Stretch to fill the parent column so sibling Peeks line up visually
+	 * even when one has fewer rules than the other. The .foot already has
+	 * `margin-top: auto`, so the extra height becomes whitespace above the
+	 * "Read full rules →" link, not stretched-out rules. */
+	flex: 1;
+}
+.pn .pn-peek .hd {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	border-bottom: 2px solid var(--ink);
+	padding-bottom: 8px;
+	margin-bottom: 14px;
+}
+.pn .pn-peek .hd .ttl {
+	font-family: var(--display);
+	font-size: 18px;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+}
+.pn .pn-peek .hd .ttl em {
+	color: var(--red);
+	font-style: normal;
+	/* Explicit gap between the plain title and the red em. The template
+	 * already has a space character between them, but the Archivo Black
+	 * display font + uppercase letter-spacing renders that space too
+	 * tight to read as separation. 0.4em is enough to feel like distinct
+	 * words ("HOW POINTS WORK") without breaking the title's visual unit. */
+	margin-left: 0.4em;
+}
+.pn .pn-peek .hd .meta {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+.pn .pn-peek .rules-list { display: grid; gap: 10px; }
+.pn .pn-peek .rule {
+	display: grid;
+	/* 95px on the pts column fits range labels like "+0–10" or "10–150"
+	 * at the 28px display font on one line. Single values ("+5", "+10")
+	 * just right-align with extra whitespace; the grid stays uniform so
+	 * the rule names line up across rows. */
+	grid-template-columns: 95px 1fr;
+	gap: 14px;
+	align-items: baseline;
+	padding: 4px 0;
+	/* Belt-and-braces: prevent wrapping inside the pts cell so a value
+	 * that's a couple of px too wide nudges layout instead of folding
+	 * onto a second line. */
+}
+.pn .pn-peek .rule .pts {
+	white-space: nowrap;
+}
+.pn .pn-peek .rule + .rule {
+	border-top: 1.5px dashed var(--paper-3);
+	padding-top: 10px;
+}
+.pn .pn-peek .rule .pts {
+	font-family: var(--display);
+	font-size: 28px;
+	line-height: 1;
+	color: var(--red);
+	text-align: right;
+	letter-spacing: -0.02em;
+}
+.pn .pn-peek .rule .pts.gold { color: var(--gold); }
+.pn .pn-peek .rule .pts.navy { color: var(--navy); }
+.pn .pn-peek .rule .pts.green { color: var(--green); }
+.pn .pn-peek .rule .pts .pl {
+	font-family: var(--mono);
+	font-size: 10px;
+	color: var(--ink-3);
+	letter-spacing: 0.04em;
+	display: block;
+	margin-top: 2px;
+}
+.pn .pn-peek .rule .nm {
+	font-family: var(--display);
+	font-size: 14px;
+	text-transform: uppercase;
+	line-height: 1.1;
+}
+.pn .pn-peek .rule .nm .desc {
+	display: block;
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-3);
+	letter-spacing: 0.02em;
+	text-transform: none;
+	font-weight: 400;
+	margin-top: 3px;
+	line-height: 1.4;
+}
+.pn .pn-peek .foot {
+	margin-top: auto;
+	padding-top: 12px;
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	display: flex;
+	justify-content: flex-end;
+}
+.pn .pn-peek .foot a {
+	color: var(--ink);
+	border-bottom: 1px solid var(--ink);
+	text-decoration: none;
+	cursor: pointer;
+	padding-bottom: 1px;
+}
+.pn .pn-peek .item-list { display: grid; gap: 10px; }
+.pn .pn-peek .item {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	gap: 12px;
+	align-items: baseline;
+	padding: 4px 0;
+}
+.pn .pn-peek .item + .item {
+	border-top: 1.5px dashed var(--paper-3);
+	padding-top: 10px;
+}
+.pn .pn-peek .item .ix {
+	font-family: var(--display);
+	font-size: 11px;
+	background: var(--ink);
+	color: var(--paper);
+	padding: 3px 7px;
+	letter-spacing: 0.06em;
+}
+.pn .pn-peek .item .nm {
+	font-family: var(--display);
+	font-size: 14px;
+	text-transform: uppercase;
+	line-height: 1.1;
+}
+.pn .pn-peek .item .nm .desc {
+	display: block;
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-3);
+	margin-top: 3px;
+	letter-spacing: 0.02em;
+	text-transform: none;
+	font-weight: 400;
+}
+.pn .pn-peek .item .v {
+	font-family: var(--display);
+	font-size: 14px;
+	text-transform: uppercase;
+	color: var(--red);
+	letter-spacing: 0.04em;
+}
+
+/* ============================================================
+ * ROSTER (Phase 1)
+ * ============================================================ */
+.pn .pn-roster {
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--ink);
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	/* min-height: 0 + overflow: hidden release this card's grip on the
+	 * parent grid row's height — the row size becomes max(other columns'
+	 * natural heights), and the "How points work" peek (4 rules) anchors
+	 * it. `flex: 1` then stretches the roster to fill its grid column at
+	 * that height (without `flex: 1` the card would shrink to header-only
+	 * because its scrollable child has `flex: 1 1 0`). The inner
+	 * .roster-scroll scrolls when the player list overflows. */
+	flex: 1;
+	min-height: 0;
+	overflow: hidden;
+}
+/* Internal scroll surface — flexes to fill the roster card below its
+ * sticky header, scrolls vertically when player list is longer than the
+ * column height. `min-height: 0` is load-bearing — without it the flex
+ * item refuses to shrink below its content and overflow:auto never kicks
+ * in. */
+.pn .pn-roster .roster-scroll {
+	flex: 1 1 0;
+	min-height: 0;
+	overflow-y: auto;
+}
+/* Roster column is the only one that may have more natural content than
+ * the peek cards can match. Marking it as shrink-eligible at the grid-item
+ * level so the row height pins to the peek cards, not the roster. */
+.pn .pn-dash-cols .col:has(.pn-roster) {
+	min-height: 0;
+}
+.pn .pn-roster .hd {
+	background: var(--ink);
+	color: var(--paper);
+	padding: 10px 16px;
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	font-family: var(--display);
+	font-size: 16px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.pn .pn-roster .hd .right {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.1em;
+	color: var(--paper-3);
+}
+.pn .pn-roster table { width: 100%; border-collapse: collapse; }
+.pn .pn-roster th {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	font-weight: 500;
+	text-align: left;
+	padding: 8px 14px;
+	background: var(--paper-2);
+	border-bottom: 2px solid var(--ink);
+}
+.pn .pn-roster th.r { text-align: right; }
+.pn .pn-roster td {
+	padding: 7px 14px;
+	border-bottom: 1px dashed var(--paper-3);
+	vertical-align: middle;
+}
+.pn .pn-roster td.pos {
+	font-family: var(--mono);
+	font-size: 12px;
+	color: var(--ink-3);
+	width: 28px;
+	letter-spacing: 0.04em;
+}
+.pn .pn-roster td.nm {
+	font-family: var(--display);
+	font-size: 13px;
+	text-transform: uppercase;
+}
+.pn .pn-roster td.nm.you { color: var(--red); }
+.pn .pn-roster td.nm .h {
+	display: block;
+	font-family: var(--mono);
+	font-size: 10px;
+	font-weight: 400;
+	color: var(--ink-3);
+	margin-top: 2px;
+	text-transform: lowercase;
+	letter-spacing: 0.02em;
+}
+.pn .pn-roster td.r { text-align: right; }
+.pn .pn-roster td.prog {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-3);
+	letter-spacing: 0.04em;
+}
+.pn .pn-roster td.prog .pip {
+	display: inline-block;
+	width: 6px;
+	height: 6px;
+	background: var(--green);
+	border-radius: 50%;
+	margin-right: 6px;
+	vertical-align: middle;
+}
+.pn .pn-roster td.prog .pip.empty { background: var(--paper-3); }
+.pn .pn-roster tr:nth-child(even) td { background: rgba(0, 0, 0, 0.02); }
+
+/* ============================================================
+ * GROUP-STAGE SKINNY STRIP (Phase 2)
+ * ============================================================ */
+.pn .pn-gss {
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--ink);
+	/* Section gap below the Groups strip (Groups → Spectator row). Bumped
+	 * 18→26 to match the new KPI→Groups gap above and give the strip
+	 * breathing room from the cards below. */
+	margin-bottom: 26px;
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 0;
+	align-items: stretch;
+}
+.pn .pn-gss .gss-lbl {
+	padding: 0 16px;
+	background: var(--ink);
+	color: var(--paper);
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	border-right: 2.5px solid var(--ink);
+}
+.pn .pn-gss .gss-lbl .ttl {
+	font-family: var(--display);
+	font-size: 14px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	line-height: 1;
+}
+.pn .pn-gss .gss-lbl .ttl em {
+	color: var(--gold);
+	font-style: normal;
+}
+.pn .pn-gss .gss-lbl .sub {
+	font-family: var(--mono);
+	font-size: 9px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--paper-3);
+	margin-top: 3px;
+}
+.pn .pn-gss .gss-cells {
+	display: grid;
+	grid-template-columns: repeat(12, 1fr);
+}
+.pn .pn-gss .gss-cell {
+	padding: 8px 6px 9px;
+	text-align: center;
+	border-right: 1.5px dashed var(--paper-3);
+	position: relative;
+	cursor: pointer;
+	transition: background 0.12s;
+}
+.pn .pn-gss .gss-cell:hover { background: var(--paper-2); }
+.pn .pn-gss .gss-cell:last-child { border-right: 0; }
+.pn .pn-gss .gss-cell .g {
+	font-family: var(--display);
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	line-height: 1;
+}
+.pn .pn-gss .gss-cell .v {
+	font-family: var(--display);
+	font-size: 22px;
+	letter-spacing: -0.02em;
+	line-height: 1;
+	margin-top: 6px;
+	color: var(--ink);
+}
+.pn .pn-gss .gss-cell.hi .v { color: var(--gold); }
+.pn .pn-gss .gss-cell.lo .v { color: var(--paper-3); }
+.pn .pn-gss .gss-cell .mini {
+	height: 3px;
+	width: 80%;
+	margin: 5px auto 0;
+	background: var(--paper-3);
+	position: relative;
+}
+.pn .pn-gss .gss-cell .mini .fill {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	background: var(--ink);
+}
+.pn .pn-gss .gss-cell.hi .mini .fill { background: var(--gold); }
+.pn .pn-gss .gss-cell.lo .mini .fill { background: var(--paper-3); }
+
+/* ============================================================
+ * GROUP-STAGE SUMMARY TABLE (Phase 3)
+ * ============================================================ */
+.pn .pn-summary {
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--ink);
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+}
+.pn .pn-summary .hd {
+	background: var(--ink);
+	color: var(--paper);
+	padding: 10px 16px;
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	font-family: var(--display);
+	font-size: 16px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+.pn .pn-summary .hd em {
+	color: var(--gold);
+	font-style: normal;
+}
+.pn .pn-summary .hd .right {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.1em;
+	color: var(--paper-3);
+	font-weight: 400;
+	text-transform: uppercase;
+}
+.pn .pn-summary table { width: 100%; border-collapse: collapse; }
+.pn .pn-summary th {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	font-weight: 500;
+	padding: 7px 12px;
+	background: var(--paper-2);
+	border-bottom: 2px solid var(--ink);
+	text-align: right;
+}
+.pn .pn-summary th:first-child {
+	text-align: left;
+	padding-left: 16px;
+}
+.pn .pn-summary th:last-child { padding-right: 16px; }
+.pn .pn-summary td {
+	padding: 6.5px 12px;
+	border-bottom: 1px dashed var(--paper-3);
+	text-align: right;
+	font-family: var(--mono);
+	font-size: 12px;
+	vertical-align: middle;
+	font-variant-numeric: tabular-nums;
+}
+.pn .pn-summary td:first-child {
+	padding-left: 16px;
+	text-align: left;
+}
+.pn .pn-summary td:last-child { padding-right: 16px; }
+.pn .pn-summary td.grp {
+	font-family: var(--display);
+	font-size: 13px;
+	text-transform: uppercase;
+	color: var(--ink);
+}
+.pn .pn-summary td.outc { color: var(--ink-2); }
+.pn .pn-summary td.exact {
+	color: var(--green);
+	font-weight: 600;
+}
+.pn .pn-summary td.qual {
+	color: var(--navy);
+	font-weight: 600;
+}
+.pn .pn-summary td.total {
+	font-family: var(--display);
+	font-size: 14px;
+	color: var(--ink);
+}
+.pn .pn-summary tr.bonus td {
+	background: rgba(212, 154, 46, 0.1);
+	font-family: var(--display);
+	font-size: 13px;
+	border-top: 2px solid var(--ink);
+}
+.pn .pn-summary tr.grand td {
+	background: var(--ink);
+	color: var(--paper);
+	font-family: var(--display);
+	font-size: 16px;
+	padding: 11px 12px;
+	border-bottom: 0;
+}
+.pn .pn-summary tr.grand td:first-child { padding-left: 16px; }
+.pn .pn-summary tr.grand td:last-child {
+	padding-right: 16px;
+	color: var(--gold);
+	font-size: 22px;
+	letter-spacing: -0.01em;
+}
+.pn .pn-summary .foot {
+	background: var(--paper-2);
+	padding: 10px 16px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	border-top: 2px solid var(--ink);
+}
+.pn .pn-summary .foot a {
+	color: var(--ink);
+	border-bottom: 1px solid var(--ink);
+	text-decoration: none;
+	padding-bottom: 1px;
+	cursor: pointer;
+}
+
+/* ============================================================
+ * SCORING JOURNEY (Phase 4) — stages as rows, EARNED / AVAILABLE cols
+ * ============================================================ */
+.pn .pn-sj2 {
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--ink);
+	padding: 16px 20px 18px;
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+.pn .pn-sj2 .sj2-h {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	border-bottom: 2px solid var(--ink);
+	padding-bottom: 8px;
+}
+.pn .pn-sj2 .sj2-h .ttl {
+	font-family: var(--display);
+	font-size: 18px;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	line-height: 1;
+}
+.pn .pn-sj2 .sj2-h .ttl em {
+	color: var(--red);
+	font-style: normal;
+}
+.pn .pn-sj2 .sj2-h .breakdown {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink);
+	border-bottom: 1px solid var(--ink);
+	text-decoration: none;
+	padding-bottom: 1px;
+	cursor: pointer;
+}
+.pn .pn-sj2 .sj2-phase {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.pn .pn-sj2 .sj2-phase-h {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	padding-bottom: 6px;
+	border-bottom: 1.5px dashed var(--paper-3);
+}
+.pn .pn-sj2 .sj2-phase-h .ttl {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-2);
+	display: flex;
+	align-items: baseline;
+	gap: 4px;
+}
+.pn .pn-sj2 .sj2-phase-h .ttl b {
+	font-family: var(--display);
+	font-size: 16px;
+	letter-spacing: 0.02em;
+	color: var(--ink);
+	margin-right: 4px;
+}
+.pn .pn-sj2 .sj2-phase-h .ttl .kind {
+	color: var(--ink-3);
+	font-family: var(--mono);
+	font-size: 11px;
+}
+.pn .pn-sj2 .sj2-phase-h .totals {
+	display: flex;
+	gap: 18px;
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	color: var(--ink-3);
+	text-transform: lowercase;
+}
+.pn .pn-sj2 .sj2-phase-h .totals b {
+	font-family: var(--display);
+	font-size: 13px;
+	letter-spacing: -0.01em;
+	margin-left: 4px;
+}
+.pn .pn-sj2 .sj2-phase-h .totals b.g { color: var(--green); }
+.pn .pn-sj2 .sj2-phase-h .totals b.y { color: var(--gold); }
+.pn .pn-sj2 .sj2-grid {
+	display: grid;
+	grid-template-columns: 64px 1fr 1fr;
+	gap: 6px 14px;
+	align-items: center;
+}
+.pn .pn-sj2 .sj2-col-hd {
+	font-family: var(--mono);
+	font-size: 9.5px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	padding-bottom: 4px;
+	border-bottom: 1.5px solid var(--ink);
+}
+.pn .pn-sj2 .sj2-col-hd.empty { border-bottom: none; }
+.pn .pn-sj2 .sj2-row-lbl {
+	font-family: var(--display);
+	font-size: 14px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--ink);
+}
+.pn .pn-sj2 .sj2-cell { position: relative; }
+.pn .pn-sj2 .sj2-bar {
+	height: 22px;
+	background: var(--paper-3);
+	border: 1.5px solid var(--ink);
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+.pn .pn-sj2 .sj2-bar .fill {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	padding-right: 8px;
+	min-width: 8%;
+}
+.pn .pn-sj2 .sj2-cell.earned .sj2-bar .fill { background: var(--green); }
+.pn .pn-sj2 .sj2-cell.available .sj2-bar .fill {
+	background: var(--gold);
+	background-image: repeating-linear-gradient(45deg, var(--gold) 0 8px, #b9831f 8px 10px);
+}
+.pn .pn-sj2 .sj2-bar .fill .lbl {
+	font-family: var(--display);
+	font-size: 12px;
+	letter-spacing: -0.005em;
+	color: var(--paper);
+	line-height: 1;
+	white-space: nowrap;
+	text-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+}
+.pn .pn-sj2 .sj2-cell.available .sj2-bar .fill .lbl {
+	color: var(--ink);
+	text-shadow: none;
+}
+.pn .pn-sj2 .sj2-bar .fill .lbl .frac {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	opacity: 0.85;
+	margin-left: 2px;
+}
+.pn .pn-sj2 .sj2-bar .empty {
+	margin: 0 auto;
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	color: var(--paper-3);
+}
+.pn .pn-sj2 .sj2-cell .sj2-tip {
+	position: absolute;
+	bottom: calc(100% + 8px);
+	left: 50%;
+	transform: translateX(-50%);
+	background: var(--paper);
+	color: var(--ink);
+	border: 2px solid var(--ink);
+	box-shadow: 3px 3px 0 var(--ink);
+	padding: 8px 11px 7px;
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.02em;
+	line-height: 1.45;
+	white-space: nowrap;
+	pointer-events: none;
+	opacity: 0;
+	visibility: hidden;
+	transition: opacity 0.12s ease, visibility 0.12s ease;
+	z-index: 20;
+}
+.pn .pn-sj2 .sj2-cell .sj2-tip b {
+	font-family: var(--display);
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	color: var(--ink);
+}
+.pn .pn-sj2 .sj2-cell .sj2-tip em {
+	color: var(--green);
+	font-style: normal;
+	font-weight: 600;
+}
+.pn .pn-sj2 .sj2-cell.available .sj2-tip em { color: var(--gold); }
+.pn .pn-sj2 .sj2-cell:hover .sj2-tip {
+	opacity: 1;
+	visibility: visible;
+}
+
+/* ============================================================
+ * PODIUM (Phase 5)
+ * ============================================================ */
+.pn .pn-podium {
+	background: var(--navy);
+	color: var(--paper);
+	border: 3px solid var(--ink);
+	box-shadow: 10px 10px 0 var(--ink);
+	padding: 28px 36px 26px;
+	position: relative;
+	margin-bottom: 22px;
+	overflow: hidden;
+}
+.pn .pn-podium::before {
+	content: '';
+	position: absolute;
+	inset: 0;
+	background-image: repeating-linear-gradient(135deg, transparent 0 20px, rgba(212, 154, 46, 0.08) 20px 21px);
+	pointer-events: none;
+}
+.pn .pn-podium .pod-h {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: end;
+	gap: 24px;
+	position: relative;
+	z-index: 1;
+	padding-bottom: 18px;
+	border-bottom: 2px solid var(--gold);
+	margin-bottom: 26px;
+}
+.pn .pn-podium .pod-h .label {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--gold);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+.pn .pn-podium .pod-h .label .pip {
+	width: 8px;
+	height: 8px;
+	background: var(--red);
+	border-radius: 50%;
+}
+.pn .pn-podium .pod-h h1 {
+	font-family: var(--display);
+	font-size: 48px;
+	line-height: 0.95;
+	letter-spacing: -0.015em;
+	text-transform: uppercase;
+	margin: 8px 0 0;
+}
+.pn .pn-podium .pod-h h1 em {
+	color: var(--gold);
+	font-style: normal;
+}
+.pn .pn-podium .pod-h .meta {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--paper-3);
+	text-align: right;
+}
+.pn .pn-podium .pod-h .meta b {
+	display: block;
+	font-family: var(--display);
+	font-size: 20px;
+	letter-spacing: 0;
+	color: var(--paper);
+	margin-top: 4px;
+}
+.pn .pn-podium .pod-row {
+	display: grid;
+	grid-template-columns: 1fr 1.25fr 1fr;
+	gap: 16px;
+	align-items: end;
+	position: relative;
+	z-index: 1;
+}
+.pn .pn-podium .pod-step {
+	background: var(--paper);
+	color: var(--ink);
+	border: 2.5px solid var(--ink);
+	padding: 16px 18px 14px;
+	position: relative;
+	box-shadow: 5px 5px 0 var(--ink);
+}
+.pn .pn-podium .pod-step.first {
+	background: var(--gold);
+	padding: 26px 22px 20px;
+	box-shadow: 6px 6px 0 var(--red);
+}
+.pn .pn-podium .pod-step.second {
+	background: var(--paper-2);
+	transform: translateY(14px);
+}
+.pn .pn-podium .pod-step.third {
+	background: var(--paper);
+	transform: translateY(14px);
+}
+.pn .pn-podium .pod-step .rank-badge {
+	position: absolute;
+	top: -14px;
+	left: 18px;
+	background: var(--ink);
+	color: var(--paper);
+	font-family: var(--display);
+	font-size: 13px;
+	padding: 5px 11px 4px;
+	letter-spacing: 0.05em;
+	border: 2px solid var(--paper);
+	white-space: nowrap;
+}
+.pn .pn-podium .pod-step.first .rank-badge {
+	background: var(--red);
+	color: var(--paper);
+	font-size: 16px;
+	padding: 7px 14px 6px;
+}
+.pn .pn-podium .pod-step .trophy {
+	position: absolute;
+	top: -38px;
+	right: 18px;
+	width: 56px;
+	height: 56px;
+	background: var(--gold);
+	color: var(--ink);
+	display: grid;
+	place-items: center;
+	font-family: var(--display);
+	font-size: 30px;
+	border: 3px solid var(--ink);
+	box-shadow: 4px 4px 0 var(--red);
+}
+.pn .pn-podium .pod-step .nm {
+	font-family: var(--display);
+	font-size: 24px;
+	line-height: 1;
+	text-transform: uppercase;
+	letter-spacing: 0.01em;
+	margin-top: 8px;
+}
+.pn .pn-podium .pod-step.first .nm { font-size: 32px; }
+.pn .pn-podium .pod-step .h {
+	font-family: var(--mono);
+	font-size: 10.5px;
+	letter-spacing: 0.06em;
+	color: var(--ink-2);
+	margin-top: 4px;
+	text-transform: none;
+}
+.pn .pn-podium .pod-step .pts {
+	margin-top: 14px;
+	display: flex;
+	align-items: baseline;
+	gap: 6px;
+	font-family: var(--display);
+}
+.pn .pn-podium .pod-step .pts .v {
+	font-size: 44px;
+	line-height: 1;
+	letter-spacing: -0.02em;
+	color: var(--red);
+}
+.pn .pn-podium .pod-step.first .pts .v {
+	font-size: 56px;
+	color: var(--ink);
+}
+.pn .pn-podium .pod-step .pts .u {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+.pn .pn-podium .pod-step .crown-tag {
+	position: absolute;
+	top: 14px;
+	right: 16px;
+	font-family: var(--mono);
+	font-size: 9px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--ink-2);
+}
+.pn .pn-podium .winner-line {
+	margin-top: 22px;
+	padding-top: 16px;
+	border-top: 2px solid var(--gold);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	position: relative;
+	z-index: 1;
+	font-family: var(--display);
+	font-size: 16px;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+	color: var(--paper);
+}
+.pn .pn-podium .winner-line .wb {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+.pn .pn-podium .winner-line .wb em {
+	font-style: normal;
+	color: var(--gold);
+}
+.pn .pn-podium .winner-line .picked {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.1em;
+	color: var(--paper-3);
+	text-transform: uppercase;
+}
+.pn .pn-podium .winner-line .picked b {
+	color: var(--gold);
+	font-family: var(--display);
+	font-size: 14px;
+}
+.pn .pn-podium .pn-pod-cta {
+	background: var(--gold);
+	color: var(--ink);
+	border: 2.5px solid var(--paper);
+	padding: 9px 16px 8px;
+	font-family: var(--display);
+	font-size: 13px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	box-shadow: 3px 3px 0 var(--red);
+	cursor: pointer;
+	white-space: nowrap;
+	text-decoration: none;
+}
+
+/* ============================================================
+ * POINTS BY SOURCE
+ * ============================================================ */
+.pn .pn-source {
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--ink);
+	padding: 16px 18px;
+	display: flex;
+	flex-direction: column;
+}
+.pn .pn-source .src-row + .src-row { margin-top: 11px; }
+.pn .pn-source .src-row .lbl {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	margin-bottom: 4px;
+}
+.pn .pn-source .src-row .lbl .nm {
+	font-family: var(--display);
+	font-size: 13px;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+}
+.pn .pn-source .src-row .lbl .v {
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink-2);
+	letter-spacing: 0.04em;
+}
+.pn .pn-source .src-row .lbl .v b {
+	color: var(--ink);
+	font-family: var(--display);
+	font-size: 14px;
+	letter-spacing: -0.01em;
+}
+.pn .pn-source .src-row .bar {
+	height: 14px;
+	background: var(--paper-2);
+	border: 1.5px solid var(--ink);
+	position: relative;
+}
+.pn .pn-source .src-row .bar .fill {
+	position: absolute;
+	left: 0;
+	top: 0;
+	bottom: 0;
+}
+.pn .pn-source .src-row .bar .fill.match { background: var(--red); }
+.pn .pn-source .src-row .bar .fill.p1 { background: var(--navy); }
+.pn .pn-source .src-row .bar .fill.p2 {
+	background: var(--navy);
+	background-image: repeating-linear-gradient(45deg, var(--navy) 0 5px, #0d1d44 5px 7px);
+	opacity: 0.78;
+}
+.pn .pn-source .src-row .bar .fill.bonus { background: var(--gold); }
+.pn .pn-source .total {
+	margin-top: auto;
+	padding-top: 12px;
+	border-top: 2px solid var(--ink);
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	font-family: var(--display);
+	font-size: 16px;
+	text-transform: uppercase;
+}
+.pn .pn-source .total .v {
+	font-size: 24px;
+	color: var(--red);
+	letter-spacing: -0.02em;
+}
+.pn .pn-source .foot {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	text-align: right;
+	margin-top: 8px;
+}
+.pn .pn-source .foot a {
+	color: var(--ink);
+	border-bottom: 1px solid var(--ink);
+	text-decoration: none;
+	padding-bottom: 1px;
+}
+
+/* ============================================================
+ * HIGHLIGHTS (Phase 5)
+ * ============================================================ */
+.pn .pn-hlights {
+	background: var(--paper);
+	border: 2.5px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--ink);
+	padding: 18px 20px;
+	display: flex;
+	flex-direction: column;
+}
+.pn .pn-hlights .label {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding-bottom: 8px;
+	border-bottom: 2px solid var(--ink);
+	margin-bottom: 14px;
+}
+.pn .pn-hlights .label .pip {
+	width: 8px;
+	height: 8px;
+	background: var(--gold);
+	border-radius: 50%;
+}
+.pn .pn-hlights .h-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+	flex: 1;
+}
+.pn .pn-hlights .h-card {
+	background: var(--paper-2);
+	border: 2px solid var(--ink);
+	padding: 12px 14px;
+	position: relative;
+}
+.pn .pn-hlights .h-card .h-l {
+	font-family: var(--mono);
+	font-size: 9px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+.pn .pn-hlights .h-card .h-v {
+	font-family: var(--display);
+	font-size: 28px;
+	line-height: 0.95;
+	letter-spacing: -0.02em;
+	margin-top: 4px;
+}
+.pn .pn-hlights .h-card .h-v em {
+	color: var(--red);
+	font-style: normal;
+}
+.pn .pn-hlights .h-card .h-v.gold em { color: var(--gold); }
+.pn .pn-hlights .h-card .h-d {
+	font-family: var(--mono);
+	font-size: 10.5px;
+	letter-spacing: 0.04em;
+	color: var(--ink-2);
+	margin-top: 6px;
+	line-height: 1.4;
+}
+.pn .pn-hlights .h-card .h-d b { color: var(--ink); }
+.pn .pn-hlights .h-card .tag {
+	position: absolute;
+	top: -8px;
+	right: -8px;
+	background: var(--gold);
+	color: var(--ink);
+	font-family: var(--display);
+	font-size: 10px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	padding: 2px 7px;
+	border: 2px solid var(--ink);
+}
+.pn .pn-hlights .h-card .tag.red {
+	background: var(--red);
+	color: var(--paper);
+}
+.pn .pn-hlights .h-card .tag.green {
+	background: var(--green);
+	color: var(--paper);
+}
+
+/* ============================================================
+ * MEMORIAL STRIP (Phase 5)
+ * ============================================================ */
+.pn .pn-final-strip {
+	background: var(--paper-2);
+	border: 2px solid var(--ink);
+	padding: 12px 18px;
+	margin-top: 22px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ink-2);
+}
+.pn .pn-final-strip b { color: var(--ink); }
+.pn .pn-final-strip .seal {
+	width: 38px;
+	height: 38px;
+	background: var(--red);
+	color: var(--paper);
+	display: grid;
+	place-items: center;
+	font-family: var(--display);
+	font-size: 18px;
+	border: 2.5px solid var(--ink);
+	margin-right: 14px;
+}
+.pn .pn-final-strip .left {
+	display: flex;
+	align-items: center;
+}
+
+/* ============================================================
+ * v4 dashboard body padding
+ * ============================================================ */
+.pn .pn-dash-v4 {
+	padding: 22px 28px;
+}
+@media (max-width: 900px) {
+	.pn .pn-kpi-row-v4 {
+		/* 3 cells across × 2 rows on mobile. Source order yields:
+		 *   Row 1 — Rank · Total · Trajectory
+		 *   Row 2 — Outcomes · Exact · Rarity bonus */
+		grid-template-columns: repeat(3, 1fr);
+		gap: 8px;
+	}
+	/* Mobile KPI sizing — the 1/3-column cells (~110px outer at 375px
+	 * viewport, ~80px content) can't host the desktop 54px value font
+	 * plus the delta chip on one line. Scale value / chip / padding
+	 * down in step so the topline stays single-row and the cell still
+	 * communicates a hierarchy (value dominant, chip secondary). */
+	.pn .pn-kpi-v4 {
+		padding: 8px 10px;
+		min-height: 88px;
+		gap: 2px;
+	}
+	.pn .pn-kpi-v4 .l {
+		font-size: 9px;
+		letter-spacing: 0.1em;
+		gap: 4px;
+	}
+	.pn .pn-kpi-v4 .l .pip {
+		width: 6px;
+		height: 6px;
+	}
+	.pn .pn-kpi-v4 .topline {
+		gap: 4px;
+	}
+	.pn .pn-kpi-v4 .v {
+		font-size: 32px;
+	}
+	.pn .pn-kpi-v4 .v .sm {
+		font-size: 12px;
+	}
+	.pn .pn-kpi-v4 .v .sm.unit {
+		font-size: 10px;
+		margin-left: 2px;
+	}
+	.pn .pn-kpi-v4 .delta {
+		font-size: 11px;
+		padding: 2px 5px 1px;
+		border-width: 1.5px;
+		top: -3px;
+	}
+	.pn .pn-kpi-v4 .sub {
+		font-size: 9px;
+		margin-top: 2px;
+	}
+	.pn .pn-kpi-v4.trajectory .spark-wrap,
+	.pn .pn-kpi-v4.trajectory .spark-wrap svg {
+		height: 32px;
+	}
+	.pn .pn-kpi-v4.trajectory .trj-sub {
+		font-size: 9px;
+	}
+	.pn .pn-dash-cols,
+	.pn .pn-dash-cols.two,
+	.pn .pn-dash-cols.two-thirds,
+	.pn .pn-dash-cols.between,
+	.pn .pn-dash-cols.spectator {
+		grid-template-columns: 1fr;
+	}
+	/* Groups So Far: stack the navy label, cells, and red-total into three
+	   horizontal bars instead of the desktop 3-column row. Cells wrap from a
+	   single 12-wide row into 6×2 — denser than 4×3 and a closer match to
+	   the skinny-strip metaphor. */
+	.pn .pn-gss {
+		grid-template-columns: 1fr;
+	}
+	.pn .pn-gss .gss-lbl {
+		border-right: 0;
+		border-bottom: 2.5px solid var(--ink);
+		padding: 8px 14px;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+	}
+	.pn .pn-gss .gss-lbl .sub { margin-top: 0; }
+	.pn .pn-gss .gss-cells {
+		grid-template-columns: repeat(6, 1fr);
+	}
+	.pn .pn-gss .gss-cell:nth-child(6n) { border-right: 0; }
+	.pn .pn-gss .gss-cell:nth-child(n + 7) {
+		border-top: 1.5px dashed var(--paper-3);
+	}
+	.pn .pn-gss .gss-tot {
+		border-left: 0;
+		border-top: 2.5px solid var(--ink);
+		padding: 8px 14px;
+		flex-direction: row;
+		align-items: center;
+		justify-content: space-between;
+		text-align: left;
+	}
+	.pn .pn-gss .gss-tot .v { margin-top: 0; }
+	/* Match the mobile .mtab-row min-height (44px) so 4 standings rows
+	 * stay aligned with 4 match-table rows when the cards are stacked
+	 * vertically on small viewports. The internal head bar matches
+	 * .mtab-head's mobile padding/font so the standings card stays the
+	 * same total height as the match-table card. */
+	.pn .pn-top5 .row {
+		min-height: 44px;
+	}
+	.pn .pn-top5 .head {
+		padding: 6px 8px 5px;
+		font-size: 10px;
+		letter-spacing: 0.1em;
+	}
+	.pn .pn-hero-v4 .hero-row {
+		grid-template-columns: 1fr;
+	}
+	.pn .pn-hero-v4 .progress-block {
+		grid-template-columns: 1fr;
+	}
+	.pn .pn-podium .pod-row {
+		grid-template-columns: 1fr;
+	}
+	.pn .pn-dash-v4 {
+		/* Mobile horizontal padding pulled in to 3px — about the floor
+		 * before the sticker shadow on the right side starts clipping
+		 * against the viewport edge. */
+		padding: 14px 3px;
+	}
+	/* Match-table compression: shrink the fixed columns + gaps, drop fonts
+	 * one tier, and pin flags down to 18×12 so the row stops overflowing
+	 * its grid slot. The whole table was sized for the desktop's
+	 * ~450px 1/3-grid column; on mobile each row has to host the same
+	 * five cells inside a full-width container that is itself ~30% smaller
+	 * than the desktop slot, so every fixed dimension shrinks in step. */
+	/* Mobile parallels the desktop subgrid setup but with tighter
+	 * spacing. `.mtab` horizontal padding is 4 (the "internal card
+	 * padding" — gap between card border and first/last cell). The
+	 * head/row negative-margin matches so backgrounds still extend to
+	 * the card edges, and the row's own internal padding restores
+	 * subgrid alignment. Column-gap stays at 8 — inter-cell breathing
+	 * room is left slightly wider than the table-edge gutter, so cells
+	 * read as individually grouped rather than smushed. */
+	.pn .mtab {
+		column-gap: 8px;
+		padding: 0 4px;
+	}
+	.pn .mtab-head {
+		margin: 0 -4px;
+		padding: 6px 4px 5px;
+		font-size: 10px;
+		letter-spacing: 0.1em;
+	}
+	.pn .mtab-row {
+		margin: 0 -4px;
+		padding: 6px 4px;
+		min-height: 44px;
+	}
+	.pn .mtab-empty {
+		margin: 0 -4px;
+		padding: 18px 4px;
+	}
+	.pn .mtab .grp {
+		width: 22px;
+		height: 20px;
+		font-size: 11px;
+		border-width: 1.25px;
+	}
+	.pn .mtab .grp.ko {
+		font-size: 10px;
+		min-width: 22px;
+		padding: 0 4px;
+	}
+	.pn .mtab .c-match { gap: 5px; }
+	.pn .mtab .team { font-size: 13px; gap: 4px; }
+	.pn .mtab .sc {
+		font-size: 14px;
+		padding: 3px 6px 2px;
+		box-shadow: 1.5px 1.5px 0 var(--ink);
+	}
+	.pn .mtab .sc.live { box-shadow: 1.5px 1.5px 0 var(--red); }
+	.pn .mtab .sc.vs { font-size: 10px; padding: 2px 6px; }
+	.pn .mtab .pick { font-size: 12px; padding: 2px 6px 1px; border-width: 1.5px; }
+	.pn .mtab .pick.empty { font-size: 12px; }
+	.pn .mtab .pts {
+		font-size: 12px;
+		padding: 3px 7px 2px;
+		min-width: 28px;
+		box-shadow: 1.5px 1.5px 0 var(--ink);
+		border-width: 1.5px;
+	}
+	.pn .mtab .pts.miss { box-shadow: 1.5px 1.5px 0 var(--red); }
+	.pn .mtab .pts.dash { font-size: 14px; }
+	.pn .mtab .cta {
+		font-size: 11px;
+		padding: 4px 7px 3px;
+		border-width: 1.5px;
+		box-shadow: 1.5px 1.5px 0 var(--ink);
+	}
+	.pn .mtab .cta.secondary { box-shadow: 1.5px 1.5px 0 var(--ink-3); }
+	.pn .mtab .status { font-size: 11px; }
+	.pn .mtab .status.ft { font-size: 13px; }
+	.pn .mtab .status.live { font-size: 13px; }
+	.pn .mtab .status.live::before {
+		width: 7px;
+		height: 7px;
+		margin-right: 4px;
+	}
+	/* PnFlag sets dimensions via inline style, so external CSS needs
+	 * !important to take effect at the mobile breakpoint. Narrower flags
+	 * make the Match cell fit while still being recognizable. */
+	.pn .mtab .pn-flag {
+		width: 18px !important;
+		height: 12px !important;
+	}
+	/* Release the desktop height-anchor on mobile. In the stacked layout
+	 * each card is its own row, so there's nothing for the roster to
+	 * "fit alongside" — its desktop rules collapse it to just the header
+	 * bar because the inner `flex: 1 1 0` resolves to zero with no parent
+	 * height. Mobile = roster shows its full table and the page scrolls. */
+	.pn .pn-roster {
+		flex: 0 0 auto;
+		overflow: visible;
+	}
+	.pn .pn-roster .roster-scroll {
+		flex: 0 0 auto;
+		overflow: visible;
+	}
+}
+
+/* Phone-only fluid clock. The funnel hero clock has 4 fixed-width digit
+ * cells (~338px combined) that overflow narrow viewports once hero padding
+ * is taken out. Below 540px we switch the row to a 4-column grid with each
+ * cell flexing to `1fr`, and use clamp() to scale font / padding / unit
+ * label with the viewport. The cells stretch to fill the hero width on
+ * every phone size and the digits grow with available room rather than
+ * locking to one shrunken size. `min-width: 0` is required because the
+ * desktop rule sets `min-width: 56px`, which a 1fr track would otherwise
+ * honour over the flex factor. */
+@media (max-width: 540px) {
+	.pn .pn-hero-v4 .clock {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 6px;
+	}
+	.pn .pn-hero-v4 .clock .digit {
+		min-width: 0;
+		padding: clamp(8px, 2.6vw, 14px) clamp(6px, 2vw, 12px) clamp(6px, 2vw, 10px);
+		font-size: clamp(28px, 9vw, 44px);
+	}
+	.pn .pn-hero-v4 .clock .digit .u {
+		margin-top: clamp(4px, 1.3vw, 6px);
+		font-size: clamp(8px, 2.2vw, 9px);
+	}
+}
+

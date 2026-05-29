@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     # service treats this as a no-op and returns a sentinel rather than
     # erroring, so dev/test environments without a key still boot cleanly.
     resend_api_key: str = ""
-    email_from: str = "The Predictor <predictor@laarohi.xyz>"
+    email_from: str = "CxF Predictaa <predictor@laarohi.xyz>"
     # Safety belt for live-fire tests of the deadline batch sender.
     # Comma-separated allowlist of recipient addresses; when set,
     # batch sends skip anyone not in the list (with a logged count).

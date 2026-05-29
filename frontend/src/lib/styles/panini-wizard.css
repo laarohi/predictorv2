@@ -17,21 +17,31 @@
  * against the hero. Uses negative margins to escape .pn-body's 28px
  * padding so the ink bleeds edge to edge. */
 .pn .pn-wm-wrap {
-	/* Flush full-bleed by default — escapes .pn-body's 28px padding on
-	 * all sides so the ink hero sits edge-to-edge against the chrome,
-	 * matching the Results & Fixtures mobile hero. */
-	margin: -28px -28px 14px;
+	/* Full-bleed on all three sides (top + horizontals) so the navy ink
+	 * hero extends to the viewport edges. The -14px top escapes pn-body's
+	 * current 14px top padding (was -28px when body padding was 28px).
+	 * Horizontal margin uses var(--pn-body-neg-x) so the hero stays flush
+	 * with body padding whether desktop (28px) or mobile (20px).
+	 * The hero's own padding-top (below) handles status-bar clearance via
+	 * env(safe-area-inset-top), so PREDICT doesn't sit under the notch. */
+	margin: -14px var(--pn-body-neg-x) 14px;
 }
-/* When the restoration banner is rendered above us, drop the negative
- * top margin so we don't pull up under it. The banner is transient
- * (auto-dismissed) so most sessions render with the flush layout. */
+/* When the restoration banner is rendered above us, drop the negative top
+ * margin so we sit naturally below the banner (which provides its own
+ * navy-halo wrap that pulls itself to the viewport top). */
 .pn .pn-wm-wrap.has-banner {
-	margin: 0 -28px 14px;
+	margin: 0 var(--pn-body-neg-x) 14px;
 }
 .pn .pn-wm-hero {
 	background: var(--ink);
 	color: var(--paper);
-	padding: 14px 14px 14px;
+	/* Top padding uses max(14px, safe-area) — fixed 14px floor for
+	 * desktop / non-iOS, scales up to clear the notch (~50px) on iPhones
+	 * with safe-area-inset-top. Without this, PREDICT renders under the
+	 * notch. The .has-banner case still gets this padding but the banner
+	 * above already cleared the status bar, so the extra room here is
+	 * harmless visual breathing room. */
+	padding: max(14px, env(safe-area-inset-top)) 14px 14px;
 }
 .pn .pn-wm-hero .top-row {
 	display: flex;
@@ -1668,6 +1678,25 @@
 	font-size: 13px;
 	line-height: 1.45;
 	color: var(--ink);
+}
+/* Mobile-only navy "halo" wrapping the banner sticker. On mobile, the
+ * banner sits at the top of the predictions page, above the navy hero.
+ * Without this wrap, the area around the cream banner sticker is pn-body's
+ * cream paper — which looks like a wrong visual context for the navy hero
+ * below. The wrap pulls itself to the viewport edges with navy bg, so the
+ * banner becomes a cream sticker on a navy background that matches the
+ * hero. On desktop, the wrap is invisible (no media-query rules apply). */
+@media (max-width: 699px) {
+	.pn .pn-restore-banner-wrap {
+		background: var(--ink);
+		margin: -14px var(--pn-body-neg-x) 0;
+		padding: max(14px, env(safe-area-inset-top)) 14px 14px;
+	}
+	/* Drop the sticker's own margin-bottom — the wrap's bottom padding
+	 * now provides the space between banner and hero. */
+	.pn .pn-restore-banner-wrap .pn-restore-banner {
+		margin-bottom: 0;
+	}
 }
 .pn .pn-restore-banner .content {
 	display: flex;

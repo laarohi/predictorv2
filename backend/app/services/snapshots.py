@@ -54,6 +54,8 @@ async def take_daily_snapshots(session: AsyncSession) -> int:
             "user_id": entry.user_id,
             "position": entry.position,
             "total_points": entry.total_points,
+            "exact_scores": entry.exact_scores,
+            "correct_outcomes": entry.correct_outcomes,
             "captured_date": today,
             "captured_at": utc_now(),
         }
@@ -77,20 +79,26 @@ async def get_user_trajectory(
     session: AsyncSession,
     user_id: uuid.UUID,
     days: int = 7,
+    all_time: bool = False,
 ) -> list[LeaderboardSnapshot]:
     """Return one user's snapshot history for the last `days` days, oldest first.
+
+    When `all_time` is True, ignores `days` and returns the full history.
+    Used by the post-comp dashboard's peak-rank lookup.
 
     Includes today's snapshot if one exists; doesn't fabricate missing days.
     The API endpoint appends a live "now" point on top of this so the chart's
     final dot is always the current rank.
     """
-    floor_date = utc_now().date() - timedelta(days=days - 1)
-    result = await session.execute(
+    stmt = (
         select(LeaderboardSnapshot)
         .where(LeaderboardSnapshot.user_id == user_id)
-        .where(LeaderboardSnapshot.captured_date >= floor_date)
-        .order_by(LeaderboardSnapshot.captured_date.asc())
     )
+    if not all_time:
+        floor_date = utc_now().date() - timedelta(days=days - 1)
+        stmt = stmt.where(LeaderboardSnapshot.captured_date >= floor_date)
+    stmt = stmt.order_by(LeaderboardSnapshot.captured_date.asc())
+    result = await session.execute(stmt)
     return list(result.scalars().all())
 
 

@@ -37,12 +37,14 @@ Every fair-play-tier descent emits a TieWarning so callers can surface
 would have needed conduct data we don't track" to the user.
 """
 
+import uuid
 from typing import TypedDict
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.models.fixture import Fixture, MatchStatus
+from app.models.prediction import MatchPrediction, PredictionPhase
 from app.models.score import Score
 
 
@@ -105,7 +107,10 @@ class TeamStanding:
 def _apply_fifa_tiebreakers(
     teams: list[dict],
     *,
-    group_matches: list[tuple[Fixture, Score]] | None = None,
+    # Accepts (fixture, scoreLike) tuples where scoreLike just needs
+    # `.home_score` and `.away_score` — Score and MatchPrediction both
+    # satisfy this. Lets predicted standings reuse the same chain.
+    group_matches: list[tuple[Fixture, Score | MatchPrediction]] | None = None,
     context: str,
     fifa_rankings: list[str] | None = None,
 ) -> tuple[list[dict], list[TieWarning]]:
@@ -114,15 +119,16 @@ def _apply_fifa_tiebreakers(
     Args:
         teams: team standings dicts (must contain 'team', 'group', 'points',
             'goal_difference', 'goals_for').
-        group_matches: (fixture, score) tuples used for the H2H step. Pass
-            None or [] for cross-group sorts like the third-place ranking —
-            Article 13 doesn't apply H2H across groups.
+        group_matches: (fixture, score-or-prediction) tuples used for the H2H
+            step. Pass None or [] for cross-group sorts like the third-place
+            ranking — Article 13 doesn't apply H2H across groups.
         context: tagged onto every TieWarning so callers can distinguish
             in-group vs third-place ties ('group_standings',
             'third_place_qualifying').
         fifa_rankings: ordered list of team names, position 0 = rank #1.
             Used by Step 3 g/h. Defaults to empty (falls through to
-            alphabetical when ranking data isn't available).
+            alphabetical); production callers should resolve via
+            `_resolve_fifa_rankings(session)` and pass the result.
 
     Returns (sorted_teams, warnings). Each fair-play-tier descent (where
     we'd need yellow/red-card data we don't track) emits one TieWarning
@@ -163,7 +169,7 @@ def _segment_end(items: list[dict], start: int, *, key) -> int:
 
 def _resolve_points_tied_subset(
     tied: list[dict],
-    group_matches: list[tuple[Fixture, Score]] | None,
+    group_matches: list[tuple[Fixture, Score | MatchPrediction]] | None,
     context: str,
     fifa_rankings: list[str],
     warnings: list[TieWarning],
@@ -315,7 +321,7 @@ async def _resolve_fifa_rankings(session: AsyncSession) -> list[str]:
 
 def _compute_h2h_stats(
     tied_teams: list[dict],
-    matches: list[tuple[Fixture, Score]],
+    matches: list[tuple[Fixture, Score | MatchPrediction]],
 ) -> dict[str, dict[str, int]]:
     """Build a mini-table of points/GD/goals from matches BETWEEN the tied teams only."""
     tied_names = {t["team"] for t in tied_teams}
@@ -414,7 +420,7 @@ async def get_actual_group_standings_with_warnings(
 
     # Sort each group with FIFA tiebreakers and accumulate warnings.
     # Resolve rankings once at the async boundary so the (sync) tiebreaker
-    # chain doesn't need a session.
+    # chain doesn't need a session — DB first, YAML fallback.
     rankings = await _resolve_fifa_rankings(session)
     out_standings: dict[str, list[dict]] = {}
     out_warnings: list[TieWarning] = []
@@ -448,6 +454,84 @@ async def get_qualifying_third_place_teams(
     """Get the 8 best third-place teams that qualify for knockout stage."""
     qualifying, _warnings = await get_qualifying_third_place_teams_with_warnings(session)
     return qualifying
+
+
+async def get_predicted_group_standings(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+) -> tuple[dict[str, list[dict]], list[TieWarning]]:
+    """Compute a user's *predicted* group standings from their Phase 1
+    group match score predictions.
+
+    Mirrors `get_actual_group_standings_with_warnings` but reads
+    `MatchPrediction` rows instead of `Score` rows. Used by the
+    group_position scoring bonus so that a thoughtful set of score picks
+    implicitly produces a position prediction with no extra UI needed.
+
+    `_apply_fifa_tiebreakers` accepts the predictions for H2H lookup —
+    MatchPrediction duck-types as Score (both expose `.home_score` and
+    `.away_score`), so no scoring-side adapter is needed.
+    """
+    result = await session.execute(
+        select(Fixture, MatchPrediction)
+        .join(MatchPrediction, MatchPrediction.fixture_id == Fixture.id)
+        .where(
+            Fixture.stage == "group",
+            MatchPrediction.user_id == user_id,
+            MatchPrediction.phase == PredictionPhase.PHASE_1,
+        )
+    )
+    rows = result.all()
+
+    standings_by_group: dict[str, dict[str, TeamStanding]] = {}
+    matches_by_group: dict[str, list[tuple[Fixture, MatchPrediction]]] = {}
+
+    for fixture, prediction in rows:
+        if not fixture.group:
+            continue
+        group = fixture.group
+        standings_by_group.setdefault(group, {})
+        matches_by_group.setdefault(group, []).append((fixture, prediction))
+
+        for name in (fixture.home_team, fixture.away_team):
+            if name not in standings_by_group[group]:
+                standings_by_group[group][name] = TeamStanding(name, group)
+
+        home = standings_by_group[group][fixture.home_team]
+        away = standings_by_group[group][fixture.away_team]
+
+        home.played += 1
+        away.played += 1
+        home.goals_for += prediction.home_score
+        home.goals_against += prediction.away_score
+        away.goals_for += prediction.away_score
+        away.goals_against += prediction.home_score
+
+        if prediction.home_score > prediction.away_score:
+            home.won += 1
+            away.lost += 1
+        elif prediction.home_score < prediction.away_score:
+            away.won += 1
+            home.lost += 1
+        else:
+            home.drawn += 1
+            away.drawn += 1
+
+    rankings = await _resolve_fifa_rankings(session)
+    out_standings: dict[str, list[dict]] = {}
+    out_warnings: list[TieWarning] = []
+    for group, teams_dict in standings_by_group.items():
+        teams = [t.to_dict() for t in teams_dict.values()]
+        sorted_teams, warnings = _apply_fifa_tiebreakers(
+            teams,
+            group_matches=matches_by_group.get(group, []),
+            context="group_standings",
+            fifa_rankings=rankings,
+        )
+        out_standings[group] = sorted_teams
+        out_warnings.extend(warnings)
+
+    return out_standings, out_warnings
 
 
 async def get_qualifying_third_place_teams_with_warnings(

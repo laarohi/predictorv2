@@ -1,0 +1,254 @@
+<script lang="ts">
+	/**
+	 * Phase 3 — Between-phases dashboard (v4).
+	 *
+	 * Layout:
+	 *   1. Unsaved-bracket alert (gold, if user has local bracket edits pending)
+	 *   2. Funnel hero (Phase 2 bracket deadline countdown + progress) — the
+	 *      "you just finished Phase 1 with N pts, real groups are in" beat
+	 *   3. KPI row (Phase 1 final values + group-stage trajectory)
+	 *   4. 2-col bottom:
+	 *        - Group stage summary table (12 groups × Outc/Exact/Qual/Total)
+	 *        - Phase 1 "final" leaderboard (Top 5 + you)
+	 */
+	import { onMount } from 'svelte';
+	import PnPageShell from '$components/panini/PnPageShell.svelte';
+	import DwAlert from './widgets/DwAlert.svelte';
+	import DwFunnelHero from './widgets/DwFunnelHero.svelte';
+	import DwKpiRow from './widgets/DwKpiRow.svelte';
+	import DwGroupSummaryTable from './widgets/DwGroupSummaryTable.svelte';
+	import DwTop5 from './widgets/DwTop5.svelte';
+	import type { GroupSummaryRow } from './widgets/DwGroupSummaryTable.svelte';
+
+	import { user } from '$stores/auth';
+	import { fetchAllFixtures, fixtures } from '$stores/fixtures';
+	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
+	import {
+		phase2BracketDeadline,
+		currentTime
+	} from '$stores/phase';
+	import {
+		fetchLeaderboard,
+		currentUserPosition,
+		leaderboard,
+		totalParticipants,
+		setPhase
+	} from '$stores/leaderboard';
+	import { getMyRankTrajectory, type RankTrajectoryResponse } from '$api/leaderboard';
+	import type { Fixture } from '$types';
+
+	let trajectoryData: RankTrajectoryResponse | null = null;
+
+	onMount(async () => {
+		fetchAllFixtures();
+		fetchMatchPredictions();
+		// Pull the Phase 1 (final) leaderboard for the right column — between
+		// phases it represents the locked-in groups standings.
+		await setPhase('phase_1');
+		try {
+			trajectoryData = await getMyRankTrajectory(30);
+		} catch {
+			trajectoryData = null;
+		}
+	});
+
+	// ---- Constants ---------------------------------------------------------
+	const POINTS_PER_OUTCOME = 5;
+	const POINTS_PER_EXACT_BONUS = 10;
+	const TOTAL_P2_BRACKET_SLOTS = 32;
+
+	// ---- Helpers -----------------------------------------------------------
+	function outcomeOf(h: number, a: number): '1' | 'X' | '2' {
+		if (h > a) return '1';
+		if (h < a) return '2';
+		return 'X';
+	}
+
+	function pickResult(f: Fixture): 'exact' | 'outc' | 'miss' | null {
+		if (f.status !== 'finished' || !f.score) return null;
+		const p = $predictionsByFixture.get(f.id);
+		if (!p) return null;
+		const fh = f.score.home_score;
+		const fa = f.score.away_score;
+		if (p.home_score === fh && p.away_score === fa) return 'exact';
+		if (outcomeOf(p.home_score, p.away_score) === outcomeOf(fh, fa)) return 'outc';
+		return 'miss';
+	}
+
+	// ---- Countdown digits --------------------------------------------------
+	$: countdown = (() => {
+		if (!$phase2BracketDeadline) return { d: 0, h: 0, m: 0, s: 0 };
+		const target = new Date($phase2BracketDeadline).getTime();
+		const diff = target - $currentTime.getTime();
+		if (diff <= 0) return { d: 0, h: 0, m: 0, s: 0 };
+		const d = Math.floor(diff / (1000 * 60 * 60 * 24));
+		const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+		const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+		const s = Math.floor((diff % (1000 * 60)) / 1000);
+		return { d, h, m, s };
+	})();
+
+	// ---- Phase 1 group-by-group breakdown ---------------------------------
+	$: groupRows = (() => {
+		const groups = Array.from({ length: 12 }, (_, i) =>
+			String.fromCharCode('A'.charCodeAt(0) + i)
+		);
+		const map = new Map<string, { outcome: number; exact: number }>();
+		groups.forEach((g) => map.set(g, { outcome: 0, exact: 0 }));
+		for (const f of $fixtures) {
+			if (f.stage !== 'group' || !f.group) continue;
+			const r = pickResult(f);
+			if (!r) continue;
+			const bucket = map.get(f.group);
+			if (!bucket) continue;
+			if (r === 'exact') {
+				bucket.outcome += POINTS_PER_OUTCOME;
+				bucket.exact += POINTS_PER_EXACT_BONUS;
+			} else if (r === 'outc') {
+				bucket.outcome += POINTS_PER_OUTCOME;
+			}
+		}
+		const rows: GroupSummaryRow[] = groups.map((g) => {
+			const b = map.get(g)!;
+			return {
+				group: g,
+				outcome: b.outcome,
+				exact: b.exact,
+				qual: 0,           // pending backend per-group breakdown
+				total: b.outcome + b.exact,
+				qualPending: true
+			};
+		});
+		return rows;
+	})();
+
+	$: groupOutcomeTotal = groupRows.reduce((acc, r) => acc + r.outcome, 0);
+	$: groupExactTotal = groupRows.reduce((acc, r) => acc + r.exact, 0);
+	$: bonusPts = $currentUserPosition?.breakdown?.bonus_question_points ?? 0;
+	$: phaseTotal = $currentUserPosition?.breakdown?.phase1?.total ?? (groupOutcomeTotal + groupExactTotal + bonusPts);
+
+	// ---- KPI values --------------------------------------------------------
+	$: rank = $currentUserPosition?.position ?? null;
+	$: rankOf = $totalParticipants || $leaderboard.length || 0;
+	$: rankDelta = $currentUserPosition?.movement ?? 0;
+	$: total = $currentUserPosition?.total_points ?? 0;
+	$: exactCount = $currentUserPosition?.exact_scores ?? 0;
+	$: exactOf = $currentUserPosition?.breakdown?.total_predictions ?? 0;
+	$: correctOutcomes = $currentUserPosition?.correct_outcomes ?? 0;
+	$: rarityPts = $currentUserPosition?.breakdown?.hybrid_bonus_points ?? 0;
+	$: trajectoryRanks = trajectoryData?.points.map((p) => p.position) ?? [];
+
+	// ---- Top 5 (Phase 1 final) + you --------------------------------------
+	// Visible row count is fixed at 5: either 5 top rows when the user is
+	// already in the top 5, OR 4 top rows + the pinned `you` row when the
+	// user is outside. Keeps the standings card at a constant height
+	// regardless of where the user sits on the leaderboard.
+	$: topFive = $leaderboard.slice(0, youRow ? 4 : 5).map((e) => ({
+		userId: e.user_id,
+		position: e.position,
+		name: e.user_name,
+		hint: `${e.exact_scores} exact · ${e.correct_outcomes} outc`,
+		points: e.total_points,
+		isCurrentUser: e.user_id === $user?.id
+	}));
+	$: youRow = (() => {
+		const me = $currentUserPosition;
+		if (!me || me.position <= 5) return null;
+		const gap = me.position > 1 ? ` · −${($leaderboard[0]?.total_points ?? me.total_points) - me.total_points} to #1` : '';
+		return {
+			userId: me.user_id,
+			position: me.position,
+			name: me.user_name,
+			hint: `YOU${gap}`,
+			points: me.total_points,
+			isCurrentUser: true
+		};
+	})();
+
+	// ---- Bracket progress (rough proxy until $phase2BracketPrediction lands) ---
+	// We don't import the bracket store yet — for the funnel hero, show the
+	// total slot count and rely on the Predictions wizard for granular detail.
+	$: bracketFilled = 0; // TODO: wire to bracket store
+	$: stripLock = $phase2BracketDeadline
+		? `<b>Phase 2 bracket locks</b> · ${countdown.d}d ${countdown.h}h ${countdown.m}m`
+		: null;
+</script>
+
+<svelte:head>
+	<title>Predictor — Redo your bracket</title>
+</svelte:head>
+
+<PnPageShell lockLabel={stripLock}>
+	<div class="pn-dash-v4">
+		{#if bracketFilled > 0 && bracketFilled < TOTAL_P2_BRACKET_SLOTS}
+			<DwAlert
+				variant="gold"
+				title="Bracket has unsaved changes"
+				meta="You re-picked the R16 round on this device — <b>save before the deadline</b>"
+				ctaLabel="Save bracket"
+				ctaHref="/predictions"
+			/>
+		{/if}
+
+		<DwFunnelHero
+			label="Phase 2 — Re-pick bracket"
+			titleHtml="Real groups are in.<br />Re-pick the <em>knockout</em>."
+			lede={`Phase 1 ended. Group stage scored you <b style="color: var(--gold);">${phaseTotal} pts</b>. Your original bracket carries over until you update it — but the real R32 matchups are now set.`}
+			{countdown}
+			progressLabel="Phase 2 bracket — picks updated"
+			progressValue={bracketFilled}
+			progressTotal={TOTAL_P2_BRACKET_SLOTS}
+			progressUnit="updated"
+			ctaLabel="Update bracket"
+			ctaHref="/predictions"
+			teasers={[
+				{ label: 'Phase 1 total', value: String(phaseTotal), outOf: 'pts' },
+				{ label: 'Phase 2 multiplier', value: '×0.7' },
+				{ label: 'Bracket in play', value: '—', outOf: 'pts available' }
+			]}
+		/>
+
+		<DwKpiRow
+			{rank}
+			{rankOf}
+			{rankDelta}
+			{total}
+			totalDelta={0}
+			totalSub={'<b>pts</b> · phase 1 final'}
+			exact={exactCount}
+			{exactOf}
+			exactDelta={0}
+			outcomes={correctOutcomes}
+			outcomesOf={exactOf}
+			outcomesDelta={0}
+			rarity={rarityPts}
+			rarityShareOf={total}
+			trajectory={trajectoryRanks}
+			trajectoryMaxRank={rankOf || 30}
+			trajectoryTodayPts={0}
+		/>
+
+		<section class="pn-dash-cols between">
+			<div class="col">
+				<DwGroupSummaryTable
+					rows={groupRows}
+					bonusPoints={bonusPts}
+					phaseTotal={phaseTotal}
+					title="Group stage"
+					titleEm="summary"
+					meta="final · all matches played"
+				/>
+			</div>
+			<div class="col">
+				<DwTop5
+					title="Phase 1"
+					titleEm="final"
+					subtitle="where it stands"
+					rows={topFive}
+					you={youRow}
+					footLabel="See full standings →"
+				/>
+			</div>
+		</section>
+	</div>
+</PnPageShell>

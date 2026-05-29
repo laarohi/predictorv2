@@ -67,9 +67,9 @@
 
 <header class="pn-mast">
 	<a href="/" class="logo" style="text-decoration: none; color: inherit;">
-		<div class="crest">P</div>
+		<div class="crest">CxF</div>
 		<div>
-			<div class="logo-name">The Predictor</div>
+			<div class="logo-name">Predict<span class="aa">aa</span></div>
 			<div class="logo-vol">Vol. I — World Cup 2026</div>
 		</div>
 	</a>

@@ -234,3 +234,53 @@ The new Panini wizard adds a "Bonus" pill with 6 example bonus questions (Who wi
 ### 2026-05-15 — Bracket exposure value is currently a fixed stub
 
 `stubBracketExposure` returns the same `{ pointsAvailable: 235, picksLocked: 22, picksTotal: 22, finalPick: ARG over FRA }` regardless of user. This is intentional: real bracket-exposure math needs to know (a) which knockout-stage points are still in play given the current bracket state, (b) which of the user's picks are still alive. Push back if you want me to compute a less misleading value from the existing bracket prediction data, even without backend support.
+
+### 2026-05-23 — Phase-aware landing dashboard (scaffolding only)
+
+The site had a phase-blind dashboard greeting every user with the same nine widgets regardless of where the competition was in its lifecycle. This change introduces a **UX-phase taxonomy** and a **dispatcher** so each phase can have its own landing layout in follow-up plans.
+
+**Five UX phases** (derived in `frontend/src/lib/stores/phase.ts` via `deriveUxPhase`):
+
+| `UxPhase` value     | Detection                                                | What the dashboard should be |
+|---------------------|----------------------------------------------------------|------------------------------|
+| `pre_tournament`    | `!phase1_locked` (also the defensive default when `phaseStatus` is null) | Registration funnel, prediction completion progress |
+| `group_stage`       | `phase1_locked && !is_phase2_active`                     | Live match watching + leaderboard movement (the current 9-widget dashboard) |
+| `between_phases`    | `is_phase2_active && !phase2_bracket_locked`             | "Redo your bracket using real groups" hero + actual standings |
+| `knockout_stage`    | `is_phase2_active && phase2_bracket_locked`              | Next KO match + three-source points breakdown |
+| `post_competition`  | Final fixture (`stage === 'final'`) status is `finished` | Champion + retrospective; finished-final wins over lingering locked-bracket state |
+
+**File layout (this plan):**
+
+- `frontend/src/lib/stores/phase.ts` — `UxPhase` type, pure `deriveUxPhase(phaseStatus, finalFinished)` helper, `uxPhase` derived store, `isFinalFinished` derived store (small standalone boolean keyed off the final fixture's status), `uxPhaseOverride` writable for dev tooling. **Note**: `uxPhase` was originally derived from `[phaseStatus, fixtures, uxPhaseOverride]` directly. That caused an infinite reactive loop (`RangeError: Maximum call stack size exceeded` in `scheduler.flush`) when `DashGroupStage` mounted, because `fetchAllFixtures` wrote to `fixtures` and the cascading re-evaluation through the dispatcher's transitive subscribers blew the stack. Splitting `isFinalFinished` out as its own derived (outputting a stable boolean) keeps `uxPhase` stable across fixture writes and breaks the loop.
+- `frontend/src/lib/stores/phase.test.ts` — 9 vitest specs covering all 5 phases + defensive defaults + finished-final precedence.
+- `frontend/src/routes/+page.svelte` — thin dispatcher (~40 lines) handling auth gate + `{#if $uxPhase === '...'} <Dashboard*/> {/if}` switch.
+- `frontend/src/lib/components/panini/dashboard/Dashboard{Pre,Group,Between,KO,Post}.svelte` — one component per phase. `DashGroupStage` is today's full dashboard moved verbatim; the other four are scaffolds carrying their phase's CTA + the conditional nudge.
+- `frontend/src/lib/components/panini/dashboard/widgets/DwPredictionNudge.svelte` — cross-phase nudge with calm/urgent visual states; urgent threshold is `unfilledCount > 0 && msUntilDeadline < 12h`.
+- `frontend/src/lib/components/panini/PnDevPhasePill.svelte` + `+layout.svelte` — dev-only `?uxPhase=` URL override and floating pill for cycling phases without backend mutation.
+
+**Out of scope, deferred to follow-up plans:**
+
+- **Per-phase visual layouts.** `DashboardPre`, `DashboardBetween`, `DashboardKO`, `DashboardPost` are scaffolds with a hero CTA + the conditional nudge. Each will get a dedicated layout-design plan that composes widgets specific to that phase's user goal.
+- **Widget extractions** (KPI row, live broadcast, next-lock countdown, rank trajectory, closest rivals, hot pick, bracket exposure, top 5, upcoming table). Deferred because (a) the natural shape of each widget depends on how it's used in each phase's layout, and (b) extracting them upfront would mean churn now and churn again during layout design. They live inside `DashGroupStage.svelte` for now.
+- **New widgets** `DwPhaseSplitDonut`, `DwActualStandings`, `DwRegisterCTA`. Specified in the plan but each is tied to a specific phase's hero — build them when designing that phase's layout.
+- **Phase-aware tweaks to non-dashboard pages** (`/predictions`, `/leaderboard`, `/results`, `/profile`, `/rules`). Each has real design tension worth its own discussion. Plan deliberately scoped to the dashboard alone.
+
+**Dev tooling — how to QA all five phases without mutating real data:**
+
+- **URL override:** `/?uxPhase=between_phases` (or any other `UxPhase` value) seeds `uxPhaseOverride` on mount when `import.meta.env.DEV`. One-shot; pill takes over after.
+- **PnDevPhasePill:** floating bottom-right pill (only visible when DEV) with dropdown to switch phases. Clicking "auto-derive" clears the override.
+- **Backend seed scripts** (in `backend/scripts/`):
+  - `seed_phase_pretournament.py` — clears scores, resets fixtures, sets `phase1_deadline = now + 7d`.
+  - `seed_phase_between.py` — wraps `seed_phase2_test.py` then sets `phase2_bracket_deadline = now + 24h`.
+  - `seed_phase_post.py` — marks the FINAL fixture FINISHED with a score.
+  - All three idempotent with `--undo`.
+
+**Manual end-to-end checklist (per UX phase, what the dashboard should render):**
+
+1. `?uxPhase=pre_tournament` → `DashboardPre` renders. Hero copy: "Welcome to the Predictor". Nudge: calm by default, urgent when Phase 1 deadline < 12h with gaps. CTA links to `/predictions` and `/rules`.
+2. `?uxPhase=group_stage` → `DashGroupStage` renders (today's 9-widget dashboard, unchanged behavior).
+3. `?uxPhase=between_phases` → `DashboardBetween` renders. Hero copy: "Groups are done. Redo your bracket." Nudge scope = phase_2_bracket.
+4. `?uxPhase=knockout_stage` → `DashboardKO` renders. Hero copy: "Every match counts now." Nudge only appears when next KO < 12h with no pick.
+5. `?uxPhase=post_competition` → `DashboardPost` renders. Hero copy: "That's a wrap." Champion strip if leaderboard loaded. No nudge.
+
+The dev pill should show the current `uxPhase`; clicking opens a menu where you can switch. The dot is green when not overriding, red when overriding.

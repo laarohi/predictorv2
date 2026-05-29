@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 
-from app.dependencies import DbSession, OptionalUser
+from app.dependencies import CurrentUser, DbSession, OptionalUser
 from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.score import Score
@@ -16,6 +16,7 @@ from app.models.user import User
 from app.schemas.auth import UserStats
 from app.services.locking import get_fixture_lock_view, is_phase1_locked
 from app.services.profile import calculate_user_stats
+from sqlmodel import func
 
 router = APIRouter()
 
@@ -72,6 +73,81 @@ class UserPredictionsResponse(BaseModel):
 
 
 # Endpoints
+
+
+class RosterEntry(BaseModel):
+    """One row of the pre-tournament registered-users roster.
+
+    Fields are deliberately narrow — no email, no paid status, no
+    auth_provider. Anything in here is visible to every authenticated
+    user; treat it the same way as the public leaderboard.
+    """
+
+    user_id: uuid.UUID
+    name: str
+    match_predictions_filled: int
+    bracket_picks_filled: int
+    is_current_user: bool
+
+
+class RosterResponse(BaseModel):
+    entries: list[RosterEntry]
+    total_active_users: int
+
+
+@router.get("/roster", response_model=RosterResponse)
+async def get_roster(
+    session: DbSession,
+    current_user: CurrentUser,
+) -> RosterResponse:
+    """List of active registered users with their prediction progress.
+
+    Drives the DwRoster widget on the Phase 1 dashboard. Returns only
+    public-safe fields. Sorted alphabetically by name so the order is
+    stable across requests (signup order would leak join time).
+
+    The two count fields are deliberately granular: a player who's
+    finished group-stage picks but hasn't touched the bracket shows as
+    "48 + 0" rather than a single 48/92 ratio that conflates two
+    different completeness signals.
+    """
+    # Active users only — drops `is_active=False` rows (admin-disabled
+    # or otherwise sidelined). Sorted by name for stability.
+    users_result = await session.execute(
+        select(User).where(User.is_active == True).order_by(User.name)  # noqa: E712
+    )
+    users = list(users_result.scalars().all())
+
+    # Aggregate prediction counts in single queries — avoids O(N) round-trips
+    match_counts_result = await session.execute(
+        select(MatchPrediction.user_id, func.count(MatchPrediction.id))
+        .group_by(MatchPrediction.user_id)
+    )
+    match_counts: dict[uuid.UUID, int] = dict(match_counts_result.all())
+
+    # Bracket picks live in TeamPrediction — count only the knockout stages
+    # (group_position picks land here too but they're picked alongside
+    # group-stage scores, not as bracket bracket picks).
+    KO_STAGES = ("round_of_32", "round_of_16", "quarter_final", "semi_final", "final", "winner")
+    bracket_counts_result = await session.execute(
+        select(TeamPrediction.user_id, func.count(TeamPrediction.id))
+        .where(TeamPrediction.stage.in_(KO_STAGES))
+        .where(TeamPrediction.phase == PredictionPhase.PHASE_1)
+        .group_by(TeamPrediction.user_id)
+    )
+    bracket_counts: dict[uuid.UUID, int] = dict(bracket_counts_result.all())
+
+    entries = [
+        RosterEntry(
+            user_id=u.id,
+            name=u.name,
+            match_predictions_filled=match_counts.get(u.id, 0),
+            bracket_picks_filled=bracket_counts.get(u.id, 0),
+            is_current_user=(u.id == current_user.id),
+        )
+        for u in users
+    ]
+    return RosterResponse(entries=entries, total_active_users=len(users))
 
 
 @router.get("/{user_id}/profile", response_model=PublicProfile)

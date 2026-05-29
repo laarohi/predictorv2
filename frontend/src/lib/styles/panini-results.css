@@ -18,7 +18,7 @@
 	 * the fallback (76px = mast ~70 + strip ~6) covers the pre-JS render. */
 	top: var(--pn-chrome-h, 76px);
 	z-index: 10;
-	margin: -28px -28px 16px;
+	margin: -28px var(--pn-body-neg-x) 16px;
 }
 .pn .pn-rs-hero {
 	background: var(--ink);
@@ -902,9 +902,9 @@
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
-	/* Break out of .pn-body's 28px padding so the ink hero bleeds edge
-	   to edge — matches the design's mobile artboard. */
-	margin: -28px -28px 0;
+	/* Break out of .pn-body's horizontal padding so the ink hero bleeds
+	   edge to edge — matches the design's mobile artboard. */
+	margin: -28px var(--pn-body-neg-x) 0;
 }
 
 /* Sticky wrapper for the mobile hero + tools row — keeps the title,

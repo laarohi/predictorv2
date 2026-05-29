@@ -206,6 +206,16 @@
 	min-height: 56px;
 	position: relative;
 }
+/* On the mobile bracket, each slot is a fixed 56px container with
+ * `align-items: center`. Populated compact cards are ~40-43px tall, so
+ * they center inside the slot with ~8px above + below visible. The
+ * default .tbd min-height (56px) fills the slot entirely — no centering
+ * room, no visible gap between adjacent TBD cards, and the card reads
+ * as oversized vs its populated siblings. Match the populated compact
+ * footprint so TBD cards inherit the same in-slot breathing room. */
+.pn .pn-bm.tbd.compact {
+	min-height: 40px;
+}
 .pn .pn-bm.tbd::after {
 	content: 'TBD';
 	position: absolute;
@@ -402,11 +412,12 @@
 
 /* ===== Mobile swipeable =====
    On mobile the bracket bleeds edge-to-edge: negative margin cancels the
-   page's 28px body padding, and the side borders + shadow are dropped so
-   the navy stage runs corner-to-corner like the mockup. */
+   page's body horizontal padding (desktop 28px / mobile 20px via the
+   --pn-body-neg-x variable), and the side borders + shadow are dropped
+   so the navy stage runs corner-to-corner like the mockup. */
 .pn .pn-brkt-mob {
-	margin-left: -28px;
-	margin-right: -28px;
+	margin-left: var(--pn-body-neg-x);
+	margin-right: var(--pn-body-neg-x);
 }
 .pn .pn-mb {
 	display: flex;

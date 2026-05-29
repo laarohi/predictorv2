@@ -21,7 +21,7 @@
  * tight 8px gutter. */
 @media (max-width: 899px) {
 	.pn .pn-mm-only {
-		margin: -28px -28px 0;
+		margin: -28px var(--pn-body-neg-x) 0;
 	}
 }
 
@@ -34,7 +34,7 @@
 	display: grid;
 	grid-template-columns: 3fr 2fr;
 	gap: 0;
-	margin: -28px -28px 14px;
+	margin: -28px var(--pn-body-neg-x) 14px;
 	align-items: stretch;
 }
 
