@@ -6,6 +6,7 @@ from datetime import timedelta
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from fastapi_sso.sso.google import GoogleSSO
+from fastapi_sso.state import generate_random_state
 from pydantic import BaseModel, EmailStr
 from sqlmodel import select
 
@@ -40,14 +41,22 @@ logger = logging.getLogger(__name__)
 
 
 def get_google_sso() -> GoogleSSO:
-    """Get Google SSO instance."""
+    """Get Google SSO instance with CSRF state enforced.
+
+    get_login_redirect(state=...) sets an `sso_state` cookie and includes the
+    state in the Google auth URL; verify_and_process then rejects a callback
+    whose state query param is missing or doesn't match the cookie. This closes
+    the OAuth login-CSRF gap.
+    """
     settings = get_settings()
-    return GoogleSSO(
+    sso = GoogleSSO(
         client_id=settings.google_client_id,
         client_secret=settings.google_client_secret,
         redirect_uri=settings.google_redirect_uri,
         allow_insecure_http=settings.debug,
     )
+    sso.requires_state = True
+    return sso
 
 
 @router.post("/register", response_model=Token)
@@ -144,7 +153,7 @@ async def google_login():
         )
 
     google_sso = get_google_sso()
-    return await google_sso.get_login_redirect()
+    return await google_sso.get_login_redirect(state=generate_random_state())
 
 
 @router.get("/google/callback")
