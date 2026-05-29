@@ -165,7 +165,7 @@ the dashboard whether they still owe money.
     - Pass `paid: e.paid` through into each `RosterRow` in the existing
       `rosterRows` reactive block.
 
-11. **`frontend/src/lib/styles/panini-dashboard.css`** — add styles under
+11. **`frontend/src/lib/styles/panini-dashboard-v4.css`** — add styles under
     `.pn-roster`:
     ```css
     .pn-roster .paid-pill.unpaid {
@@ -258,6 +258,6 @@ Frontend:
 - `frontend/src/lib/components/panini/dashboard/widgets/DwAlert.svelte`
 - `frontend/src/lib/components/panini/dashboard/widgets/DwRoster.svelte`
 - `frontend/src/lib/components/panini/dashboard/DashboardPre.svelte`
-- `frontend/src/lib/styles/panini-dashboard.css`
+- `frontend/src/lib/styles/panini-dashboard-v4.css`
 
 No DB migration; no new dependencies.
