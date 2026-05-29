@@ -1324,6 +1324,23 @@
 }
 .pn .pn-roster td.prog .pip.empty { background: var(--paper-3); }
 .pn .pn-roster tr:nth-child(even) td { background: rgba(0, 0, 0, 0.02); }
+.pn .pn-roster td.nm .paid-pill {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 1px 5px;
+	font-family: var(--mono);
+	font-size: 9px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	vertical-align: middle;
+	border-radius: 2px;
+}
+.pn .pn-roster td.nm .paid-pill.unpaid {
+	color: var(--red-deep);
+	background: var(--paper-3);
+	border: 1.5px solid var(--red-deep);
+}
 
 /* ============================================================
  * GROUP-STAGE SKINNY STRIP (Phase 2)
