@@ -32,19 +32,38 @@ scoring:
     hybrid_cap: 10          # Legacy alias, read as fallback
 
   advancement:
-    group_advance: 10       # Team advances from group
-    group_position: 5       # Correct group position (1st/2nd)
+    # Phase 1 — pre-tournament picks, full reward.
     round_of_32: 10
     round_of_16: 15
     quarter_final: 20
     semi_final: 40
     final: 60
     winner: 100
-
-  phase_multipliers:
-    phase_1: 1.0            # Pre-tournament predictions (full points)
-    phase_2: 0.7            # Post-group stage predictions (70% points)
+    # Phase 1 bonus: derived from group match score predictions (see
+    # services/standings.get_predicted_group_standings). Paid only for
+    # teams that qualify for R32 — positions 1 or 2 always, position 3
+    # only if a best-8-thirds qualifier.
+    group_position: 5
+    # Phase 2 — post-group-stage. Independent per-stage table; there is
+    # no multiplier on Phase 1. R32 = 0 because the R32 line-up is
+    # published after groups (nothing to predict); R16 = 5 because R32
+    # match-outcome scoring already implicitly pays for predicting who
+    # advances. Deeper rounds carry most of the Phase 2 reward.
+    phase_2:
+      round_of_32: 0
+      round_of_16: 5
+      quarter_final: 15
+      semi_final: 40
+      final: 60
+      winner: 100
 ```
+
+> **Note on the architecture:** earlier versions of this scoring system
+> used a `phase_multipliers:` block (Phase 2 = Phase 1 × 0.7). That
+> block has been removed — Phase 1 and Phase 2 advancement points are
+> now independent tables. See
+> [`scoring-calibration-2026.md`](./scoring-calibration-2026.md) for the
+> rationale and migration notes.
 
 ## Scoring Modes
 
@@ -149,19 +168,56 @@ should be preferred for new deployments.
 ## Advancement Prediction Points
 
 Points are awarded when a team reaches at least the predicted stage.
+Phase 1 and Phase 2 read from **independent point tables** — there is
+no implicit multiplier between them, and each stage's value for each
+phase is set explicitly in YAML.
 
-| Stage | Phase 1 Points | Phase 2 Points (70%) |
-|-------|---------------|---------------------|
-| Group advance | 10 | 7 |
-| Correct group position | 5 | 3.5 |
-| Round of 32 | 10 | 7 |
-| Round of 16 | 15 | 10.5 |
-| Quarter-final | 20 | 14 |
-| Semi-final | 40 | 28 |
-| Final | 60 | 42 |
-| Winner | 100 | 70 |
+| Stage | Phase 1 | Phase 2 | Notes |
+|---|---:|---:|---|
+| Round of 32 | 10 | **0** | Phase 2 zero: bracket is published after groups, no prediction skill |
+| Round of 16 | 15 | **5** | Phase 2 minimal: R32 match-outcome already pays for "X beats Y" |
+| Quarter-final | 20 | 15 | |
+| Semi-final | 40 | 40 | |
+| Final | 60 | 60 | |
+| Winner | 100 | 100 | |
+| Group position bonus | 5 | — | Phase 1 only; derived from group match score predictions, paid only when the team qualifies (positions 1 or 2 always, position 3 only if a best-8-thirds qualifier). See below. |
 
-**Note:** Phase 2 predictions (made after group stage) receive reduced points because players have more information when making predictions.
+The current values are illustrative — the live values come from
+`config/worldcup2026.yml`. Fetch them at runtime via `GET
+/api/leaderboard/scoring-rules` (Phase 2 values are nested under
+`advancement.phase_2`).
+
+### Group position bonus (Phase 1 only)
+
+Predicting that a team finishes in a specific group position is *not*
+a separate UI step. Instead, the user's predicted group standings are
+**derived from their group match score predictions** via
+[`services/standings.get_predicted_group_standings`](../backend/app/services/standings.py),
+applying the same FIFA tiebreaker chain (points → GD → GF → H2H) used
+on actual results. For each team where the user's predicted position
+matches the actual position **and** the team qualifies for R32, the
+user earns the `group_position` value (default 5) on top of the R32
+base.
+
+Eligibility rules:
+
+- **Position 1 or 2** in any group → always qualifies → bonus paid on match
+- **Position 3** → bonus only if the team is one of the 8 best-third-placed teams that qualify
+- **Position 4** → never qualifies, never paid
+
+Phase 2 has no group match score predictions (groups are done by then),
+so the bonus is Phase 1 only.
+
+### Why Phase 2's smaller R32 / R16 values?
+
+When Phase 2 opens, the R32 bracket is already determined by the
+actual group standings — predicting it is trivial, so it pays nothing.
+R16 advancement is largely redundant with the user's R32 match-outcome
+predictions: if you predict "Brazil beats Argentina 2-1" you've
+already earned 5 + (exact + rarity) for that match; awarding a full
+R16 advancement bonus on top would double-pay the same insight. The
+token 5 points reflects only the marginal "you knew Brazil belonged
+in R16" signal that isn't already captured by match scoring.
 
 ## API Endpoint
 
@@ -183,21 +239,30 @@ GET /api/leaderboard/scoring-rules
     "hybrid_cap": 10
   },
   "advancement": {
-    "group_advance": 10,
-    "group_position": 5,
     "round_of_32": 10,
     "round_of_16": 15,
     "quarter_final": 20,
     "semi_final": 40,
     "final": 60,
-    "winner": 100
-  },
-  "phase_multipliers": {
-    "phase_1": 1.0,
-    "phase_2": 0.7
+    "winner": 100,
+    "group_position": 5,
+    "phase_2": {
+      "round_of_32": 0,
+      "round_of_16": 5,
+      "quarter_final": 15,
+      "semi_final": 40,
+      "final": 60,
+      "winner": 100
+    }
   }
 }
 ```
+
+The response no longer includes a `phase_multipliers` field — Phase 2
+values are nested under `advancement.phase_2` and read directly by the
+scoring engine. The frontend has never consumed `phase_multipliers`, so
+removing it is invisible to UI; any third-party consumer that depended
+on it needs to read the per-stage table instead.
 
 ## Extending the Scoring System
 
@@ -325,20 +390,27 @@ DEFAULT_SCORING_CONFIG = {
         "rarity_cap": 10,
     },
     "advancement": {
-        "group_advance": 10,
-        "group_position": 5,
+        # Phase 1 — pre-tournament, full reward.
         "round_of_32": 10,
         "round_of_16": 15,
         "quarter_final": 20,
         "semi_final": 40,
         "final": 60,
         "winner": 100,
-    },
-    "phase_multipliers": {
-        "phase_1": 1.0,
-        "phase_2": 0.7,
+        # Phase 1 group-position bonus (derived from match score
+        # predictions; paid only for qualifying positions).
+        "group_position": 5,
+        # Phase 2 — explicit per-stage. No multiplier.
+        "phase_2": {
+            "round_of_32": 0,
+            "round_of_16": 5,
+            "quarter_final": 15,
+            "semi_final": 40,
+            "final": 60,
+            "winner": 100,
+        },
     },
 }
 ```
 
-Partial configs are merged with defaults, so you only need to specify values you want to change.
+Partial configs are merged with defaults, so you only need to specify values you want to change. Setting `advancement.phase_2.winner: 90` in your YAML, for example, overrides just that one stage's Phase 2 reward; all other Phase 2 stages fall back to defaults.

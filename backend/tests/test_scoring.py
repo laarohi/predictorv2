@@ -3,12 +3,15 @@
 CRITICAL: No scoring logic changes without a corresponding test case.
 """
 
+import uuid
+
 import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.models.prediction import MatchPrediction, PredictionPhase
 from app.models.score import Score
 from app.services.scoring import (
+    calculate_group_position_bonus,
     calculate_match_points,
     calculate_advancement_points,
     get_scoring_config,
@@ -31,7 +34,7 @@ class TestGetScoringConfig:
 
             assert config["match"]["correct_outcome"] == 5
             assert config["match"]["exact_score"] == 10
-            assert config["advancement"]["winner"] == 100
+            assert config["advancement"]["winner"] == 150
             assert config["mode"] == "logarithmic"
 
     def test_config_merges_with_defaults(self):
@@ -53,7 +56,7 @@ class TestGetScoringConfig:
             assert config["match"]["correct_outcome"] == 10
             # Default values preserved
             assert config["match"]["exact_score"] == 10
-            assert config["advancement"]["winner"] == 100
+            assert config["advancement"]["winner"] == 150
 
 
 class TestScoringStrategies:
@@ -500,14 +503,14 @@ class TestCalculateAdvancementPoints:
         return pred
 
     def test_winner_prediction_correct(self, winner_prediction):
-        """Should award 100 points for correct winner in Phase 1."""
+        """Should award Phase 1 winner value (150) for correct champion."""
         actual_advancement = {"Brazil": "winner"}
 
         points = calculate_advancement_points(
             winner_prediction, actual_advancement, PredictionPhase.PHASE_1
         )
 
-        assert points == 100
+        assert points == 150
 
     def test_winner_prediction_wrong(self, winner_prediction):
         """Should award 0 points when team doesn't win."""
@@ -542,7 +545,7 @@ class TestCalculateAdvancementPoints:
         assert points == 0
 
     def test_phase_2_reduced_points(self, winner_prediction):
-        """Phase 2 predictions should award reduced points."""
+        """Phase 2 winner reads from the explicit advancement.phase_2 table."""
         actual_advancement = {"Brazil": "winner"}
         winner_prediction.phase = PredictionPhase.PHASE_2
 
@@ -550,5 +553,228 @@ class TestCalculateAdvancementPoints:
             winner_prediction, actual_advancement, PredictionPhase.PHASE_2
         )
 
-        # Phase 2 winner is 70 points (70% of 100)
-        assert points == 70
+        # Phase 2 winner is 100 (default config — see DEFAULT_SCORING_CONFIG).
+        # If you change the YAML, update this expectation alongside it.
+        assert points == 100
+
+    def test_phase_2_round_of_32_pays_zero(self):
+        """Phase 2 R32 picks score zero — the bracket is determined by
+        actual group results, so there's no prediction skill at R32."""
+        pred = MagicMock()
+        pred.team = "Brazil"
+        pred.stage = "round_of_32"
+        pred.phase = PredictionPhase.PHASE_2
+
+        # Brazil reached R32 (and further) — but P2 R32 advancement = 0.
+        assert calculate_advancement_points(
+            pred, {"Brazil": "winner"}, PredictionPhase.PHASE_2
+        ) == 0
+
+    def test_phase_2_round_of_16_minimal_value(self):
+        """Phase 2 R16 picks score 5 — marginal value-add over R32 match
+        outcome scoring, which already pays for predicting who advances."""
+        pred = MagicMock()
+        pred.team = "Brazil"
+        pred.stage = "round_of_16"
+        pred.phase = PredictionPhase.PHASE_2
+
+        assert calculate_advancement_points(
+            pred, {"Brazil": "quarter_final"}, PredictionPhase.PHASE_2
+        ) == 5
+
+    def test_phase_2_uses_independent_table(self):
+        """Phase 1 and Phase 2 read separate point tables, not a multiplier
+        on a shared one. Pinned so future changes don't silently re-introduce
+        the multiplier behaviour."""
+        pred = MagicMock()
+        pred.team = "Brazil"
+        pred.stage = "semi_final"
+
+        pred.phase = PredictionPhase.PHASE_1
+        p1_points = calculate_advancement_points(
+            pred, {"Brazil": "semi_final"}, PredictionPhase.PHASE_1
+        )
+        pred.phase = PredictionPhase.PHASE_2
+        p2_points = calculate_advancement_points(
+            pred, {"Brazil": "semi_final"}, PredictionPhase.PHASE_2
+        )
+        # Defaults: P1 SF = 55, P2 SF = 40. Not a fixed ratio.
+        assert p1_points == 55
+        assert p2_points == 40
+
+    def test_quarter_final_singular_stage(self):
+        """Regression: a quarter_final pick must score the full QF base.
+
+        Earlier the frontend wrote the stage as 'quarter_finals' (plural)
+        while scoring only knew 'quarter_final' (singular), so every QF
+        pick silently scored 0. The fix normalizes stored stage names to
+        singular; this test pins that behavior."""
+        pred = MagicMock()
+        pred.team = "Brazil"
+        pred.stage = "quarter_final"
+        pred.phase = PredictionPhase.PHASE_1
+
+        # Predicted QF, actually reached QF: full Phase 1 QF base (25).
+        assert calculate_advancement_points(
+            pred, {"Brazil": "quarter_final"}, PredictionPhase.PHASE_1
+        ) == 25
+        # Plural variant must score 0 — pinned so we don't silently
+        # re-introduce the mismatch.
+        pred.stage = "quarter_finals"
+        assert calculate_advancement_points(
+            pred, {"Brazil": "quarter_final"}, PredictionPhase.PHASE_1
+        ) == 0
+
+    def test_semi_final_singular_stage(self):
+        """Regression: same as QF, for semi_final."""
+        pred = MagicMock()
+        pred.team = "Argentina"
+        pred.stage = "semi_final"
+        pred.phase = PredictionPhase.PHASE_1
+
+        # Phase 1 SF base = 55.
+        assert calculate_advancement_points(
+            pred, {"Argentina": "semi_final"}, PredictionPhase.PHASE_1
+        ) == 55
+        pred.stage = "semi_finals"
+        assert calculate_advancement_points(
+            pred, {"Argentina": "semi_final"}, PredictionPhase.PHASE_1
+        ) == 0
+
+
+class TestGroupPositionBonus:
+    """Tests for the Phase 1 group-position bonus.
+
+    The bonus pays `advancement.group_position` (default 5) when a user's
+    *predicted* group position matches the team's actual position, AND
+    the team qualified for the knockout stage:
+      - Positions 1 and 2 always qualify
+      - Position 3 only if the team is one of the 8 best third-placed
+      - Position 4 never qualifies
+    """
+
+    @staticmethod
+    def _standings(positions: list[str], group: str = "A") -> list[dict]:
+        """Build a standings list in the shape get_actual_group_standings
+        returns (just enough fields for the bonus logic)."""
+        return [
+            {"team": team, "group": group, "points": 9 - i, "goal_difference": 5 - i, "goals_for": 5 - i}
+            for i, team in enumerate(positions)
+        ]
+
+    @pytest.mark.asyncio
+    async def test_top_two_match_awards_bonus(self):
+        """Predict 1st and 2nd correctly → +5 each (top-2 always qualify)."""
+        user_id = uuid.uuid4()
+        actual = {"A": self._standings(["Brazil", "France", "Mexico", "Iran"])}
+        predicted = {"A": self._standings(["Brazil", "France", "Mexico", "Iran"])}
+
+        with (
+            patch("app.services.standings.get_predicted_group_standings", new=AsyncMock(return_value=(predicted, []))),
+            patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value=actual)),
+            patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[{"team": "Mexico"}])),
+        ):
+            session = MagicMock()
+            # Brazil (1st), France (2nd) match → 2 * 5 = 10
+            # Mexico (3rd) matches AND is a qualifying third → +5
+            # Iran (4th) doesn't qualify → no bonus
+            points = await calculate_group_position_bonus(session, user_id)
+            assert points == 15
+
+    @pytest.mark.asyncio
+    async def test_predicted_first_actual_second_no_bonus(self):
+        """Position must match exactly — predicted 1st, actual 2nd → 0."""
+        user_id = uuid.uuid4()
+        actual = {"A": self._standings(["France", "Brazil", "Mexico", "Iran"])}
+        predicted = {"A": self._standings(["Brazil", "France", "Mexico", "Iran"])}
+
+        with (
+            patch("app.services.standings.get_predicted_group_standings", new=AsyncMock(return_value=(predicted, []))),
+            patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value=actual)),
+            patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[{"team": "Mexico"}])),
+        ):
+            # Brazil predicted 1st but actually 2nd → no bonus
+            # France predicted 2nd but actually 1st → no bonus
+            # Mexico (3rd) matches AND qualifies → +5
+            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            assert points == 5
+
+    @pytest.mark.asyncio
+    async def test_third_place_qualifies_awards_bonus(self):
+        """Predict 3rd, actual 3rd, team in best-8-thirds → +5."""
+        user_id = uuid.uuid4()
+        actual = {"A": self._standings(["Brazil", "France", "Mexico", "Iran"])}
+        predicted = {"A": self._standings(["Brazil", "France", "Mexico", "Iran"])}
+
+        with (
+            patch("app.services.standings.get_predicted_group_standings", new=AsyncMock(return_value=(predicted, []))),
+            patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value=actual)),
+            patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[{"team": "Mexico"}])),
+        ):
+            # 1st + 2nd + 3rd-qualifying = 3 * 5 = 15
+            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            assert points == 15
+
+    @pytest.mark.asyncio
+    async def test_third_place_does_not_qualify_no_bonus(self):
+        """Predict 3rd, actual 3rd, team NOT in best-8-thirds → 0."""
+        user_id = uuid.uuid4()
+        actual = {"A": self._standings(["Brazil", "France", "Mexico", "Iran"])}
+        predicted = {"A": self._standings(["Brazil", "France", "Mexico", "Iran"])}
+
+        with (
+            patch("app.services.standings.get_predicted_group_standings", new=AsyncMock(return_value=(predicted, []))),
+            patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value=actual)),
+            patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[])),  # nobody qualifies as third
+        ):
+            # 1st (5) + 2nd (5) + 3rd-not-qualifying (0) + 4th (0) = 10
+            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            assert points == 10
+
+    @pytest.mark.asyncio
+    async def test_position_four_never_awards(self):
+        """Predicting position 4 is never paid even if it matches."""
+        user_id = uuid.uuid4()
+        actual = {"A": self._standings(["A1", "A2", "A3", "A4"])}
+        predicted = {"A": self._standings(["A1", "A2", "A3", "A4"])}
+
+        with (
+            patch("app.services.standings.get_predicted_group_standings", new=AsyncMock(return_value=(predicted, []))),
+            patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value=actual)),
+            patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[{"team": "A3"}])),
+        ):
+            # All four positions match. 1+2+3-qualifying = 15. A4 = 0.
+            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            assert points == 15
+
+    @pytest.mark.asyncio
+    async def test_no_groups_predicted_returns_zero(self):
+        """User who hasn't predicted any group matches gets 0."""
+        user_id = uuid.uuid4()
+        with (
+            patch("app.services.standings.get_predicted_group_standings", new=AsyncMock(return_value=({}, []))),
+            patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value={})),
+            patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[])),
+        ):
+            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            assert points == 0
+
+    @pytest.mark.asyncio
+    async def test_yaml_value_drives_bonus(self):
+        """Bonus reads `advancement.group_position` from config."""
+        user_id = uuid.uuid4()
+        actual = {"A": [{"team": "Brazil", "group": "A", "points": 9, "goal_difference": 5, "goals_for": 5}]}
+        predicted = {"A": [{"team": "Brazil", "group": "A", "points": 9, "goal_difference": 5, "goals_for": 5}]}
+
+        # Override the YAML-backed config to 7 instead of the default 5.
+        cfg = {
+            "advancement": {"group_position": 7},
+        }
+        with (
+            patch("app.services.scoring.get_scoring_config", return_value=cfg),
+            patch("app.services.standings.get_predicted_group_standings", new=AsyncMock(return_value=(predicted, []))),
+            patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value=actual)),
+            patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[])),
+        ):
+            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            assert points == 7

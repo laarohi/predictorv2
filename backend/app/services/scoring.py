@@ -39,18 +39,27 @@ DEFAULT_SCORING_CONFIG: dict[str, Any] = {
         "rarity_cap": 10,
     },
     "advancement": {
-        "group_advance": 10,
-        "group_position": 5,
+        # Phase 1 — pre-tournament, full reward.
         "round_of_32": 10,
         "round_of_16": 15,
-        "quarter_final": 20,
-        "semi_final": 40,
-        "final": 60,
-        "winner": 100,
-    },
-    "phase_multipliers": {
-        "phase_1": 1.0,
-        "phase_2": 0.7,
+        "quarter_final": 25,
+        "semi_final": 55,
+        "final": 85,
+        "winner": 150,
+        # Phase 1 group-position bonus. See `calculate_group_position_bonus`
+        # and `services/standings.get_predicted_group_standings`.
+        "group_position": 5,
+        # Phase 2 — post-group-stage. Explicit per-stage values (no
+        # multiplier); R32/R16 deliberately squashed because they're
+        # largely redundant with Phase 2 match-outcome scoring.
+        "phase_2": {
+            "round_of_32": 0,
+            "round_of_16": 5,
+            "quarter_final": 15,
+            "semi_final": 40,
+            "final": 60,
+            "winner": 100,
+        },
     },
 }
 
@@ -319,7 +328,15 @@ def calculate_advancement_points(
     actual_advancement: dict[str, str],
     phase: PredictionPhase,
 ) -> int:
-    """Calculate points for team advancement prediction.
+    """Calculate points for a team advancement prediction.
+
+    Phase 1 and Phase 2 read from independent point tables in the YAML
+    (`scoring.advancement` for Phase 1, `scoring.advancement.phase_2`
+    for Phase 2). There is no implicit multiplier — every stage's value
+    is explicit. Phase 2 R32 = 0 because the R32 line-up is published
+    after the group stage and there's no prediction skill to reward;
+    Phase 2 R16 = 5 because R32 match-outcome scoring already pays for
+    "team X beats team Y" insight.
 
     Args:
         team_prediction: User's prediction for team advancement
@@ -332,9 +349,12 @@ def calculate_advancement_points(
     config = get_scoring_config()
     adv_config = config.get("advancement", {})
 
-    # Get phase-specific multiplier
-    phase_multipliers = config.get("phase_multipliers", {"phase_1": 1.0, "phase_2": 0.7})
-    multiplier = phase_multipliers.get(phase.value, 1.0)
+    # Phase-specific point table. Phase 2 values are nested under
+    # `advancement.phase_2`; Phase 1 reads the top level directly.
+    if phase == PredictionPhase.PHASE_2:
+        stage_points = adv_config.get("phase_2", {})
+    else:
+        stage_points = adv_config
 
     team = team_prediction.team
     predicted_stage = team_prediction.stage
@@ -343,7 +363,7 @@ def calculate_advancement_points(
     if not actual_stage:
         return 0
 
-    # Define stage ordering
+    # Stage ordering — team must have reached at least the predicted stage.
     stage_order = [
         "group",
         "round_of_32",
@@ -357,12 +377,78 @@ def calculate_advancement_points(
     predicted_idx = stage_order.index(predicted_stage) if predicted_stage in stage_order else -1
     actual_idx = stage_order.index(actual_stage) if actual_stage in stage_order else -1
 
-    # Team must have reached at least the predicted stage
     if actual_idx >= predicted_idx:
-        base_points = adv_config.get(predicted_stage, 0)
-        return int(base_points * multiplier)
+        return int(stage_points.get(predicted_stage, 0))
 
     return 0
+
+
+async def calculate_group_position_bonus(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+) -> int:
+    """Phase 1 bonus: reward correctly predicting a team's group position.
+
+    The user's *predicted* group standings are derived from their Phase 1
+    group match score predictions (see
+    `services.standings.get_predicted_group_standings`). For each team
+    whose predicted position matches their actual position AND who
+    qualified for the knockout stage, award `advancement.group_position`
+    points (default 5).
+
+    Eligibility rules (settled in the calibration discussion):
+      - Position 1 or 2 in any group → always qualifies → bonus paid on match
+      - Position 3 → bonus only if the team is one of the 8 best thirds
+      - Position 4 → never (team eliminated)
+
+    Phase 2 has no group match predictions, so this bonus is Phase 1 only.
+    """
+    # Imported inside the function to avoid pulling standings (which imports
+    # MatchPrediction) into the import chain that scoring.py participates in.
+    from app.services.standings import (
+        get_actual_group_standings,
+        get_predicted_group_standings,
+        get_qualifying_third_place_teams,
+    )
+
+    config = get_scoring_config()
+    bonus_value = config.get("advancement", {}).get("group_position", 0)
+    if bonus_value <= 0:
+        return 0
+
+    predicted, _ = await get_predicted_group_standings(session, user_id)
+    actual = await get_actual_group_standings(session)
+    if not predicted or not actual:
+        return 0
+
+    qualifying_thirds = await get_qualifying_third_place_teams(session)
+    qualifying_third_names = {t["team"] for t in qualifying_thirds}
+
+    total = 0
+    for group, predicted_teams in predicted.items():
+        actual_teams = actual.get(group, [])
+        if not actual_teams:
+            continue
+        # Build {team_name: 1-indexed actual position}.
+        actual_positions = {t["team"]: i + 1 for i, t in enumerate(actual_teams)}
+
+        for i, predicted_team in enumerate(predicted_teams):
+            predicted_position = i + 1
+            team_name = predicted_team["team"]
+            actual_position = actual_positions.get(team_name)
+            if actual_position != predicted_position:
+                continue
+            # Position 4 never qualifies; skip.
+            if predicted_position == 4:
+                continue
+            # Position 1/2 always qualifies → bonus.
+            # Position 3 only if best-8-thirds.
+            if predicted_position in (1, 2) or (
+                predicted_position == 3 and team_name in qualifying_third_names
+            ):
+                total += bonus_value
+
+    return total
 
 
 async def get_actual_advancement(session: AsyncSession) -> dict[str, str]:
@@ -469,16 +555,10 @@ def _add_match_points_to_phase(
 def _add_advancement_points_to_phase(
     phase_breakdown: PhaseBreakdown,
     stage: str,
-    group_position: int | None,
     points: int,
 ) -> None:
     """Add advancement prediction points to a phase breakdown."""
-    if stage == "group":
-        if group_position is not None:
-            phase_breakdown.group_position_points += points
-        else:
-            phase_breakdown.group_advance_points += points
-    elif stage == "round_of_32":
+    if stage == "round_of_32":
         phase_breakdown.round_of_32_points += points
     elif stage == "round_of_16":
         phase_breakdown.round_of_16_points += points
@@ -582,9 +662,16 @@ async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> Po
         _add_advancement_points_to_phase(
             phase_breakdown,
             pred.stage,
-            pred.group_position,
             points,
         )
+
+    # Phase 1 group-position bonus — derived from match score predictions,
+    # paid only for correctly-placed teams that qualify. Lives in
+    # phase1.group_position_points so the existing leaderboard breakdown
+    # bucket picks it up automatically.
+    phase1.group_position_points += await calculate_group_position_bonus(
+        session, user_id
+    )
 
     # Bonus-question points (cross-phase). Imported here to avoid a circular
     # import at module load: services.bonus depends on the config layer

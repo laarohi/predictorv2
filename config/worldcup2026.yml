@@ -60,24 +60,36 @@ scoring:
     hybrid_cap: 10
 
   advancement:
-    # Points for predicting team advances from group stage
-    group_advance: 10
-    # Bonus for predicting correct group position (1st vs 2nd)
-    group_position: 5
-    # Knockout round advancement points
+    # Phase 1 knockout-stage points — pre-tournament picks, full reward.
+    # Group-stage advancement is implicitly rewarded by `round_of_32`
+    # (predicting a team into R32 = predicting they advanced from groups).
     round_of_32: 10
     round_of_16: 15
-    quarter_final: 20
-    semi_final: 40
-    final: 60
-    winner: 100
+    quarter_final: 25
+    semi_final: 55
+    final: 85
+    winner: 150
+    # Phase 1 bonus: if a user's predicted group standings (derived from
+    # their group match score predictions) place a team in the same group
+    # position they actually finish, AND that team qualifies for the
+    # knockout stage (positions 1 or 2, OR position 3 as one of the 8
+    # best third-placed teams), they earn this on top of the R32 base.
+    # Positions 4 (and unqualified 3rds) never earn the bonus.
+    group_position: 5
 
-  # Phase-specific multipliers
-  # Phase 1: Pre-tournament predictions (full points)
-  # Phase 2: Post-group stage predictions (reduced points)
-  phase_multipliers:
-    phase_1: 1.0
-    phase_2: 0.7
+    # Phase 2 knockout-stage points — explicit per-stage table, no
+    # multiplier. R32 = 0 because the R32 line-up is published after the
+    # group stage (no prediction skill). R16 = 5 because R32 match-outcome
+    # scoring already implicitly pays for picking who advances; this is a
+    # token marginal reward. QF onward follows ~0.7× Phase 1 rounded
+    # appropriately (set explicitly to allow non-linear tilts).
+    phase_2:
+      round_of_32: 0
+      round_of_16: 5
+      quarter_final: 15
+      semi_final: 40
+      final: 60
+      winner: 100
 
 # Bonus questions
 # These are pre-tournament predictions that lock with Phase 1 and are scored

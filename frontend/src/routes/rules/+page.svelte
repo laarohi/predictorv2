@@ -145,13 +145,13 @@
 
 	<!-- 02 — Phases -->
 	<section class="pn-rl-section">
-		<div class="h"><span>02 · Two Phases</span><span class="right">Phase II points at 70% value</span></div>
+		<div class="h"><span>02 · Two Phases</span><span class="right">Phase II points set per stage</span></div>
 		<div class="body">
 			<p>
 				The competition is split into two phases. Phase I is the headline event — everything is
 				up for grabs and predictions are made blind, before a ball is kicked. Phase II opens
 				after the group stage, gives you a second crack at the bracket with full knowledge of
-				who advanced, and is worth less per pick to keep Phase I players in the game.
+				who advanced, and pays smaller per-stage rewards to keep Phase I players in the game.
 			</p>
 			<div class="pn-rl-phases">
 				<div class="pn-rl-phase gold">
@@ -161,7 +161,7 @@
 						<li>Predict every group-stage match score</li>
 						<li>Build a full knockout bracket from group winners</li>
 						<li>Answer the 9 bonus questions</li>
-						<li>All Phase I points are 1× face value</li>
+						<li>Full advancement rewards — Phase I carries the heaviest weight</li>
 					</ul>
 				</div>
 				<div class="pn-rl-phase">
@@ -170,7 +170,7 @@
 					<ul>
 						<li>Re-build the bracket using <b>actual</b> group standings</li>
 						<li>Predict the score of each knockout match</li>
-						<li>Phase II points are scaled to <b>70%</b> of their face value</li>
+						<li>Advancement points are set <b>per stage</b> — R32 picks pay nothing (the bracket is published) and R16 picks pay a token amount; deeper rounds carry most of the Phase II reward</li>
 						<li>Phase I picks remain frozen — Phase II is additive</li>
 					</ul>
 				</div>
@@ -253,10 +253,6 @@
 				<i>plus</i> the Final points for Argentina, plus their SF / QF / R16 / R32 stage points.
 			</p>
 			<div class="pn-rl-stages">
-				<div class="pn-rl-stage">
-					<div class="lbl">Group advance</div>
-					<div class="pts">10</div>
-				</div>
 				<div class="pn-rl-stage">
 					<div class="lbl">Group position</div>
 					<div class="pts">5</div>
