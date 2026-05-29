@@ -20,6 +20,7 @@ export interface RosterEntry {
 	match_predictions_filled: number;
 	bracket_picks_filled: number;
 	is_current_user: boolean;
+	paid: boolean;
 }
 
 export interface RosterResponse {
