@@ -454,3 +454,15 @@
 .pn .pn-m-lb-row .mv .up { color: var(--green); font-weight: 600; }
 .pn .pn-m-lb-row .mv .dn { color: var(--red); font-weight: 600; }
 .pn .pn-m-lb-row .mv .eq { color: var(--ink-3); }
+
+/* ===== Desktop / Mobile show-hide =====
+ * Migrated from the (now-deleted) v3 panini-dashboard.css. Used only by
+ * /leaderboard/+page.svelte to switch between the desktop table layout
+ * (.pn-desk) and the mobile card layout (.pn-mob) at the 700px
+ * breakpoint. */
+.pn .pn-desk { display: none; }
+.pn .pn-mob { display: block; }
+@media (min-width: 700px) {
+	.pn .pn-desk { display: block; }
+	.pn .pn-mob { display: none; }
+}
