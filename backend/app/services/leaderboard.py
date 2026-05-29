@@ -165,10 +165,32 @@ async def calculate_leaderboard(
         result = await session.execute(select(User).where(User.is_active == True))
         users = result.scalars().all()
 
+        # Precompute tournament-global inputs ONCE and feed them to every
+        # calculate_user_points call (see its *_cache args). This collapses a
+        # cold rebuild from O(users × fixtures) queries to a small constant.
+        # Imported here to mirror scoring.py's lazy standings import.
+        from app.services.scoring import get_actual_advancement, get_all_outcome_counts
+        from app.services.standings import (
+            get_actual_group_standings,
+            get_qualifying_third_place_teams,
+        )
+
+        outcome_counts_by_fixture = await get_all_outcome_counts(session)
+        actual_advancement = await get_actual_advancement(session)
+        actual_standings = await get_actual_group_standings(session)
+        qualifying_thirds = await get_qualifying_third_place_teams(session)
+
         entries: list[LeaderboardEntry] = []
 
         for user in users:
-            breakdown = await calculate_user_points(session, user.id)
+            breakdown = await calculate_user_points(
+                session,
+                user.id,
+                outcome_counts_by_fixture=outcome_counts_by_fixture,
+                actual_advancement_cache=actual_advancement,
+                actual_standings_cache=actual_standings,
+                qualifying_thirds_cache=qualifying_thirds,
+            )
             correct_outcomes, exact_scores = await get_user_match_stats(session, user.id)
 
             # Get points based on phase filter

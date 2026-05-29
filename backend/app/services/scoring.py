@@ -386,6 +386,9 @@ def calculate_advancement_points(
 async def calculate_group_position_bonus(
     session: AsyncSession,
     user_id: uuid.UUID,
+    *,
+    actual_standings: dict | None = None,
+    qualifying_thirds: list | None = None,
 ) -> int:
     """Phase 1 bonus: reward correctly predicting a team's group position.
 
@@ -416,13 +419,24 @@ async def calculate_group_position_bonus(
     if bonus_value <= 0:
         return 0
 
+    # The user's predicted standings vary per user; the actual standings and
+    # qualifying-thirds are global, so the leaderboard build passes them in
+    # precomputed (computed once instead of per user).
     predicted, _ = await get_predicted_group_standings(session, user_id)
-    actual = await get_actual_group_standings(session)
+    actual = (
+        actual_standings
+        if actual_standings is not None
+        else await get_actual_group_standings(session)
+    )
     if not predicted or not actual:
         return 0
 
-    qualifying_thirds = await get_qualifying_third_place_teams(session)
-    qualifying_third_names = {t["team"] for t in qualifying_thirds}
+    thirds = (
+        qualifying_thirds
+        if qualifying_thirds is not None
+        else await get_qualifying_third_place_teams(session)
+    )
+    qualifying_third_names = {t["team"] for t in thirds}
 
     total = 0
     for group, predicted_teams in predicted.items():
@@ -572,12 +586,27 @@ def _add_advancement_points_to_phase(
         phase_breakdown.winner_points += points
 
 
-async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> PointBreakdown:
+async def calculate_user_points(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    outcome_counts_by_fixture: dict[uuid.UUID, dict[str, int]] | None = None,
+    actual_advancement_cache: dict[str, str] | None = None,
+    actual_standings_cache: dict | None = None,
+    qualifying_thirds_cache: list | None = None,
+) -> PointBreakdown:
     """Calculate total points for a user.
 
     Args:
         session: Database session
         user_id: User to calculate points for
+
+    The keyword-only ``*_cache`` args let the leaderboard build precompute the
+    per-fixture outcome counts and the tournament-global advancement/standings
+    ONCE and pass them in, instead of this function re-querying them per user
+    (an O(users × fixtures) explosion on a cold rebuild). When omitted, the
+    function computes everything itself, so behaviour is identical for the
+    direct callers (profile, breakdown, highlights).
 
     Returns:
         PointBreakdown with detailed point categories by phase
@@ -617,7 +646,10 @@ async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> Po
         # Rarity bonus uses per-fixture predictor counts: "the room that
         # showed up", not all active users. Sum of outcome buckets gives
         # the total predictors for this fixture.
-        outcome_counts = await get_outcome_counts(session, fixture.id)
+        if outcome_counts_by_fixture is not None:
+            outcome_counts = outcome_counts_by_fixture.get(fixture.id, {"1": 0, "X": 0, "2": 0})
+        else:
+            outcome_counts = await get_outcome_counts(session, fixture.id)
         total_predictors = sum(outcome_counts.values())
         correct_predictors = outcome_counts.get(score.outcome, 0)
 
@@ -651,7 +683,11 @@ async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> Po
     team_predictions = result.scalars().all()
 
     # Calculate advancement points by stage
-    actual_advancement = await get_actual_advancement(session)
+    actual_advancement = (
+        actual_advancement_cache
+        if actual_advancement_cache is not None
+        else await get_actual_advancement(session)
+    )
     for pred in team_predictions:
         points = calculate_advancement_points(pred, actual_advancement, pred.phase)
         if points == 0:
@@ -670,7 +706,10 @@ async def calculate_user_points(session: AsyncSession, user_id: uuid.UUID) -> Po
     # phase1.group_position_points so the existing leaderboard breakdown
     # bucket picks it up automatically.
     phase1.group_position_points += await calculate_group_position_bonus(
-        session, user_id
+        session,
+        user_id,
+        actual_standings=actual_standings_cache,
+        qualifying_thirds=qualifying_thirds_cache,
     )
 
     # Bonus-question points (cross-phase). Imported here to avoid a circular
@@ -708,3 +747,21 @@ async def get_outcome_counts(session: AsyncSession, fixture_id: uuid.UUID) -> di
         counts[outcome] = counts.get(outcome, 0) + 1
 
     return counts
+
+
+async def get_all_outcome_counts(
+    session: AsyncSession,
+) -> dict[uuid.UUID, dict[str, int]]:
+    """Outcome counts for EVERY fixture, in a single query.
+
+    Equivalent to calling get_outcome_counts() per fixture, but the leaderboard
+    build calls this once and passes the result into calculate_user_points
+    instead of issuing one query per fixture per user.
+    """
+    result = await session.execute(select(MatchPrediction))
+    by_fixture: dict[uuid.UUID, dict[str, int]] = {}
+    for pred in result.scalars().all():
+        counts = by_fixture.setdefault(pred.fixture_id, {"1": 0, "X": 0, "2": 0})
+        outcome = pred.predicted_outcome
+        counts[outcome] = counts.get(outcome, 0) + 1
+    return by_fixture
