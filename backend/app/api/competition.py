@@ -12,6 +12,7 @@ from app.models._datetime import utc_now
 from app.models.competition import Competition
 from app.models.user import User
 from app.services.locking import get_current_phase, is_phase2_bracket_locked
+from app.config import get_tournament_config
 from app.services.scoring import get_scoring_config
 
 
@@ -59,9 +60,16 @@ async def get_competition_info(session: DbSession) -> CompetitionInfo:
         .where(User.paid == True)  # noqa: E712
     )
 
+    # YAML is the source of truth for entry_fee — the dashboard payment
+    # banner reads this value to render copy AND to build the Revolut URL.
+    # The DB column stays as a fallback so the admin's "update competition"
+    # form keeps working without a migration.
+    yaml_fee = get_tournament_config().get("tournament", {}).get("entry_fee")
+    entry_fee = float(yaml_fee) if yaml_fee is not None else float(competition.entry_fee)
+
     return CompetitionInfo(
         name=competition.name,
-        entry_fee=float(competition.entry_fee),
+        entry_fee=entry_fee,
         is_phase2_active=competition.is_phase2_active,
         phase1_deadline=competition.phase1_deadline,
         phase2_bracket_deadline=competition.phase2_bracket_deadline,
