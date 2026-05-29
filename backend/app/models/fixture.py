@@ -39,12 +39,14 @@ class Fixture(SQLModel, table=True):
     kickoff: datetime = Field(sa_column=utc_datetime_column(index=True))
 
     # Tournament position
-    stage: str  # "group", "round_of_32", "round_of_16", "quarter_final", "semi_final", "final"
+    # Indexed: standings/advancement/scoring repeatedly filter fixtures by stage.
+    stage: str = Field(index=True)  # "group", "round_of_32", ... "final"
     group: str | None = None  # "A", "B", etc. for group stage
     match_number: int | None = None  # For ordering
 
     # Match state
-    status: MatchStatus = Field(default=MatchStatus.SCHEDULED)
+    # Indexed: scoring/leaderboard repeatedly filter on status == FINISHED.
+    status: MatchStatus = Field(default=MatchStatus.SCHEDULED, index=True)
     minute: int | None = None  # Current minute if live
 
     # External API reference
