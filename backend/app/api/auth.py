@@ -20,6 +20,7 @@ from app.dependencies import (
 from app.models.user import AuthProvider, User
 from app.schemas.auth import PasswordChange, Token, UserCreate, UserLogin, UserRead, UserStats
 from app.services.email import EmailSendError
+from app.services.login_throttle import record_failure, record_success, seconds_locked
 from app.services.magic_link import (
     MagicLinkError,
     RateLimited,
@@ -92,16 +93,26 @@ async def register(user_data: UserCreate, session: DbSession) -> Token:
 @router.post("/login", response_model=Token)
 async def login(credentials: UserLogin, session: DbSession) -> Token:
     """Login with email/password."""
+    # Per-account brute-force guard (complements nginx's per-IP limit).
+    locked = seconds_locked(credentials.email)
+    if locked is not None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many failed attempts. Try again in {int(locked // 60) + 1} minute(s).",
+        )
+
     result = await session.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
 
     if not user or not user.password_hash:
+        record_failure(credentials.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
 
     if not verify_password(credentials.password, user.password_hash):
+        record_failure(credentials.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -113,6 +124,7 @@ async def login(credentials: UserLogin, session: DbSession) -> Token:
             detail="Account is inactive",
         )
 
+    record_success(credentials.email)
     access_token = create_access_token(
         user_id=str(user.id),
         expires_delta=timedelta(minutes=get_settings().jwt_access_token_expire_minutes),
