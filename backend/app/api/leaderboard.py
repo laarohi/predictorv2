@@ -7,7 +7,7 @@ from typing import Any
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
-from app.dependencies import CurrentUser, DbSession, OptionalUser
+from app.dependencies import AdminUser, CurrentUser, DbSession, OptionalUser
 from app.schemas.leaderboard import LeaderboardResponse, PointBreakdown
 from app.services.leaderboard import calculate_leaderboard, invalidate_cache
 from app.services.scoring import calculate_user_points, get_scoring_config, SCORING_STRATEGIES
@@ -114,14 +114,21 @@ async def get_leaderboard(
     if phase is not None and phase not in ("phase_1", "phase_2"):
         phase = None  # Default to overall for invalid values
 
-    return await calculate_leaderboard(session, force_refresh=refresh, phase=phase)
+    # force_refresh bypasses the 30s cache and triggers a full recompute.
+    # Restrict it to admins so a curious friend can't pin the worker by
+    # hammering ?refresh=true during a live match (the cache + internal
+    # invalidation already keep regular users' data fresh).
+    force = refresh and _user is not None and _user.is_admin
+    return await calculate_leaderboard(session, force_refresh=force, phase=phase)
 
 
 @router.post("/invalidate")
-async def invalidate_leaderboard_cache() -> dict[str, str]:
-    """Invalidate the leaderboard cache.
+async def invalidate_leaderboard_cache(_admin: AdminUser) -> dict[str, str]:
+    """Invalidate the leaderboard cache (admin only).
 
-    Call this after scores are updated to force recalculation on next request.
+    Score and admin writes already invalidate the cache internally, so this is
+    just a manual escape hatch. Gated to admins so it can't be used as an
+    unauthenticated way to force cache rebuilds.
     """
     invalidate_cache()
     return {"status": "cache invalidated"}

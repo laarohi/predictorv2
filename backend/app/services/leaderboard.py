@@ -4,6 +4,7 @@ Provides cached leaderboard calculations with position tracking.
 Supports filtering by phase (overall, phase_1, phase_2).
 """
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -37,9 +38,33 @@ class CachedLeaderboard:
     previous_positions: dict[uuid.UUID, int] = field(default_factory=dict)
 
 
-# In-memory cache - keyed by phase
+# In-memory cache - keyed by phase.
+# NOTE: this cache is per-process. Correct for the current single-worker
+# deployment; if uvicorn is ever run with --workers>1 each worker keeps its
+# own cache and invalidation signal, so move this to a shared store (Redis /
+# a DB last-invalidated timestamp) before scaling out.
 _cache: dict[str, CachedLeaderboard] = {}
 _cache_ttl = timedelta(seconds=30)  # 30-second cache
+
+# Per-key locks for single-flight rebuilds (see calculate_leaderboard).
+_cache_locks: dict[str, asyncio.Lock] = {}
+
+
+def _lock_for(cache_key: str) -> asyncio.Lock:
+    lock = _cache_locks.get(cache_key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _cache_locks[cache_key] = lock
+    return lock
+
+
+def _response_from_cache(cached: CachedLeaderboard) -> LeaderboardResponse:
+    return LeaderboardResponse(
+        entries=cached.entries,
+        last_calculated=cached.last_calculated,
+        total_participants=cached.total_participants,
+        phase=cached.phase,
+    )
 
 
 def _get_phase_points(breakdown: PointBreakdown, phase: PhaseFilter) -> int:
@@ -110,87 +135,89 @@ async def calculate_leaderboard(
     """
     global _cache
 
-    now = utc_now()
     cache_key = phase or "overall"
 
-    # Return cached data if valid
-    if not force_refresh and cache_key in _cache:
-        cached = _cache[cache_key]
-        if (now - cached.last_calculated) < _cache_ttl:
-            return LeaderboardResponse(
-                entries=cached.entries,
-                last_calculated=cached.last_calculated,
-                total_participants=cached.total_participants,
-                phase=cached.phase,
+    # Fast path: a fresh cache hit needs no lock.
+    if not force_refresh:
+        cached = _cache.get(cache_key)
+        if cached and (utc_now() - cached.last_calculated) < _cache_ttl:
+            return _response_from_cache(cached)
+
+    # Single-flight: serialize rebuilds of a given key so concurrent cache
+    # misses (e.g. many users polling right after TTL expiry or a score
+    # update) coalesce behind one rebuild instead of each running the full
+    # O(users) recompute in parallel.
+    async with _lock_for(cache_key):
+        # Re-check inside the lock: another coroutine may have just rebuilt.
+        if not force_refresh:
+            cached = _cache.get(cache_key)
+            if cached and (utc_now() - cached.last_calculated) < _cache_ttl:
+                return _response_from_cache(cached)
+
+        now = utc_now()
+
+        # Store previous positions for movement tracking
+        previous_positions: dict[uuid.UUID, int] = {}
+        if cache_key in _cache:
+            previous_positions = {e.user_id: e.position for e in _cache[cache_key].entries}
+
+        # Get all active users
+        result = await session.execute(select(User).where(User.is_active == True))
+        users = result.scalars().all()
+
+        entries: list[LeaderboardEntry] = []
+
+        for user in users:
+            breakdown = await calculate_user_points(session, user.id)
+            correct_outcomes, exact_scores = await get_user_match_stats(session, user.id)
+
+            # Get points based on phase filter
+            phase_points = _get_phase_points(breakdown, phase)
+
+            entries.append(
+                LeaderboardEntry(
+                    user_id=user.id,
+                    user_name=user.name,
+                    position=0,  # Will be set after sorting
+                    total_points=phase_points,  # Points for the filtered phase
+                    breakdown=breakdown,  # Full breakdown (always includes all phases)
+                    correct_outcomes=correct_outcomes,
+                    exact_scores=exact_scores,
+                    movement=0,  # Will be calculated after positioning
+                )
             )
 
-    # Store previous positions for movement tracking
-    previous_positions: dict[uuid.UUID, int] = {}
-    if cache_key in _cache:
-        previous_positions = {e.user_id: e.position for e in _cache[cache_key].entries}
+        # Sort by phase points (descending), then by exact scores as tiebreaker
+        entries.sort(key=lambda e: (e.total_points, e.exact_scores), reverse=True)
 
-    # Get all active users
-    result = await session.execute(select(User).where(User.is_active == True))
-    users = result.scalars().all()
+        # Assign positions (handle ties)
+        current_position = 1
+        for i, entry in enumerate(entries):
+            if i > 0 and (
+                entry.total_points < entries[i - 1].total_points
+                or (
+                    entry.total_points == entries[i - 1].total_points
+                    and entry.exact_scores < entries[i - 1].exact_scores
+                )
+            ):
+                current_position = i + 1
+            entry.position = current_position
 
-    entries: list[LeaderboardEntry] = []
+            # Calculate movement from previous position
+            prev_pos = previous_positions.get(entry.user_id)
+            if prev_pos is not None:
+                entry.movement = prev_pos - entry.position  # Positive = moved up
 
-    for user in users:
-        breakdown = await calculate_user_points(session, user.id)
-        correct_outcomes, exact_scores = await get_user_match_stats(session, user.id)
-
-        # Get points based on phase filter
-        phase_points = _get_phase_points(breakdown, phase)
-
-        entries.append(
-            LeaderboardEntry(
-                user_id=user.id,
-                user_name=user.name,
-                position=0,  # Will be set after sorting
-                total_points=phase_points,  # Points for the filtered phase
-                breakdown=breakdown,  # Full breakdown (always includes all phases)
-                correct_outcomes=correct_outcomes,
-                exact_scores=exact_scores,
-                movement=0,  # Will be calculated after positioning
-            )
+        # Update cache
+        _cache[cache_key] = CachedLeaderboard(
+            entries=entries,
+            last_calculated=now,
+            total_participants=len(users),
+            phase=phase,
+            previous_positions={e.user_id: e.position for e in entries},
         )
 
-    # Sort by phase points (descending), then by exact scores as tiebreaker
-    entries.sort(key=lambda e: (e.total_points, e.exact_scores), reverse=True)
-
-    # Assign positions (handle ties)
-    current_position = 1
-    for i, entry in enumerate(entries):
-        if i > 0 and (
-            entry.total_points < entries[i - 1].total_points
-            or (
-                entry.total_points == entries[i - 1].total_points
-                and entry.exact_scores < entries[i - 1].exact_scores
-            )
-        ):
-            current_position = i + 1
-        entry.position = current_position
-
-        # Calculate movement from previous position
-        prev_pos = previous_positions.get(entry.user_id)
-        if prev_pos is not None:
-            entry.movement = prev_pos - entry.position  # Positive = moved up
-
-    # Update cache
-    _cache[cache_key] = CachedLeaderboard(
-        entries=entries,
-        last_calculated=now,
-        total_participants=len(users),
-        phase=phase,
-        previous_positions={e.user_id: e.position for e in entries},
-    )
-
-    return LeaderboardResponse(
-        entries=entries,
-        last_calculated=now,
-        total_participants=len(users),
-        phase=phase,
-    )
+        return _response_from_cache(_cache[cache_key])
 
 
 def invalidate_cache() -> None:
