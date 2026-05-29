@@ -11,6 +11,7 @@ export interface User {
 	auth_provider: 'email' | 'google';
 	is_admin: boolean;
 	is_active: boolean;
+	paid: boolean;
 	competition_id: string | null;
 	created_at: string;
 }
