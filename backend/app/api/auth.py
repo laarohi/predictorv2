@@ -187,9 +187,13 @@ async def google_callback(request: Request, session: DbSession):
         user = result.scalar_one_or_none()
 
         if user:
-            # Link Google account to existing user
+            # Link Google to the existing account. Don't downgrade an
+            # email+password user to GOOGLE-only — that would disable their
+            # password login and password-change. Only adopt GOOGLE as the
+            # provider when there's no password to preserve.
             user.google_id = google_user.id
-            user.auth_provider = AuthProvider.GOOGLE
+            if not user.password_hash:
+                user.auth_provider = AuthProvider.GOOGLE
         else:
             # Create new user
             user = User(
