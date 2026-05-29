@@ -23,7 +23,9 @@ from sqlmodel import select
 
 from app.config import get_tournament_config
 from app.models.bonus import BonusAnswer, BonusPrediction
+from app.models.fifa_ranking import FifaRanking
 from app.models.fixture import Fixture, MatchStatus
+from app.services.fifa_codes import FIFA_CODE_TO_TEAM_NAME
 
 
 BonusCategory = Literal["group_stage", "top_flop", "awards"]
@@ -63,23 +65,41 @@ def _category_points(bonus_cfg: dict, category: BonusCategory) -> int:
     return int(bonus_cfg.get("points", {}).get(category, 0))
 
 
-def get_fifa_rankings() -> list[str]:
-    """Return the configured ordered FIFA rankings (top 25 or so) from YAML.
-    Order is significant — first entry is rank #1. Empty list if not
-    configured."""
-    return list(_get_bonus_config().get("fifa_rankings", []) or [])
+async def get_fifa_rankings(session: AsyncSession) -> list[str]:
+    """Return our tournament-team subset of the live FIFA ranking, ordered
+    by rank (index 0 = rank #1). Returns an empty list if the table is
+    empty — consumers must handle that case (the standings tiebreaker
+    falls through to alphabetical; bonus-question cutoffs return empty
+    eligibility lists).
+
+    The `fifa_rankings` table holds all 211 ranked teams; this filters to
+    teams that appear in our `FIFA_CODE_TO_TEAM_NAME` mapping so consumers
+    (tiebreakers, bonus eligibility) see the canonical DB team names they
+    already expect. Populate the table via
+    `scripts/sync_fifa_rankings.py`."""
+    rows = (
+        await session.execute(
+            select(FifaRanking).order_by(FifaRanking.rank)
+        )
+    ).scalars().all()
+    return [
+        FIFA_CODE_TO_TEAM_NAME[r.country_code]
+        for r in rows
+        if r.country_code in FIFA_CODE_TO_TEAM_NAME
+    ]
 
 
 async def fetch_competition_teams(session: AsyncSession) -> set[str]:
-    """All distinct team names from the fixtures table, excluding 'TBD'
-    placeholder slots. This is the authoritative "who's in the competition?"
-    source — the DB is populated by the Football-Data API import
-    (services/fixture_sync.py), so it reflects the real qualifiers.
+    """All distinct *resolved* team names from the fixtures table. Excludes
+    the legacy 'TBD' marker and the 'slot:<stage>:<id>:<side>' placeholders
+    that fixture_sync.py writes for unresolved knockout matches — those
+    aren't real teams and would leak into bonus-question dropdowns
+    (specifically `dark_horse`, whose 'outside top N' cutoff doesn't
+    naturally filter them out the way `flop`'s 'inside top N' intersection
+    does).
 
-    Used by `get_questions()` to pre-filter eligible teams per question.
-    Previously this came from a YAML `groups:` section, but that ended up
-    being a third out-of-sync source of truth (along with seed_data.py and
-    the DB itself); the DB is the only place kept current with reality."""
+    The DB is populated by the Football-Data API import
+    (services/fixture_sync.py), so it reflects the real qualifiers."""
     rows = (
         await session.execute(
             select(Fixture.home_team, Fixture.away_team).distinct()
@@ -87,10 +107,9 @@ async def fetch_competition_teams(session: AsyncSession) -> set[str]:
     ).all()
     teams: set[str] = set()
     for home, away in rows:
-        if home and home != "TBD":
-            teams.add(home)
-        if away and away != "TBD":
-            teams.add(away)
+        for name in (home, away):
+            if name and name != "TBD" and not name.startswith("slot:"):
+                teams.add(name)
     return teams
 
 
@@ -116,15 +135,24 @@ def _eligible_teams_for_cutoff(
     return sorted(t for t in competition_teams if t not in top_n_set)
 
 
-def get_question_top_n_set(question_id: str) -> set[str]:
+def get_question_top_n_set(
+    question_id: str,
+    rankings: list[str] | None = None,
+) -> set[str]:
     """Return the FIFA top-N set for a question's cutoff. The rank comes from
     the question's `cutoff:` block in YAML; the team list comes from
-    `fifa_rankings:`. Empty set if either is missing.
+    `rankings` (defaults to the YAML snapshot). Empty set if either is missing.
 
     This is the *raw* top-N set — it includes all teams in the rankings up to
     N regardless of whether they're in the competition. Callers that need the
-    competition-intersected set (e.g. `compute_bottlers`) intersect after."""
-    rankings = get_fifa_rankings()
+    competition-intersected set (e.g. `compute_bottlers`) intersect after.
+
+    Pass `rankings=` from a caller that has resolved them from the DB
+    (`get_fifa_rankings()`); omit when ranking-based filtering isn't
+    needed (e.g. validation-only call sites that just want
+    `question.points`)."""
+    if rankings is None:
+        rankings = []
     cfg = _get_bonus_config()
     for q in cfg.get("questions", []) or []:
         if q.get("id") == question_id:
@@ -135,6 +163,7 @@ def get_question_top_n_set(question_id: str) -> set[str]:
 
 def get_questions(
     competition_teams: set[str] | None = None,
+    rankings: list[str] | None = None,
 ) -> list[BonusQuestion]:
     """Load the list of bonus questions from YAML, with per-question label
     token substitution and (if `competition_teams` is provided) pre-computed
@@ -147,9 +176,14 @@ def get_questions(
 
     Pass `competition_teams=<set>` (typically from `fetch_competition_teams`)
     from contexts that *do* need the filtered list — e.g. the public bonus
-    questions API route, the admin listing route."""
+    questions API route, the admin listing route.
+
+    Pass `rankings=` from a caller that has resolved them from the DB
+    (`get_fifa_rankings()`); omit when ranking-based filtering isn't
+    needed (e.g. validation-only call sites)."""
     cfg = _get_bonus_config()
-    rankings = get_fifa_rankings()
+    if rankings is None:
+        rankings = []
     raw_qs = cfg.get("questions", []) or []
     questions: list[BonusQuestion] = []
     for raw in raw_qs:
@@ -420,8 +454,12 @@ async def compute_bonus_answers_for_competition(
 
     # Per-question top-N sets — pulled from each question's `cutoff:` block
     # so dark_horse and flop can use different cutoffs (e.g. 12 vs 7).
-    dark_horse_top = get_question_top_n_set("dark_horse")
-    flop_top = get_question_top_n_set("flop")
+    # Resolve rankings once so both questions see a consistent FIFA top-N
+    # list. Empty when the table hasn't been synced yet (no auto-suggested
+    # answers in that case, which is the right fail-safe).
+    rankings = await get_fifa_rankings(session)
+    dark_horse_top = get_question_top_n_set("dark_horse", rankings=rankings)
+    flop_top = get_question_top_n_set("flop", rankings=rankings)
 
     return {
         "most_goals_scored_group": _teams_with_extremum(stats, "gf", True),

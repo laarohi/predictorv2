@@ -28,6 +28,7 @@ from app.models.bonus import BonusPrediction
 from app.services.bonus import (
     BonusQuestion,
     fetch_competition_teams,
+    get_fifa_rankings,
     get_questions as get_bonus_questions,
 )
 from app.services.bracket_exposure import compute_bracket_exposure
@@ -616,7 +617,8 @@ async def get_bonus_questions_route(
     leaks nothing.
     """
     competition_teams = await fetch_competition_teams(session)
-    qs = get_bonus_questions(competition_teams=competition_teams)
+    rankings = await get_fifa_rankings(session)
+    qs = get_bonus_questions(competition_teams=competition_teams, rankings=rankings)
     return [
         BonusQuestionResponse(
             id=q.id,

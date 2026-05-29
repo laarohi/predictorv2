@@ -300,6 +300,19 @@ def _walk_segments(
     return out
 
 
+async def _resolve_fifa_rankings(session: AsyncSession) -> list[str]:
+    """Load FIFA rankings from the `fifa_rankings` table. Async because
+    it needs a session — called at the async boundary so the sync
+    tiebreaker chain receives a plain list. Returns `[]` if the table
+    hasn't been synced; the tiebreaker chain then falls through to
+    alphabetical (which is the documented behavior when ranking data
+    is unavailable)."""
+    # Lazy import to avoid pulling the bonus service into the import
+    # chain at module load — standings is imported from many places.
+    from app.services.bonus import get_fifa_rankings
+    return await get_fifa_rankings(session)
+
+
 def _compute_h2h_stats(
     tied_teams: list[dict],
     matches: list[tuple[Fixture, Score]],
@@ -400,6 +413,9 @@ async def get_actual_group_standings_with_warnings(
             away.drawn += 1
 
     # Sort each group with FIFA tiebreakers and accumulate warnings.
+    # Resolve rankings once at the async boundary so the (sync) tiebreaker
+    # chain doesn't need a session.
+    rankings = await _resolve_fifa_rankings(session)
     out_standings: dict[str, list[dict]] = {}
     out_warnings: list[TieWarning] = []
     for group, teams_dict in standings_by_group.items():
@@ -408,6 +424,7 @@ async def get_actual_group_standings_with_warnings(
             teams,
             group_matches=matches_by_group.get(group, []),
             context="group_standings",
+            fifa_rankings=rankings,
         )
         out_standings[group] = sorted_teams
         out_warnings.extend(warnings)
@@ -450,10 +467,12 @@ async def get_qualifying_third_place_teams_with_warnings(
         if len(teams) >= 3:
             third_place_teams.append({**teams[2], "group": group})
 
+    rankings = await _resolve_fifa_rankings(session)
     sorted_third, third_warnings = _apply_fifa_tiebreakers(
         third_place_teams,
         group_matches=None,  # H2H not applicable cross-group
         context="third_place_qualifying",
+        fifa_rankings=rankings,
     )
 
     # Top 8 qualify. Note: warnings about ties that straddle the 8/9 boundary

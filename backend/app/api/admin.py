@@ -20,6 +20,7 @@ from app.services.audit_log import build_user_history
 from app.services.bonus import (
     compute_bonus_answers_for_competition,
     fetch_competition_teams,
+    get_fifa_rankings,
     get_questions as get_bonus_questions,
 )
 from app.services.email import EmailSendError, send_email
@@ -521,7 +522,8 @@ async def list_bonus_answers(
     list and a null `resolved_at`.
     """
     competition_teams = await fetch_competition_teams(session)
-    qs = get_bonus_questions(competition_teams=competition_teams)
+    rankings = await get_fifa_rankings(session)
+    qs = get_bonus_questions(competition_teams=competition_teams, rankings=rankings)
     comp_result = await session.execute(
         select(Competition).where(Competition.is_active == True)  # noqa: E712
     )

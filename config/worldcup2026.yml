@@ -87,42 +87,11 @@ scoring:
 # and bonus_answers. Labels support {top_n} substitution so changing top_n
 # below updates the wording everywhere automatically.
 bonus:
-  # FIFA Men's World Ranking — one-time snapshot (top 25). Used by:
-  #   - the wizard UI to filter team-dropdowns per question (see `cutoff` on
-  #     each top_flop question below);
-  #   - the auto-resolver (services/bonus.py) to decide which teams count as
-  #     "inside top N" for dark-horse / bottlers scoring.
-  #
-  # Order = ranking position (1-indexed). Names MUST match the spelling used
-  # in `groups:` and DB fixtures — e.g. "United States" (not "USA"). Some
-  # entries (Italy, Croatia, Senegal, Switzerland, Turkey, Austria) may not
-  # be in the competition; the cutoff logic filters them out naturally.
-  fifa_rankings:
-    - "France"          # 1
-    - "Spain"           # 2
-    - "Argentina"       # 3
-    - "England"         # 4
-    - "Portugal"        # 5
-    - "Brazil"          # 6
-    - "Netherlands"     # 7
-    - "Morocco"         # 8
-    - "Belgium"         # 9
-    - "Germany"         # 10
-    - "Croatia"         # 11
-    - "Italy"           # 12  (top 25 but did not qualify for WC 2026)
-    - "Colombia"        # 13
-    - "Senegal"         # 14
-    - "Mexico"          # 15
-    - "United States"   # 16
-    - "Uruguay"         # 17
-    - "Japan"           # 18
-    - "Switzerland"     # 19
-    - "Denmark"         # 20
-    - "Iran"            # 21
-    - "Turkey"          # 22
-    - "Ecuador"         # 23
-    - "Austria"         # 24
-    - "South Korea"     # 25
+  # FIFA Men's World Ranking is now sourced from the `fifa_rankings` DB
+  # table, populated by `backend/scripts/sync_fifa_rankings.py` from the
+  # official FIFA API. Run the script periodically (FIFA publishes ~6×/year);
+  # consumers (bonus eligibility filtering, standings tiebreakers) read
+  # from the table directly.
 
   # Point values per category. Flat within a category, so all 4 group-stage
   # questions are worth the same. Tweak here without code changes.
