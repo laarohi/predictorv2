@@ -14,7 +14,11 @@
 		{ href: '/predictions', label: 'Predict', icon: 'predict', key: 'pred' },
 		{ href: '/results', label: 'Results', icon: 'whistle', key: 'res' },
 		{ href: '/leaderboard', label: 'Standings', icon: 'trophy', key: 'ldb' },
-		{ href: '/rules', label: 'Rules', icon: 'list', key: 'rules' }
+		{ href: '/rules', label: 'Rules', icon: 'list', key: 'rules' },
+		// Account access — the masthead (with profile + sign-out) is
+		// desktop-only, so mobile users reach their profile (and the sign-out
+		// button there) via this tab.
+		{ href: '/profile', label: 'You', icon: 'user', key: 'profile' }
 	];
 
 	$: currentPath = $page.url.pathname;
