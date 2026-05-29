@@ -8,7 +8,8 @@
 	 *                    is soon)
 	 *
 	 * Slot the CTA via the `cta` snippet — the alert lays it out on the
-	 * right edge.
+	 * right edge. Set ctaExternal=true to open the CTA href in a new tab
+	 * (used for off-site links like the Revolut payment URL).
 	 */
 	export let variant: 'gold' | 'red' = 'gold';
 	/** Title rendered next to the icon. */
@@ -20,6 +21,8 @@
 	/** CTA button label. Empty string hides the button. */
 	export let ctaLabel: string = '';
 	export let ctaHref: string | null = null;
+	/** When true and ctaHref is set, opens the link in a new tab. */
+	export let ctaExternal: boolean = false;
 	export let onCta: (() => void) | null = null;
 </script>
 
@@ -32,7 +35,15 @@
 
 	{#if ctaLabel}
 		{#if ctaHref}
-			<a class="pn-btn" class:gold={variant === 'gold'} href={ctaHref}>{ctaLabel}</a>
+			<a
+				class="pn-btn"
+				class:gold={variant === 'gold'}
+				href={ctaHref}
+				target={ctaExternal ? '_blank' : undefined}
+				rel={ctaExternal ? 'noopener noreferrer' : undefined}
+			>
+				{ctaLabel}
+			</a>
 		{:else}
 			<button class="pn-btn" class:gold={variant === 'gold'} on:click={() => onCta?.()}>
 				{ctaLabel}
