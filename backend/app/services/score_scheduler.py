@@ -58,23 +58,30 @@ async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> No
         except Exception:  # noqa: BLE001
             logger.exception("score_scheduler: snapshot tick failed")
 
+        # Score sync runs BEFORE the receipt batch: it's the time-sensitive
+        # match-day operation and must not wait behind a (potentially slow)
+        # Resend send. Wrapped in its own guard so a sync error doesn't skip
+        # the receipts either.
+        try:
+            if await has_active_or_imminent_match(session):
+                result = await sync_scores_once(session)
+                if result.errors:
+                    for err in result.errors:
+                        logger.warning("score_scheduler: %s", err)
+                if result.synced or result.updated:
+                    logger.info(
+                        "score_scheduler tick: synced=%d updated=%d",
+                        result.synced,
+                        result.updated,
+                    )
+        except Exception:  # noqa: BLE001
+            logger.exception("score_scheduler: score sync tick failed")
+
+        # Receipts last — a slow/failing send can't delay the score sync above.
         try:
             await _maybe_send_phase1_receipts(session)
         except Exception:  # noqa: BLE001
             logger.exception("score_scheduler: phase1 receipt tick failed")
-
-        if not await has_active_or_imminent_match(session):
-            return
-        result = await sync_scores_once(session)
-        if result.errors:
-            for err in result.errors:
-                logger.warning("score_scheduler: %s", err)
-        if result.synced or result.updated:
-            logger.info(
-                "score_scheduler tick: synced=%d updated=%d",
-                result.synced,
-                result.updated,
-            )
 
 
 async def _maybe_send_phase1_receipts(session: AsyncSession) -> None:
