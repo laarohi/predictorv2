@@ -42,6 +42,17 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
 
+    # Admin bootstrap: comma-separated emails auto-granted admin on account
+    # creation or login. A fresh deploy otherwise has no admin at all
+    # (is_admin can only be toggled by an existing admin). See also
+    # scripts/make_admin.py for promoting an existing account.
+    admin_emails_str: str = ""
+
+    # Open self-registration toggle. Set false once the friend group is
+    # onboarded so outsiders can't join the live pool; existing users keep
+    # logging in via password / magic-link / Google.
+    registration_enabled: bool = True
+
     # Google OAuth
     google_client_id: str = ""
     google_client_secret: str = ""
@@ -90,6 +101,12 @@ class Settings(BaseSettings):
                 pass
         # Handle comma-separated format: url1,url2
         return [origin.strip() for origin in v.split(",") if origin.strip()]
+
+    @computed_field
+    @property
+    def admin_emails(self) -> list[str]:
+        """Normalized (lowercased) admin allowlist from admin_emails_str."""
+        return [e.strip().lower() for e in self.admin_emails_str.split(",") if e.strip()]
 
     @model_validator(mode="after")
     def _enforce_secret_strength(self) -> "Settings":

@@ -52,6 +52,13 @@ def get_google_sso() -> GoogleSSO:
 @router.post("/register", response_model=Token)
 async def register(user_data: UserCreate, session: DbSession) -> Token:
     """Register a new user with email/password."""
+    settings = get_settings()
+    if not settings.registration_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is closed.",
+        )
+
     # Check if email already exists
     result = await session.execute(select(User).where(User.email == user_data.email))
     if result.scalar_one_or_none():
@@ -60,12 +67,14 @@ async def register(user_data: UserCreate, session: DbSession) -> Token:
             detail="Email already registered",
         )
 
-    # Create user
+    # Create user. Admin bootstrap: emails on the ADMIN_EMAILS allowlist are
+    # created as admins so a fresh deploy can reach admin operations.
     user = User(
         email=user_data.email,
         name=user_data.name,
         password_hash=get_password_hash(user_data.password),
         auth_provider=AuthProvider.EMAIL,
+        is_admin=user_data.email.lower() in settings.admin_emails,
     )
     session.add(user)
     await session.commit()
@@ -176,9 +185,18 @@ async def google_callback(request: Request, session: DbSession):
                 name=google_user.display_name or google_user.email.split("@")[0],
                 google_id=google_user.id,
                 auth_provider=AuthProvider.GOOGLE,
+                is_admin=google_user.email.lower() in settings.admin_emails,
             )
             session.add(user)
 
+        await session.commit()
+        await session.refresh(user)
+
+    # Admin bootstrap: ensure allowlisted emails are admins on every login,
+    # including accounts that existed before being added to the list.
+    if not user.is_admin and user.email.lower() in settings.admin_emails:
+        user.is_admin = True
+        session.add(user)
         await session.commit()
         await session.refresh(user)
 
