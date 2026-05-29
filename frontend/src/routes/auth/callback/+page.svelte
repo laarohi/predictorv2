@@ -7,14 +7,20 @@
 	let error = '';
 
 	onMount(() => {
-		const token = $page.url.searchParams.get('token');
-		const errorParam = $page.url.searchParams.get('error');
+		// The backend delivers the token in the URL fragment (#token=...) so it
+		// never reaches server access logs. Read from the hash, falling back to
+		// the query string for backward compatibility.
+		const hash = new URLSearchParams(window.location.hash.slice(1));
+		const token = hash.get('token') ?? $page.url.searchParams.get('token');
+		const errorParam = hash.get('error') ?? $page.url.searchParams.get('error');
 		if (errorParam) {
 			error = errorParam;
 			return;
 		}
 		if (token) {
 			handleOAuthCallback(token);
+			// Strip the token from the address bar / history before navigating.
+			history.replaceState(null, '', window.location.pathname);
 			goto('/');
 		} else {
 			error = 'No authentication token received';

@@ -1,5 +1,6 @@
 """Authentication API routes."""
 
+import logging
 from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, Request, status
@@ -33,6 +34,8 @@ from app.services.magic_link import (
 from app.services.profile import calculate_user_stats
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 def get_google_sso() -> GoogleSSO:
@@ -137,10 +140,14 @@ async def google_callback(request: Request, session: DbSession):
 
     try:
         google_user = await google_sso.verify_and_process(request)
-    except Exception as e:
+    except Exception:
+        # Log the real cause server-side; return a generic message so raw
+        # exception text (which can include token/URL internals) isn't
+        # reflected to the client.
+        logger.exception("Google OAuth callback failed")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to authenticate with Google: {e}",
+            detail="Google sign-in failed, please try again.",
         )
 
     if not google_user or not google_user.email:
@@ -187,9 +194,14 @@ async def google_callback(request: Request, session: DbSession):
         expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
     )
 
-    # Redirect to frontend with token
-    frontend_url = settings.cors_origins[0] if settings.cors_origins else "http://localhost:5173"
-    return RedirectResponse(url=f"{frontend_url}/auth/callback?token={access_token}")
+    # Redirect to the frontend with the token in the URL *fragment*, not the
+    # query string. Fragments are never sent to the server, so the bearer
+    # token can't leak into nginx/Cloudflare access logs or the Referer
+    # header. The callback page reads it from location.hash and immediately
+    # strips it from the address bar. Use the canonical public base URL so the
+    # redirect target doesn't depend on CORS list ordering.
+    frontend_url = settings.public_base_url or "http://localhost:5173"
+    return RedirectResponse(url=f"{frontend_url}/auth/callback#token={access_token}")
 
 
 @router.get("/me", response_model=UserRead)
