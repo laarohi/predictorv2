@@ -20,7 +20,7 @@ Current focus: **World Cup 2026**
 
 **Frontend:**
 - SvelteKit with TypeScript
-- Tailwind CSS + DaisyUI (DaisyUI's tokens still drive auth-gated layouts; the user-facing surface uses the **Panini** design system — see "UI Guidelines" below)
+- Tailwind CSS — base utilities only; the entire user-facing surface is rendered through the **Panini** design system (see "UI Guidelines" below)
 - Panini design system: cream-paper sticker-album theme, fonts Archivo Black + Archivo + IBM Plex Sans/Mono, CSS-variable-scoped under `.pn`
 - Svelte stores for state management
 - Vitest for unit tests (pure utilities + stub generators)
@@ -49,15 +49,17 @@ Current focus: **World Cup 2026**
 │   │   │   ├── /components
 │   │   │   │   ├── /panini  # Panini design components (PnPageShell, PnMast,
 │   │   │   │   │            #   PnBottomNav, PnFlag, PnIcon, PnKnockoutBracket,
-│   │   │   │   │            #   PnBracketMatch, PnSparkline, PnStrip)
-│   │   │   │   └── /bracket # Legacy interactive bracket (still imported by
-│   │   │   │                #   PnKnockoutBracket for its state machine)
+│   │   │   │   │            #   PnBracketMatch, PnSparkline, PnStrip,
+│   │   │   │   │            #   PnDevPhasePill, plus /dashboard/* widgets)
+│   │   │   │   └── GoogleLoginButton.svelte
+│   │   │   │                # The only non-Panini component (already uses
+│   │   │   │                #   Panini CSS variables); legacy DaisyUI
+│   │   │   │                #   components were deleted post-migration.
 │   │   │   ├── /stores      # Svelte stores
-│   │   │   ├── /styles      # Panini CSS modules (panini-base.css, panini-
-│   │   │   │                #   dashboard.css, panini-leaderboard.css,
-│   │   │   │                #   panini-wizard.css, panini-bracket.css,
-│   │   │   │                #   panini-results.css, panini-profile.css,
-│   │   │   │                #   panini-admin.css, panini-auth.css)
+│   │   │   ├── /styles      # Panini CSS modules (panini-base.css,
+│   │   │   │                #   panini-dashboard-v4.css, panini-leaderboard,
+│   │   │   │                #   -wizard, -bracket, -results, -match,
+│   │   │   │                #   -auth, -profile, -admin, -rules)
 │   │   │   ├── /stubs       # Deterministic stubs for backend-pending widgets
 │   │   │   ├── /types       # TypeScript interfaces (incl. types/panini.ts)
 │   │   │   └── /utils       # Helper functions (incl. teamCodes.ts,
@@ -127,7 +129,7 @@ The rule was established in commit `c6089cc`. The original conversion migration 
 | `backend/app/services/standings.py` | Group standings calculation |
 | `backend/app/api/admin.py` | Admin endpoints (users, paid status, phase ops, score sync) |
 | `frontend/src/app.css` | Top-level stylesheet — order-sensitive `@import`s for Panini CSS modules go **before** `@tailwind` directives |
-| `frontend/src/routes/+layout.svelte` | Root layout — `PANINI_ROUTES` list controls which routes render their own Panini chrome vs the legacy DaisyUI navbar |
+| `frontend/src/routes/+layout.svelte` | Root layout — auth init + phase fetch + dev-only `PnDevPhasePill`. Every route renders its own chrome via `<PnPageShell>`, so the layout itself only emits a bare `<slot />`. |
 | `frontend/src/lib/components/panini/PnPageShell.svelte` | Wraps every Panini page (masthead + bottom nav + paper grain) |
 | `frontend/src/lib/components/panini/PnKnockoutBracket.svelte` | Final-in-the-middle bracket (wall chart desktop / swipeable mobile) |
 | `frontend/src/lib/components/panini/PnBracketMatch.svelte` | Single match card inside the bracket |
@@ -224,7 +226,7 @@ docker-compose exec frontend-dev npx vitest run
 docker-compose exec backend python scripts/seed_phase2_test.py
 ```
 
-**Pre-existing svelte-check baseline:** ~59 warnings (mostly `@apply` and a11y), 0 errors. New code should keep the error count at zero; a couple of new warnings is acceptable.
+**Pre-existing svelte-check baseline:** 0 errors, ~2 warnings (unused exports). The legacy DaisyUI components that produced the bulk of the old warning load have been removed. New code should keep the error count at zero and not regress warnings meaningfully.
 
 ## UI Guidelines
 
