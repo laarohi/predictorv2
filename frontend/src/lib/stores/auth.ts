@@ -43,6 +43,22 @@ token.subscribe((value) => {
 	setStoredToken(value);
 });
 
+// When any API call returns 401, clear the dead session and bounce to login.
+// Guard on having a token so we don't hijack login/register failures (no token
+// yet) or loop when already signed out / on the login page.
+function handleUnauthorized() {
+	if (get(token) === null) return;
+	const prevId = get(user)?.id;
+	if (prevId) clearAllForUser(prevId);
+	token.set(null);
+	user.set(null);
+	error.set('Your session expired — please sign in again.');
+	if (browser && !window.location.pathname.startsWith('/login')) {
+		goto('/login');
+	}
+}
+api.setUnauthorizedHandler(handleUnauthorized);
+
 // Actions
 export async function register(data: UserCreate): Promise<boolean> {
 	loading.set(true);

@@ -8,9 +8,19 @@ const API_BASE = '/api';
 
 export class ApiClient {
 	private token: string | null = null;
+	private onUnauthorized: (() => void) | null = null;
 
 	setToken(token: string | null) {
 		this.token = token;
+	}
+
+	/**
+	 * Register a handler invoked when any request returns 401. The auth store
+	 * uses this to clear the dead token and bounce to /login, rather than the
+	 * client importing the store (which would create an import cycle).
+	 */
+	setUnauthorizedHandler(handler: (() => void) | null) {
+		this.onUnauthorized = handler;
 	}
 
 	private async request<T>(
@@ -32,6 +42,11 @@ export class ApiClient {
 		});
 
 		if (!response.ok) {
+			// A 401 means the session is invalid/expired — let the auth layer
+			// clear it and redirect before we surface the error.
+			if (response.status === 401) {
+				this.onUnauthorized?.();
+			}
 			const error: ApiError = await response.json().catch(() => ({
 				detail: `HTTP ${response.status}: ${response.statusText}`
 			}));
