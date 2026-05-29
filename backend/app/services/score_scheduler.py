@@ -17,9 +17,10 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import get_settings
+from app.database import async_session_maker
 from app.models._datetime import utc_now
 from app.services.locking import get_active_competition
 from app.services.receipts import send_phase1_receipts
@@ -33,13 +34,6 @@ logger = logging.getLogger(__name__)
 # Tunable: 60 s lines up with the frontend's leaderboard poll cadence,
 # so users see fresh scores within one frontend refresh.
 POLL_INTERVAL_SECONDS = 60.0
-
-
-def _make_session_factory() -> async_sessionmaker[AsyncSession]:
-    settings = get_settings()
-    db_url = str(settings.database_url).replace("postgresql://", "postgresql+asyncpg://")
-    engine = create_async_engine(db_url)
-    return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -122,7 +116,10 @@ async def run_scheduler_loop(
     stop_event: asyncio.Event | None = None,
 ) -> None:
     """Long-running task: poll forever (until cancelled or stop_event set)."""
-    session_factory = _make_session_factory()
+    # Reuse the app's shared engine/pool rather than constructing a second
+    # engine — two pools would double the connection footprint and could
+    # exhaust Postgres max_connections under any future multi-worker config.
+    session_factory = async_session_maker
     stop_event = stop_event or asyncio.Event()
 
     logger.info("score_scheduler started (interval=%.1fs)", interval_seconds)
