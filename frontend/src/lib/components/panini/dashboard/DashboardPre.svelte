@@ -35,9 +35,11 @@
 	} from '$stores/phase';
 	import { getRoster, type RosterResponse } from '$api/users';
 	import { getBonusQuestions, getMyBonusPredictions } from '$api/bonus';
+	import { getCompetitionInfo, type CompetitionInfo } from '$api/competition';
 	import { countBracketSlotsFilled, BRACKET_TOTAL_SLOTS } from '$lib/utils/bracketProgress';
 
 	let rosterResp: RosterResponse | null = null;
+	let info: CompetitionInfo | null = null;
 	// Bonus questions + the user's saved bonus answers come from two separate
 	// endpoints (questions are config-driven, answers are per-user). We store
 	// the counts only — the dashboard never renders the question prompts, so
@@ -49,11 +51,14 @@
 		fetchAllFixtures();
 		fetchMatchPredictions();
 		fetchBracketPredictions();
-		try {
-			rosterResp = await getRoster();
-		} catch {
-			rosterResp = null;
-		}
+		// Roster + competition info fetched in parallel — they're independent
+		// requests and the banner can render without the roster.
+		const [rosterResult, infoResult] = await Promise.allSettled([
+			getRoster(),
+			getCompetitionInfo(),
+		]);
+		rosterResp = rosterResult.status === 'fulfilled' ? rosterResult.value : null;
+		info = infoResult.status === 'fulfilled' ? infoResult.value : null;
 		try {
 			const [questions, preds] = await Promise.all([
 				getBonusQuestions(),
@@ -90,6 +95,12 @@
 	$: overallTotal = totalGroupMatches + BRACKET_TOTAL_SLOTS + totalBonusQuestions;
 	$: overallFilled = filledGroup + bracketSlotsFilled + bonusFilled;
 
+	// Entry fee comes from /competition/info (YAML-backed). Fall back to 25
+	// before the fetch resolves so the banner copy and the Revolut URL stay
+	// sensible during the first render. EUR is the only supported currency.
+	$: entryFee = info?.entry_fee ?? 25;
+	$: revolutUrl = `https://revolut.me/laarohi?currency=EUR&amount=${Math.round(entryFee * 100)}&note=World%20Cup%20Predictor`;
+
 	$: countdown = (() => {
 		if (!$phase1Deadline) return { d: 0, h: 0, m: 0, s: 0 };
 		const target = new Date($phase1Deadline).getTime();
@@ -115,7 +126,8 @@
 					: `@${e.name.split(' ')[0].toLowerCase()}`,
 				filled: e.match_predictions_filled + e.bracket_picks_filled,
 				total: overallTotal,
-				isCurrentUser: e.is_current_user
+				isCurrentUser: e.is_current_user,
+				paid: e.paid
 			}));
 		}
 		if ($user) {
@@ -126,7 +138,8 @@
 					handle: 'YOU',
 					filled: overallFilled,
 					total: overallTotal,
-					isCurrentUser: true
+					isCurrentUser: true,
+					paid: $user.paid
 				}
 			];
 		}
@@ -159,6 +172,18 @@
 
 <PnPageShell lockLabel={stripLock}>
 	<div class="pn-dash-v4">
+		{#if $user && $user.paid === false}
+			<DwAlert
+				variant="red"
+				icon="€"
+				title="Entry fee unpaid"
+				meta={`Send <b>€${entryFee}</b> to <b>+356 9929 0197</b> on Revolut before the competition starts.`}
+				ctaLabel={`Pay €${entryFee} now`}
+				ctaHref={revolutUrl}
+				ctaExternal
+			/>
+		{/if}
+
 		{#if overallFilled < overallTotal && overallFilled > 0}
 			<DwAlert
 				variant="gold"
