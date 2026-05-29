@@ -29,7 +29,6 @@
     "vitest": "^1.0.0"
   },
   "dependencies": {
-    "daisyui": "^4.4.0",
     "flag-icons": "^7.5.0",
     "svelte-motion": "^0.12.0"
   },
