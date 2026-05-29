@@ -69,14 +69,14 @@ GREEN = "#1b6c3e"
 STAGE_LABELS: dict[str, str] = {
     "round_of_32": "Round of 32",
     "round_of_16": "Round of 16",
-    "quarter_finals": "Quarter-finals",
-    "semi_finals": "Semi-finals",
+    "quarter_final": "Quarter-finals",
+    "semi_final": "Semi-finals",
     "final": "Final",
     "winner": "Winner",
 }
 
 # Ordered for the bracket section (group/winner are special-cased).
-BRACKET_STAGES_IN_ORDER = ["round_of_32", "round_of_16", "quarter_finals", "semi_finals", "final"]
+BRACKET_STAGES_IN_ORDER = ["round_of_32", "round_of_16", "quarter_final", "semi_final", "final"]
 
 
 @dataclass(frozen=True, slots=True)
@@ -195,7 +195,7 @@ def _render_html(
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; background:{PAPER}; border:2px solid {INK};">
           <tr>
             <td style="padding:18px 22px 14px; border-bottom:2px solid {INK}; background:{PAPER_2};">
-              <div style="font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:{INK_3};">The Predictor · World Cup 2026</div>
+              <div style="font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:{INK_3};">CxF Predict<span style="color:#d49a2e;">aa</span> · World Cup 2026</div>
               <div style="font-family:'Archivo Black','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:24px; line-height:1.2; margin-top:4px; letter-spacing:0.01em;">Your predictions are locked in</div>
               <div style="font-size:13px; color:{INK_2}; margin-top:6px;">Hi {_esc(user.name)}, here's a record of everything you submitted before the tournament began.</div>
             </td>
@@ -215,7 +215,7 @@ def _render_html(
           {bonus_html}
           <tr>
             <td style="padding:14px 22px 22px; border-top:2px solid {INK}; background:{PAPER_2}; font-size:11px; color:{INK_3}; letter-spacing:0.03em;">
-              You're receiving this because you registered for The Predictor.
+              You're receiving this because you registered for CxF Predictaa.
               <div style="margin-top:6px;"><a href="https://predictor.laarohi.xyz" style="color:{INK_2};">predictor.laarohi.xyz</a></div>
             </td>
           </tr>
@@ -358,7 +358,7 @@ def _render_text(
     rendered_at: datetime,
 ) -> str:
     lines: list[str] = []
-    lines.append("THE PREDICTOR · WORLD CUP 2026")
+    lines.append("CXF PREDICTAA · WORLD CUP 2026")
     lines.append("=" * 40)
     lines.append("")
     lines.append(f"Hi {user.name},")

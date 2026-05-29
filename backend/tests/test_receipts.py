@@ -105,7 +105,7 @@ class TestPhase1ReceiptHappyPath:
             (_match_pred(f2.id, user.id, 0, 0), f2),
         ]
         bracket_rows = [
-            _team(user.id, "Brazil", "semi_finals"),
+            _team(user.id, "Brazil", "semi_final"),
             _team(user.id, "Argentina", "final"),
             _team(user.id, "Brazil", "winner"),
         ]

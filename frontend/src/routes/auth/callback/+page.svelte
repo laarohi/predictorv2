@@ -23,7 +23,7 @@
 </script>
 
 <svelte:head>
-	<title>Authenticating… — Predictor</title>
+	<title>Authenticating… — CxF Predictaa</title>
 </svelte:head>
 
 <div class="pn">
@@ -31,8 +31,8 @@
 		{#if error}
 			<div class="pn-auth-card" style="text-align: center;">
 				<div class="pn-auth-crest">
-					<div class="crest">P</div>
-					<div class="nm">The Predictor</div>
+					<div class="crest">CxF</div>
+					<div class="nm">Predict<span class="aa">aa</span></div>
 				</div>
 				<h1 class="pn-auth-h" style="color: var(--red);">Authentication <em>failed</em></h1>
 				<p style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 22px;">

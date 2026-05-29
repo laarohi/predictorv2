@@ -109,7 +109,7 @@ def _render_email(user: User, raw_token: str) -> tuple[str, str, str]:
     login_url = _build_login_url(raw_token)
     ttl_minutes = TOKEN_TTL_MINUTES
 
-    subject = "Your login link for The Predictor"
+    subject = "Your login link for CxF Predictaa"
 
     html = f"""\
 <!doctype html>
@@ -126,7 +126,7 @@ def _render_email(user: User, raw_token: str) -> tuple[str, str, str]:
         <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; background:#f1ebde; border:2px solid #0e1d40;">
           <tr>
             <td style="padding:18px 22px 14px; border-bottom:2px solid #0e1d40; background:#e9e1cf;">
-              <div style="font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:#8a826f;">The Predictor</div>
+              <div style="font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:#8a826f;">CxF Predict<span style="color:#d49a2e;">aa</span></div>
               <div style="font-family:'Archivo Black','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:22px; line-height:1.2; margin-top:4px; letter-spacing:0.01em;">Your login link</div>
             </td>
           </tr>
@@ -149,7 +149,7 @@ def _render_email(user: User, raw_token: str) -> tuple[str, str, str]:
           </tr>
           <tr>
             <td style="padding:14px 22px 22px; border-top:2px solid #0e1d40; background:#e9e1cf; font-size:11px; color:#8a826f; letter-spacing:0.03em;">
-              The Predictor · <a href="https://predictor.laarohi.xyz" style="color:#514a3d;">predictor.laarohi.xyz</a>
+              CxF Predictaa · <a href="https://predictor.laarohi.xyz" style="color:#514a3d;">predictor.laarohi.xyz</a>
             </td>
           </tr>
         </table>
@@ -160,7 +160,7 @@ def _render_email(user: User, raw_token: str) -> tuple[str, str, str]:
 </html>"""
 
     text = f"""\
-THE PREDICTOR — LOGIN LINK
+CXF PREDICTAA — LOGIN LINK
 ========================================
 
 Hi {user.name},

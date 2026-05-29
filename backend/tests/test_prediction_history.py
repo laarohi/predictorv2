@@ -223,7 +223,7 @@ class TestBracketRewriteHistoryCapture:
             phase=PredictionPhase.PHASE_1,
         )
         existing_france = TeamPrediction(
-            id=uuid.uuid4(), user_id=user.id, team="France", stage="semi_finals",
+            id=uuid.uuid4(), user_id=user.id, team="France", stage="semi_final",
             phase=PredictionPhase.PHASE_1,
         )
 

@@ -34,15 +34,15 @@
 </script>
 
 <svelte:head>
-	<title>Signing in — Predictor</title>
+	<title>Signing in — CxF Predictaa</title>
 </svelte:head>
 
 <div class="pn">
 	<div class="pn-auth-page">
 		<div class="pn-auth-card" style="text-align: center;">
 			<div class="pn-auth-crest">
-				<div class="crest">P</div>
-				<div class="nm">The Predictor<span class="sub">Vol. I — WC 2026</span></div>
+				<div class="crest">CxF</div>
+				<div class="nm">Predict<span class="aa">aa</span><span class="sub">Vol. I — WC 2026</span></div>
 			</div>
 
 			{#if state === 'verifying'}

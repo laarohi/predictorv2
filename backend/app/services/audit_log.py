@@ -134,8 +134,8 @@ def _format_match_change(
 _STAGE_LABELS = {
     "round_of_32": "Round of 32",
     "round_of_16": "Round of 16",
-    "quarter_finals": "Quarter-finals",
-    "semi_finals": "Semi-finals",
+    "quarter_final": "Quarter-finals",
+    "semi_final": "Semi-finals",
     "final": "Final",
     "winner": "Winner",
     "group": "Group stage",

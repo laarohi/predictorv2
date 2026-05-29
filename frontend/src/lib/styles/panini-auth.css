@@ -29,13 +29,15 @@
 	border-bottom: 2px solid var(--ink);
 }
 .pn .pn-auth-crest .crest {
-	width: 48px;
+	min-width: 48px;
 	height: 48px;
+	padding: 0 10px;
 	background: var(--red);
 	display: grid;
 	place-items: center;
 	font-family: var(--display);
-	font-size: 28px;
+	font-size: 22px;
+	letter-spacing: 0.01em;
 	color: var(--paper);
 	transform: rotate(-4deg);
 	box-shadow: 4px 4px 0 var(--ink);
@@ -45,6 +47,9 @@
 	font-size: 28px;
 	line-height: 1;
 	text-transform: uppercase;
+}
+.pn .pn-auth-crest .nm .aa {
+	color: var(--gold);
 }
 .pn .pn-auth-crest .nm .sub {
 	display: block;

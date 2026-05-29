@@ -88,8 +88,8 @@ class TestFormatTeamChange:
 
     def test_delete(self):
         assert _format_team_change(
-            "Brazil", "semi_finals",
-            {"team": "Brazil", "stage": "semi_finals"}, None,
+            "Brazil", "semi_final",
+            {"team": "Brazil", "stage": "semi_final"}, None,
             PredictionAction.DELETE,
         ) == "Semi-finals: removed Brazil"
 
