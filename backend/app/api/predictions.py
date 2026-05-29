@@ -882,12 +882,14 @@ async def get_agreements(
     supplied), return how many other users made the same exact score and
     how many made the same outcome (1/X/2).
 
-    Privacy: only counts are returned, never individual picks. Counts are
-    computed *relative to the caller's own pick*, so revealing them pre-lock
-    cannot leak any other user's prediction. The caller's own pick is
-    already known to them.
+    Privacy: only counts are returned, never individual picks, and only for
+    fixtures that are already locked or finished. Counts are computed relative
+    to the caller's own pick, so exposing them *before lock* would let a caller
+    sweep their own score and watch the counts move to reconstruct everyone
+    else's predictions (and boundary cases like agrees_exact == total leak
+    outright) — so unlocked fixtures are excluded entirely.
 
-    Empty list if the caller hasn't predicted any of the requested fixtures.
+    Empty list if the caller hasn't predicted any locked/finished fixtures.
     """
     # 1. Caller's predictions for the requested fixtures (or all if none specified).
     user_preds_q = select(MatchPrediction).where(MatchPrediction.user_id == current_user.id)
@@ -900,18 +902,38 @@ async def get_agreements(
     if not user_preds:
         return []
 
-    # 2. All predictions for those fixtures, in one query.
+    # 2. Blind pool: keep only fixtures that are already locked or finished.
     relevant_ids = list(user_preds.keys())
+    fixtures_result = await session.execute(
+        select(Fixture).where(Fixture.id.in_(relevant_ids))
+    )
+    fixtures = {f.id: f for f in fixtures_result.scalars().all()}
+    phase1_locked = await is_phase1_locked(session)
+    visible_ids: list[uuid.UUID] = []
+    for fid in relevant_ids:
+        fixture = fixtures.get(fid)
+        if fixture is None:
+            continue
+        locked, _ = await get_fixture_lock_view(session, fixture, phase1_locked=phase1_locked)
+        if locked or fixture.status == MatchStatus.FINISHED:
+            visible_ids.append(fid)
+    if not visible_ids:
+        return []
+    visible_set = set(visible_ids)
+
+    # 3. All predictions for the visible fixtures, in one query.
     all_preds_result = await session.execute(
-        select(MatchPrediction).where(MatchPrediction.fixture_id.in_(relevant_ids))
+        select(MatchPrediction).where(MatchPrediction.fixture_id.in_(visible_ids))
     )
     by_fixture: dict[uuid.UUID, list[MatchPrediction]] = defaultdict(list)
     for p in all_preds_result.scalars().all():
         by_fixture[p.fixture_id].append(p)
 
-    # 3. Aggregate per-fixture in Python.
+    # 4. Aggregate per-fixture in Python (visible fixtures only).
     out: list[FixtureAgreement] = []
     for fixture_id, my_pred in user_preds.items():
+        if fixture_id not in visible_set:
+            continue
         my_h, my_a = my_pred.home_score, my_pred.away_score
         my_sign = _outcome_sign(my_h, my_a)
         preds = by_fixture[fixture_id]
