@@ -12,7 +12,7 @@ from app.models._datetime import utc_now
 from app.schemas.leaderboard import LeaderboardResponse, PointBreakdown
 from app.services.leaderboard import calculate_leaderboard, invalidate_cache
 from app.services.scoring import calculate_user_points, get_scoring_config, SCORING_STRATEGIES
-from app.services.snapshots import get_steepest_climbers, get_user_trajectory
+from app.services.snapshots import get_user_trajectory
 
 router = APIRouter()
 
@@ -44,23 +44,6 @@ class RankTrajectoryResponse(BaseModel):
     user_id: uuid.UUID
     points: list[RankSnapshotPoint]
     total_participants: int
-
-
-class SteepestClimberEntry(BaseModel):
-    """One row in the steepest-climbers list."""
-
-    user_id: uuid.UUID
-    user_name: str
-    places: int
-    current_position: int
-    previous_position: int
-
-
-class SteepestClimbersResponse(BaseModel):
-    """Top-N users by 7-day rank improvement."""
-
-    days: int
-    entries: list[SteepestClimberEntry]
 
 
 class ScoringConfigResponse(BaseModel):
@@ -214,60 +197,6 @@ async def get_my_trajectory(
     user's live current rank, not the most recent stored snapshot.
     """
     return await _build_trajectory(session, user.id, days, all_time=all_time)
-
-
-@router.get("/snapshots/{user_id}", response_model=RankTrajectoryResponse)
-async def get_user_trajectory_route(
-    user_id: uuid.UUID,
-    session: DbSession,
-    _user: CurrentUser,
-    days: int = Query(7, ge=2, le=365),
-    all_time: bool = Query(False),
-) -> RankTrajectoryResponse:
-    """Rank trajectory for any user — powers the leaderboard's per-row
-    sparkline column and the public profile."""
-    return await _build_trajectory(session, user_id, days, all_time=all_time)
-
-
-@router.get("/climbers", response_model=SteepestClimbersResponse)
-async def get_climbers(
-    session: DbSession,
-    _user: CurrentUser,
-    days: int = Query(7, ge=2, le=90),
-    # Cap raised from 20 → 100 so the Dashboard can request the full field
-    # (it asks for 32 to cover any plausible competition size). 422'd
-    # previously when the dashboard called /climbers?days=7&limit=32.
-    limit: int = Query(5, ge=1, le=100),
-) -> SteepestClimbersResponse:
-    """Top-N users by rank improvement over the last `days`.
-
-    Used by the dashboard's "Steepest climb · group of 32" footer. Returns
-    `places` positive when the user climbed (e.g. 14 → 8 yields places=6).
-    """
-    raw = await get_steepest_climbers(session, days=days, limit=limit)
-
-    # Fetch user names in one shot
-    from sqlmodel import select  # local import to avoid widening top-level deps
-    from app.models.user import User
-
-    user_ids = [c["user_id"] for c in raw]
-    name_lookup: dict[uuid.UUID, str] = {}
-    if user_ids:
-        result = await session.execute(select(User.id, User.name).where(User.id.in_(user_ids)))
-        for uid, name in result.all():
-            name_lookup[uid] = name
-
-    entries = [
-        SteepestClimberEntry(
-            user_id=c["user_id"],
-            user_name=name_lookup.get(c["user_id"], "Unknown"),
-            places=c["places"],
-            current_position=c["current_position"],
-            previous_position=c["previous_position"],
-        )
-        for c in raw
-    ]
-    return SteepestClimbersResponse(days=days, entries=entries)
 
 
 # ---------------------------------------------------------------------------
