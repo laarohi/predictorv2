@@ -17,10 +17,8 @@ the dashboard whether they still owe money.
    paid, show a red alert at the top with a one-click "Pay €X now" button
    that opens Revolut in a new tab, pre-filled with amount and note.
 2. **Roster name-and-shame.** In the players roster on the same dashboard,
-   show an `UNPAID` pill next to any active player who has started filling in
-   predictions but hasn't paid. Paid players get no badge. Players with zero
-   progress get no badge — a player who registered but hasn't engaged yet is
-   a different problem.
+   show an `UNPAID` pill next to any active player who hasn't paid,
+   regardless of prediction progress. Paid players get no badge.
 3. **Phase scoping.** Both indicators disappear automatically once the
    tournament starts (i.e. once the dashboard transitions out of
    `pre_tournament`). This is to keep the dashboard clean once payment can no
@@ -134,13 +132,15 @@ the dashboard whether they still owe money.
 9. **`frontend/src/lib/components/panini/dashboard/widgets/DwRoster.svelte`**:
    - Add `paid?: boolean` to the exported `RosterRow` type.
    - In the row template, after `{r.name}<span class="h">{r.handle}</span>`,
-     render the pill **only when `r.paid === false && r.filled > 0`**:
+     render the pill **only when `r.paid === false`**:
      ```svelte
-     {#if r.paid === false && r.filled > 0}
+     {#if r.paid === false}
        <span class="paid-pill unpaid">UNPAID</span>
      {/if}
      ```
-     PAID users get no pill (per name-and-shame rule).
+     PAID users get no pill (per name-and-shame rule). `paid === undefined`
+     also skips the pill — defensive against an old token paired with a
+     pre-deploy backend.
 
 10. **`frontend/src/lib/components/panini/dashboard/DashboardPre.svelte`**:
     - Import `getCompetitionInfo` from `$api/competition` (or pull from an
@@ -213,15 +213,14 @@ construction. No explicit phase check is needed at the component level.
     both `paid` values flow through into `RosterResponse.entries`.
   - `/auth/me` test (if existing): assert `paid` is in the response shape.
 - **Manual frontend smoke**:
-  - Sign in as an unpaid user with some predictions → banner renders, pill
-    appears next to their own name in the roster.
-  - Sign in as a paid user → no banner, no pill anywhere.
-  - Sign in as an unpaid user with zero predictions filled → banner
-    renders (banner is independent of progress), but no pill in the
-    roster.
+  - Sign in as an unpaid user → banner renders, UNPAID pill appears next
+    to their own name in the roster (independent of prediction progress).
+  - Sign in as a paid user → no banner, no pill anywhere in the roster.
+  - Roster shows the right mix of UNPAID pills for the unpaid players in
+    the group, and no pills for paid players.
   - Click "Pay €25 now" → opens Revolut in new tab with prefilled amount.
   - Force `uxPhase = 'group_stage'` (admin advance) → both banner and
-    pill gone.
+    pill gone (the whole `DashboardPre` is gone).
 - **Vitest**: not strictly required — `DwAlert` and `DwRoster` are simple
   templating; a unit test would mostly assert markup.
 
@@ -239,9 +238,10 @@ construction. No explicit phase check is needed at the component level.
   competition" form still writes to the DB row, but the displayed amount
   comes from YAML — a future cleanup could remove the DB column or hide the
   admin field. Out of scope for this change.
-- **Pill threshold.** "Progress" = at least one match prediction or one
-  bracket pick. Edge case: a user who filled in a single match and abandoned
-  the rest still triggers the pill. Per spec — name-and-shame is intentional.
+- **Pill scope.** UNPAID pill shows for every unpaid player regardless of
+  prediction progress — even players who registered and haven't picked
+  anything yet get the pill. Per spec — name-and-shame applies to anyone
+  on the roster who hasn't paid.
 
 ## File touch list
 
