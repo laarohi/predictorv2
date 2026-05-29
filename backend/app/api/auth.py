@@ -94,6 +94,7 @@ async def register(user_data: UserCreate, session: DbSession) -> Token:
     access_token = create_access_token(
         user_id=str(user.id),
         expires_delta=timedelta(minutes=get_settings().jwt_access_token_expire_minutes),
+        token_version=user.token_version,
     )
 
     return Token(access_token=access_token)
@@ -137,6 +138,7 @@ async def login(credentials: UserLogin, session: DbSession) -> Token:
     access_token = create_access_token(
         user_id=str(user.id),
         expires_delta=timedelta(minutes=get_settings().jwt_access_token_expire_minutes),
+        token_version=user.token_version,
     )
 
     return Token(access_token=access_token)
@@ -235,6 +237,7 @@ async def google_callback(request: Request, session: DbSession):
     access_token = create_access_token(
         user_id=str(user.id),
         expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
+        token_version=user.token_version,
     )
 
     # Redirect to the frontend with the token in the URL *fragment*, not the
@@ -251,6 +254,19 @@ async def google_callback(request: Request, session: DbSession):
 async def get_current_user_info(current_user: CurrentUser) -> UserRead:
     """Get current user information."""
     return UserRead.model_validate(current_user)
+
+
+@router.post("/me/logout-all")
+async def logout_all_sessions(current_user: CurrentUser, session: DbSession) -> dict[str, str]:
+    """Sign out everywhere: invalidate all of the current user's tokens.
+
+    Bumps token_version so every previously-issued JWT (including the one used
+    for this request) fails the `tv` check on its next use.
+    """
+    current_user.token_version += 1
+    session.add(current_user)
+    await session.commit()
+    return {"status": "all sessions signed out"}
 
 
 @router.post("/me/password")
@@ -375,5 +391,6 @@ async def verify_magic_link_endpoint(
     access_token = create_access_token(
         user_id=str(user.id),
         expires_delta=timedelta(minutes=get_settings().jwt_access_token_expire_minutes),
+        token_version=user.token_version,
     )
     return Token(access_token=access_token)
