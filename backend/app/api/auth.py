@@ -271,24 +271,18 @@ async def request_magic_link(
 ) -> MagicLinkRequestResponse:
     """Generate a one-time login token and email it to the user.
 
-    Returns 200 on success. Specific failures map to:
-      - 404: unknown email
-      - 403: account inactive
+    Anti-enumeration: unknown or inactive emails return the same 200 "sent"
+    response as success, so this endpoint can't be used to probe which
+    addresses are registered. Only requester-facing failures surface:
       - 429: rate limited
       - 502: email send failure (Resend permanent error)
     """
     try:
         await create_magic_link(session, payload.email)
-    except UnknownEmail:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No account found for this email",
-        )
-    except UserInactive:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is inactive",
-        )
+    except (UnknownEmail, UserInactive):
+        # Mask account existence/state: return the same "sent" response as the
+        # success path so the endpoint can't be used for email enumeration.
+        return MagicLinkRequestResponse(status="sent")
     except RateLimited:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
