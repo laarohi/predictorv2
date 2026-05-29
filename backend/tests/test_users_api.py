@@ -373,3 +373,55 @@ class TestUserReadPaid:
         )
         read = UserRead.model_validate(user)
         assert read.paid is False
+
+
+class TestRosterEntryPaid:
+    """RosterEntry exposes `paid` so the dashboard roster can render an
+    UNPAID pill next to every unpaid player. Privacy reversal of the
+    previous public-safe-only posture is deliberate — see spec for
+    rationale."""
+
+    def test_paid_field_required(self):
+        """RosterEntry without `paid` must fail validation — guarantees
+        future contributors can't accidentally drop the field."""
+        import pytest
+        from pydantic import ValidationError
+        from app.api.users import RosterEntry
+        import uuid
+
+        with pytest.raises(ValidationError):
+            RosterEntry(
+                user_id=uuid.uuid4(),
+                name="Alice",
+                match_predictions_filled=0,
+                bracket_picks_filled=0,
+                is_current_user=False,
+            )
+
+    def test_paid_true_serializes(self):
+        from app.api.users import RosterEntry
+        import uuid
+
+        entry = RosterEntry(
+            user_id=uuid.uuid4(),
+            name="Alice",
+            match_predictions_filled=3,
+            bracket_picks_filled=2,
+            is_current_user=False,
+            paid=True,
+        )
+        assert entry.paid is True
+
+    def test_paid_false_serializes(self):
+        from app.api.users import RosterEntry
+        import uuid
+
+        entry = RosterEntry(
+            user_id=uuid.uuid4(),
+            name="Bob",
+            match_predictions_filled=0,
+            bracket_picks_filled=0,
+            is_current_user=False,
+            paid=False,
+        )
+        assert entry.paid is False

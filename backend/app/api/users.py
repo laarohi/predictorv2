@@ -78,9 +78,11 @@ class UserPredictionsResponse(BaseModel):
 class RosterEntry(BaseModel):
     """One row of the pre-tournament registered-users roster.
 
-    Fields are deliberately narrow — no email, no paid status, no
-    auth_provider. Anything in here is visible to every authenticated
-    user; treat it the same way as the public leaderboard.
+    Paid status is intentionally surfaced — small private competition
+    where the admin's paid-toggle decisions are visible to all
+    participants. The dashboard roster renders an UNPAID pill next
+    to every unpaid player. Email, auth_provider, and other private
+    fields are still excluded.
     """
 
     user_id: uuid.UUID
@@ -88,6 +90,7 @@ class RosterEntry(BaseModel):
     match_predictions_filled: int
     bracket_picks_filled: int
     is_current_user: bool
+    paid: bool
 
 
 class RosterResponse(BaseModel):
@@ -144,6 +147,7 @@ async def get_roster(
             match_predictions_filled=match_counts.get(u.id, 0),
             bracket_picks_filled=bracket_counts.get(u.id, 0),
             is_current_user=(u.id == current_user.id),
+            paid=u.paid,
         )
         for u in users
     ]
