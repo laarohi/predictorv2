@@ -22,7 +22,14 @@
 
 	import { user } from '$stores/auth';
 	import { fetchAllFixtures, fixtures } from '$stores/fixtures';
-	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
+	import {
+		fetchMatchPredictions,
+		predictionsByFixture,
+		fetchPhase2BracketPredictions,
+		workingPhase2BracketPrediction,
+		hasUnsavedPhase2BracketChanges
+	} from '$stores/predictions';
+	import { countBracketSlotsFilled, BRACKET_TOTAL_SLOTS } from '$lib/utils/bracketProgress';
 	import {
 		phase2BracketDeadline,
 		currentTime
@@ -42,6 +49,7 @@
 	onMount(async () => {
 		fetchAllFixtures();
 		fetchMatchPredictions();
+		fetchPhase2BracketPredictions();
 		// Pull the Phase 1 (final) leaderboard for the right column — between
 		// phases it represents the locked-in groups standings.
 		await setPhase('phase_1');
@@ -55,7 +63,6 @@
 	// ---- Constants ---------------------------------------------------------
 	const POINTS_PER_OUTCOME = 5;
 	const POINTS_PER_EXACT_BONUS = 10;
-	const TOTAL_P2_BRACKET_SLOTS = 32;
 
 	// ---- Helpers -----------------------------------------------------------
 	function outcomeOf(h: number, a: number): '1' | 'X' | '2' {
@@ -165,10 +172,9 @@
 		};
 	})();
 
-	// ---- Bracket progress (rough proxy until $phase2BracketPrediction lands) ---
-	// We don't import the bracket store yet — for the funnel hero, show the
-	// total slot count and rely on the Predictions wizard for granular detail.
-	$: bracketFilled = 0; // TODO: wire to bracket store
+	// ---- Bracket progress — real Phase 2 bracket fill, same helper the wizard
+	// and DashboardPre use, so the funnel can't disagree with them.
+	$: bracketFilled = countBracketSlotsFilled($workingPhase2BracketPrediction).done;
 	$: stripLock = $phase2BracketDeadline
 		? `<b>Phase 2 bracket locks</b> · ${countdown.d}d ${countdown.h}h ${countdown.m}m`
 		: null;
@@ -180,11 +186,11 @@
 
 <PnPageShell lockLabel={stripLock}>
 	<div class="pn-dash-v4">
-		{#if bracketFilled > 0 && bracketFilled < TOTAL_P2_BRACKET_SLOTS}
+		{#if $hasUnsavedPhase2BracketChanges}
 			<DwAlert
 				variant="gold"
 				title="Bracket has unsaved changes"
-				meta="You re-picked the R16 round on this device — <b>save before the deadline</b>"
+				meta="You've re-picked your bracket on this device — <b>save before the deadline</b>"
 				ctaLabel="Save bracket"
 				ctaHref="/predictions"
 			/>
@@ -195,10 +201,10 @@
 			titleHtml="Real groups are in.<br />Re-pick the <em>knockout</em>."
 			lede={`Phase 1 ended. Group stage scored you <b style="color: var(--gold);">${phaseTotal} pts</b>. Your original bracket carries over until you update it — but the real R32 matchups are now set.`}
 			{countdown}
-			progressLabel="Phase 2 bracket — picks updated"
+			progressLabel="Phase 2 bracket — picks set"
 			progressValue={bracketFilled}
-			progressTotal={TOTAL_P2_BRACKET_SLOTS}
-			progressUnit="updated"
+			progressTotal={BRACKET_TOTAL_SLOTS}
+			progressUnit="set"
 			ctaLabel="Update bracket"
 			ctaHref="/predictions"
 			teasers={[
