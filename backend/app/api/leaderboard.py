@@ -8,6 +8,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.dependencies import AdminUser, CurrentUser, DbSession, OptionalUser
+from app.models._datetime import utc_now
 from app.schemas.leaderboard import LeaderboardResponse, PointBreakdown
 from app.services.leaderboard import calculate_leaderboard, invalidate_cache
 from app.services.scoring import calculate_user_points, get_scoring_config, SCORING_STRATEGIES
@@ -177,7 +178,10 @@ async def _build_trajectory(
             total_points=live_entry.total_points,
             exact_scores=live_entry.exact_scores,
             correct_outcomes=live_entry.correct_outcomes,
-            captured_date=date.today(),
+            # UTC to match the snapshot write path; date.today() uses the
+            # server's local calendar and can land on the wrong day, making
+            # the live point overwrite/append against the wrong snapshot.
+            captured_date=utc_now().date(),
         )
         # If the last snapshot is from today, overwrite it with the live
         # value so the chart doesn't show stale data for the current day.
