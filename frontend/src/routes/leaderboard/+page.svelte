@@ -17,8 +17,6 @@
 	} from '$stores/leaderboard';
 	import { getGroupTotal, type PhaseBreakdown, type PointBreakdown } from '$types';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
-	import PnSparkline from '$components/panini/PnSparkline.svelte';
-	import { stubRankTrajectory } from '$lib/stubs/panini';
 
 	$: if (!$isAuthenticated) {
 		goto('/login');
@@ -128,11 +126,6 @@
 	$: yourMovement = $currentUserPosition?.movement ?? 0;
 	$: yourExact = $currentUserPosition?.exact_scores ?? 0;
 	$: yourOutcomes = $currentUserPosition?.correct_outcomes ?? 0;
-
-	// Roughly how many points are still in play — sum of remaining bracket
-	// stages + estimated unfinished match exact/outcome ceiling. For now
-	// use a fixed-ish number; this slot exists in the design.
-	$: availablePts = 288;
 </script>
 
 <svelte:head>
@@ -171,7 +164,6 @@
 					</div>
 					<div class="stat"><div class="l">Total</div><div class="v">{yourPoints}</div></div>
 					<div class="stat"><div class="l">To #1</div><div class="v">{toFirst < 0 ? toFirst : toFirst === 0 ? '—' : `+${toFirst}`}</div></div>
-					<div class="stat"><div class="l">Available</div><div class="v">{availablePts}</div></div>
 				</div>
 			{/if}
 
@@ -192,7 +184,6 @@
 								<th class="c">Outcome</th>
 								<th class="c">Bonus</th>
 								<th class="c">Bracket</th>
-								<th class="c">Trend · 7d</th>
 								<th class="r">Total</th>
 								<th class="r">Move</th>
 								<th></th>
@@ -201,7 +192,6 @@
 						<tbody>
 							{#each $leaderboard as r (r.user_id)}
 								{@const isYou = r.user_id === $user?.id}
-								{@const traj = stubRankTrajectory(r.user_id, r.position, $totalParticipants || $leaderboard.length || 32)}
 								{@const isOpen = expanded.has(r.user_id)}
 								<tr class:you={isYou} class:open={isOpen} on:click={() => toggle(r.user_id)} style="cursor: pointer;">
 									<td class="pos" class:gold={r.position <= 3}>{r.position}</td>
@@ -215,17 +205,6 @@
 									<td class="c">{outcomePts(r.breakdown, $leaderboardPhase)}</td>
 									<td class="c bonus">{bonusPts(r.breakdown, $leaderboardPhase)}</td>
 									<td class="c bracket">{bracketPts(r.breakdown, $leaderboardPhase)}</td>
-									<td class="c">
-										<PnSparkline
-											ranks={traj.ranks}
-											maxRank={traj.maxRank}
-											width={80}
-											height={22}
-											strokeColor={isYou ? 'var(--red)' : 'var(--ink)'}
-											fillColor="transparent"
-											markerColor={isYou ? 'var(--red)' : 'var(--ink)'}
-										/>
-									</td>
 									<td class="r total">{#if isYou}<em>{r.total_points}</em>{:else}{r.total_points}{/if}</td>
 									<td class="r mv">
 										{#if r.movement > 0}<span class="up">▲{r.movement}</span>
@@ -236,7 +215,7 @@
 								</tr>
 								{#if isOpen}
 									<tr class="detail">
-										<td colspan="10">
+										<td colspan="9">
 											<div class="pn-lb-detail">
 												{#each DETAIL_PHASES as ph (ph.k)}
 													{@const p = r.breakdown[ph.k]}
@@ -258,7 +237,7 @@
 									</tr>
 								{/if}
 							{:else}
-								<tr><td colspan="10" style="padding: 24px; text-align: center; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No standings yet</td></tr>
+								<tr><td colspan="9" style="padding: 24px; text-align: center; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No standings yet</td></tr>
 							{/each}
 						</tbody>
 					</table>
