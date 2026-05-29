@@ -128,6 +128,7 @@ The rule was established in commit `c6089cc`. The original conversion migration 
 | `backend/app/services/locking.py` | Prediction locking logic |
 | `backend/app/services/standings.py` | Group standings calculation |
 | `backend/app/api/admin.py` | Admin endpoints (users, paid status, phase ops, score sync) |
+| `backend/scripts/sync_squads.py` | Scrapes WC2026 squads from Wikipedia into the `players` table — backs the award-question player dropdowns (see "Squad data" below) |
 | `frontend/src/app.css` | Top-level stylesheet — order-sensitive `@import`s for Panini CSS modules go **before** `@tailwind` directives |
 | `frontend/src/routes/+layout.svelte` | Root layout — auth init + phase fetch + dev-only `PnDevPhasePill`. Every route renders its own chrome via `<PnPageShell>`, so the layout itself only emits a bare `<slot />`. |
 | `frontend/src/lib/components/panini/PnPageShell.svelte` | Wraps every Panini page (masthead + bottom nav + paper grain) |
@@ -139,6 +140,35 @@ The rule was established in commit `c6089cc`. The original conversion migration 
 | `frontend/src/lib/utils/bracketResolver.ts` | FIFA 2026 knockout bracket logic |
 | `frontend/src/lib/utils/teamCodes.ts` | Team name → FIFA 3-letter code mapping for `PnFlag` |
 | `docs/superpowers/panini-redesign-decisions.md` | Decisions log for the Panini redesign + every deferred follow-up |
+
+### Squad data (award-question player dropdowns)
+
+The four **awards** bonus questions (Golden Ball / Boot / Boy / Glove) use
+searchable player dropdowns (`PnCombobox`) backed by the `players` table,
+populated by `backend/scripts/sync_squads.py`:
+
+```bash
+docker-compose exec backend python scripts/sync_squads.py
+```
+
+- It scrapes the **wikitext** of the Wikipedia "2026 FIFA World Cup squads"
+  page via the MediaWiki API — parsing the regular `{{nat fs g player}}`
+  templates is far more stable than scraping rendered HTML. It extracts full
+  name, ASCII surname/first name (from each row's `sortname=` param), country,
+  FIFA code, position, and date of birth.
+- The table is rebuilt **wholesale** (truncate + refill), mirroring
+  `sync_fifa_rankings.py`. **Re-run it as squads firm up** — preliminary
+  55-man lists trim to 26, and some teams aren't announced yet (at first run,
+  44 of 48 had squads). Wikipedia section headings that differ from our
+  canonical team names (e.g. "Czech Republic" → "Czechia") are mapped via
+  `HEADING_ALIASES` in the script; an unmapped country is warned about and
+  inserted with `country_code = NULL`.
+- The user's pick and the admin's correct answer both select from this same
+  list (`GET /api/predictions/bonus/players`), so the stored `full_name`
+  strings match exactly under the existing bonus scoring — **no `player_id` FK
+  was added**. Per-award eligibility filters live client-side: Golden Boot
+  excludes GKs, Golden Glove is GKs only, Golden Boy is U21 (born on/after
+  2005-01-01), Golden Ball is the full list.
 
 ## Development
 

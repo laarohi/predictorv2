@@ -2,6 +2,7 @@
 
 import uuid
 from collections import defaultdict
+from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
@@ -25,6 +26,7 @@ from app.schemas.prediction import (
     MatchPredictionUpdate,
 )
 from app.models.bonus import BonusPrediction
+from app.models.player import Player
 from app.services.bonus import (
     BonusQuestion,
     fetch_competition_teams,
@@ -64,6 +66,24 @@ class BonusQuestionResponse(BaseModel):
     # to pick from. The frontend filters its dropdown to just these teams.
     # None for questions without a cutoff or non-team inputs.
     eligible_teams: list[str] | None = None
+
+
+class BonusPlayerResponse(BaseModel):
+    """One squad player, used to back the award-question dropdowns.
+
+    `value` is the canonical string written into bonus_predictions.answer when
+    picked, so it matches the admin's correct answer exactly under scoring's
+    normalized comparison. The frontend filters the full list client-side:
+    Golden Glove → position == 'GK', Golden Boot → position != 'GK', Golden Boy
+    → date_of_birth on/after the U21 cutoff. Golden Ball uses the full list.
+    """
+
+    full_name: str
+    surname: str
+    country: str
+    country_code: str | None = None
+    position: str
+    date_of_birth: date | None = None
 
 
 class BonusPredictionResponse(BaseModel):
@@ -659,6 +679,33 @@ async def get_bonus_questions_route(
             eligible_teams=q.eligible_teams,
         )
         for q in qs
+    ]
+
+
+@router.get("/bonus/players", response_model=list[BonusPlayerResponse])
+async def get_bonus_players(
+    session: DbSession,
+    _user: OptionalUser,
+) -> list[BonusPlayerResponse]:
+    """All squad players for the award-question dropdowns (Golden Ball/Boot/
+    Boy/Glove), populated by scripts/sync_squads.py.
+
+    Returns the full list (~1.2k players) sorted by surname; the frontend
+    filters and fuzzy-searches client-side, so no query params are needed.
+    Optionally-authed for the same reason as /bonus/questions — squad data is
+    public reference, not user data. Empty list until the first squad sync.
+    """
+    result = await session.execute(select(Player).order_by(Player.surname, Player.full_name))
+    return [
+        BonusPlayerResponse(
+            full_name=p.full_name,
+            surname=p.surname,
+            country=p.country,
+            country_code=p.country_code,
+            position=p.position,
+            date_of_birth=p.date_of_birth,
+        )
+        for p in result.scalars().all()
     ]
 
 

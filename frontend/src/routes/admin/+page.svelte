@@ -29,7 +29,15 @@
 		type SyncScoresResponse,
 		type TestReceiptResponse
 	} from '$lib/api/admin';
-	import { listBonusAnswers, setBonusAnswer, type BonusAnswerView } from '$api/bonus';
+	import {
+		listBonusAnswers,
+		setBonusAnswer,
+		getBonusPlayers,
+		type BonusAnswerView,
+		type BonusPlayer
+	} from '$api/bonus';
+	import PnCombobox from '$components/panini/PnCombobox.svelte';
+	import type { ComboOption } from '$components/panini/PnCombobox.svelte';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 
 	$: if ($isAuthenticated && !$user?.is_admin) goto('/');
@@ -85,13 +93,47 @@
 	let bonusDrafts: Map<string, string> = new Map(); // question_id → draft input
 	let savingQId: string | null = null;
 	let bonusError: string | null = null;
+	let bonusPlayers: BonusPlayer[] = []; // squad list for award-answer pickers
 
 	async function loadBonusAnswers() {
 		try {
-			bonusAnswerViews = await listBonusAnswers();
+			[bonusAnswerViews, bonusPlayers] = await Promise.all([
+				listBonusAnswers(),
+				getBonusPlayers()
+			]);
 		} catch (e) {
 			bonusError = e instanceof Error ? e.message : 'Failed to load bonus answers';
 		}
+	}
+
+	// Per-award player options, same eligibility filters as the wizard so the
+	// admin can only resolve a question with an in-universe winner.
+	const ADMIN_U21_CUTOFF = '2005-01-01';
+	$: awardPlayerOptions = ((): Record<string, ComboOption[]> => {
+		const toOpt = (p: BonusPlayer): ComboOption => ({
+			value: p.full_name,
+			label: p.full_name,
+			sublabel: `${p.country} · ${p.position}`,
+			keywords: `${p.full_name} ${p.surname} ${p.country}`,
+			flag: p.country_code ?? undefined
+		});
+		return {
+			best_player: bonusPlayers.map(toOpt),
+			top_scorer: bonusPlayers.filter((p) => p.position !== 'GK').map(toOpt),
+			golden_glove: bonusPlayers.filter((p) => p.position === 'GK').map(toOpt),
+			best_young_player: bonusPlayers
+				.filter((p) => (p.date_of_birth ?? '') >= ADMIN_U21_CUTOFF)
+				.map(toOpt)
+		};
+	})();
+
+	// Append a picked player to the comma-separated draft (skip duplicates),
+	// so ties (e.g. a shared Golden Boot) can still be entered.
+	function addAwardAnswer(view: BonusAnswerView, name: string) {
+		if (!name) return;
+		const existing = parseDraft(draftFor(view));
+		if (existing.some((a) => a.toLowerCase() === name.toLowerCase())) return;
+		setDraft(view.question_id, [...existing, name].join(', '));
 	}
 
 	// Draft is the raw text the admin is typing. Comma-separated for
@@ -552,14 +594,24 @@
 											</button>
 										{/if}
 									</div>
-									<input
-										type="text"
-										class="pn-ad-search"
-										style="margin: 0; max-width: 100%;"
-										placeholder={v.correct_answers.length ? '' : 'Enter correct answer(s), comma-separated…'}
-										value={draftFor(v)}
-										on:input={(e) => setDraft(v.question_id, e.currentTarget.value)}
-									/>
+									<div style="display: flex; flex-direction: column; gap: 6px; min-width: 0;">
+										{#if v.input_type === 'player'}
+											<PnCombobox
+												value=""
+												options={awardPlayerOptions[v.question_id] ?? []}
+												placeholder="Search a player to add…"
+												on:change={(e) => addAwardAnswer(v, e.detail)}
+											/>
+										{/if}
+										<input
+											type="text"
+											class="pn-ad-search"
+											style="margin: 0; max-width: 100%;"
+											placeholder={v.correct_answers.length ? '' : 'Enter correct answer(s), comma-separated…'}
+											value={draftFor(v)}
+											on:input={(e) => setDraft(v.question_id, e.currentTarget.value)}
+										/>
+									</div>
 									<div class="badges" style="display: flex; flex-wrap: wrap; gap: 4px;">
 										{#if v.correct_answers.length === 0}
 											<span class="pn-tag" style="opacity: 0.6;">— Unset</span>

@@ -57,6 +57,8 @@
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import PnFlag from '$components/panini/PnFlag.svelte';
 	import PnDropdown from '$components/panini/PnDropdown.svelte';
+	import PnCombobox from '$components/panini/PnCombobox.svelte';
+	import type { ComboOption } from '$components/panini/PnCombobox.svelte';
 	import PnKnockoutBracket from '$components/panini/PnKnockoutBracket.svelte';
 
 	$: if (!$isAuthenticated) {
@@ -665,6 +667,7 @@
 	// ---- Bonus questions (real backend) ----------------------------------
 
 	let bonusQuestions: import('$api/bonus').BonusQuestion[] = [];
+	let bonusPlayers: import('$api/bonus').BonusPlayer[] = []; // squad list for award dropdowns
 	let bonusAnswers: Map<string, string> = new Map(); // question_id → answer
 	let bonusInitial: Map<string, string> = new Map(); // for change tracking
 
@@ -678,11 +681,14 @@
 	})();
 
 	async function loadBonus() {
-		const [qs, preds] = await Promise.all([
-			(await import('$api/bonus')).getBonusQuestions(),
-			(await import('$api/bonus')).getMyBonusPredictions()
+		const bonusApi = await import('$api/bonus');
+		const [qs, preds, players] = await Promise.all([
+			bonusApi.getBonusQuestions(),
+			bonusApi.getMyBonusPredictions(),
+			bonusApi.getBonusPlayers()
 		]);
 		bonusQuestions = qs;
+		bonusPlayers = players;
 		const map = new Map<string, string>();
 		for (const p of preds) map.set(p.question_id, p.answer);
 		bonusAnswers = map;
@@ -717,6 +723,39 @@
 		return Array.from(set).sort();
 	})();
 	$: teamOptions = allTeams.map((t) => ({ value: t, label: displayTeamName(t), flag: teamCode(t) }));
+
+	// ---- Award-question player dropdowns ---------------------------------
+	// The full squad list (from the players table) feeds the four award
+	// questions, each with its own eligibility filter. The stored answer is the
+	// canonical full_name so it matches the admin's correct answer exactly.
+	// FIFA's Young Player Award is U21: born on/after 2005-01-01 for WC2026.
+	const U21_CUTOFF = '2005-01-01';
+
+	function toPlayerOption(p: import('$api/bonus').BonusPlayer): ComboOption {
+		return {
+			value: p.full_name,
+			label: p.full_name,
+			sublabel: `${displayTeamName(p.country)} · ${p.position}`,
+			// Match on display name, ASCII surname, and country.
+			keywords: `${p.full_name} ${p.surname} ${p.country}`,
+			flag: p.country_code ?? undefined
+		};
+	}
+
+	// Per-question option lists. Golden Boot excludes keepers, Golden Glove is
+	// keepers only, Golden Boy is U21 only, Golden Ball is everyone.
+	$: playerOptionsByQuestion = {
+		best_player: bonusPlayers.map(toPlayerOption),
+		top_scorer: bonusPlayers.filter((p) => p.position !== 'GK').map(toPlayerOption),
+		golden_glove: bonusPlayers.filter((p) => p.position === 'GK').map(toPlayerOption),
+		best_young_player: bonusPlayers
+			.filter((p) => (p.date_of_birth ?? '') >= U21_CUTOFF)
+			.map(toPlayerOption)
+	} as Record<string, ComboOption[]>;
+
+	// Selected-player → FIFA code, for the flag shown next to the combobox.
+	$: playerByName = new Map(bonusPlayers.map((p) => [p.full_name, p]));
+	$: playerFlagFor = (name: string): string => playerByName.get(name)?.country_code ?? '';
 
 	// Group questions by category for layout
 	$: bonusByCategory = (() => {
@@ -1281,14 +1320,20 @@
 											{/if}
 										</div>
 									{:else}
-										<input
-											type="text"
-											class="answer"
-											class:empty={!answer}
-											value={answer}
-											on:input={(e) => setBonusAnswer(bq.id, e.currentTarget.value)}
-											placeholder="Type a player name…"
-										/>
+										{@const popts = playerOptionsByQuestion[bq.id] ?? []}
+										<div class="answer-row">
+											<PnCombobox
+												value={answer}
+												options={popts}
+												placeholder="Type a player name…"
+												on:change={(e) => setBonusAnswer(bq.id, e.detail)}
+											/>
+											{#if answer && playerFlagFor(answer)}
+												<div class="answer-flag" aria-hidden="true">
+													<PnFlag code={playerFlagFor(answer)} w={36} h={26} />
+												</div>
+											{/if}
+										</div>
 									{/if}
 									<div class="pts-pill">+{bq.points} pts</div>
 								</div>

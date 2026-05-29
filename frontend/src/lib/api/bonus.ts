@@ -31,6 +31,21 @@ export interface BonusPrediction {
 	answer: string;
 }
 
+/** One squad player, backing the award-question dropdowns (Golden Ball/Boot/
+ *  Boy/Glove). Scraped from Wikipedia into the `players` table. `full_name` is
+ *  the canonical value stored as the answer when picked. */
+export interface BonusPlayer {
+	full_name: string;
+	/** ASCII, accent-stripped — lets the combobox match on surname alone. */
+	surname: string;
+	country: string;
+	country_code: string | null;
+	/** GK | DF | MF | FW. */
+	position: string;
+	/** ISO date (YYYY-MM-DD) or null. Drives the Golden Boy U21 filter. */
+	date_of_birth: string | null;
+}
+
 export interface BonusAnswerView {
 	question_id: string;
 	label: string;
@@ -54,6 +69,12 @@ export async function getBonusQuestions(): Promise<BonusQuestion[]> {
 
 export async function getMyBonusPredictions(): Promise<BonusPrediction[]> {
 	return api.get<BonusPrediction[]>('/predictions/bonus');
+}
+
+/** Full squad list (~1.2k players) for the award dropdowns. The caller
+ *  filters/searches client-side, so this takes no params. */
+export async function getBonusPlayers(): Promise<BonusPlayer[]> {
+	return api.get<BonusPlayer[]>('/predictions/bonus/players');
 }
 
 export async function saveBonusPredictions(

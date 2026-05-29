@@ -7,6 +7,7 @@ from app.models.fifa_ranking import FifaRanking
 from app.models.fixture import Fixture, MatchStatus
 from app.models.leaderboard_snapshot import LeaderboardSnapshot
 from app.models.magic_link import MagicLinkToken
+from app.models.player import Player
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.prediction_history import (
     BonusPredictionHistory,
@@ -33,6 +34,7 @@ __all__ = [
     "MagicLinkToken",
     "MatchPrediction",
     "MatchPredictionHistory",
+    "Player",
     "PredictionAction",
     "PredictionSource",
     "TeamPrediction",
