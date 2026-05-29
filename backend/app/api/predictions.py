@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import date
 
 from fastapi import APIRouter, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import selectinload
 from sqlmodel import select, delete
 
@@ -97,13 +97,14 @@ class BonusPredictionUpdate(BaseModel):
     """Payload for upserting a single bonus pick."""
 
     question_id: str
-    answer: str
+    answer: str = Field(max_length=100)
 
 
 class BonusPredictionBatch(BaseModel):
     """Payload for upserting multiple bonus picks at once."""
 
-    predictions: list[BonusPredictionUpdate]
+    # There are ~12 bonus questions; cap generously to reject oversized batches.
+    predictions: list[BonusPredictionUpdate] = Field(max_length=50)
 
 
 class StageCellResponse(BaseModel):
