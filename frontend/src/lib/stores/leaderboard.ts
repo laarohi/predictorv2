@@ -26,6 +26,21 @@ export const liveMatches = writable<LiveMatchScore[]>([]);
 
 // Polling state
 let pollInterval: ReturnType<typeof setInterval> | null = null;
+let pollMs = 60000;
+let visibilityHandler: (() => void) | null = null;
+
+function startInterval(): void {
+	if (pollInterval) return;
+	pollLiveData();
+	pollInterval = setInterval(pollLiveData, pollMs);
+}
+
+function clearIntervalOnly(): void {
+	if (pollInterval) {
+		clearInterval(pollInterval);
+		pollInterval = null;
+	}
+}
 
 // Derived stores
 export const currentUserPosition = derived([leaderboard, user], ([$leaderboard, $user]) => {
@@ -79,16 +94,24 @@ export async function setPhase(phase: LeaderboardPhase): Promise<void> {
 
 // Polling for live updates (always fetches overall for live data)
 export function startPolling(intervalMs: number = 60000): void {
-	if (pollInterval) return;
-
-	pollLiveData();
-	pollInterval = setInterval(pollLiveData, intervalMs);
+	pollMs = intervalMs;
+	startInterval();
+	// Pause polling while the tab is hidden (no point hammering the API on a
+	// backgrounded tab); resume + refresh immediately when it becomes visible.
+	if (typeof document !== 'undefined' && !visibilityHandler) {
+		visibilityHandler = () => {
+			if (document.hidden) clearIntervalOnly();
+			else startInterval();
+		};
+		document.addEventListener('visibilitychange', visibilityHandler);
+	}
 }
 
 export function stopPolling(): void {
-	if (pollInterval) {
-		clearInterval(pollInterval);
-		pollInterval = null;
+	clearIntervalOnly();
+	if (visibilityHandler && typeof document !== 'undefined') {
+		document.removeEventListener('visibilitychange', visibilityHandler);
+		visibilityHandler = null;
 	}
 }
 
