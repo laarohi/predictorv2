@@ -1,0 +1,22 @@
+# Production override for docker-compose.yml.
+#
+# Usage (and what the Makefile prod/deploy targets now pass):
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d
+#
+# Why: the base compose runs the backend with `uvicorn --reload` — great for
+# local dev, wrong for production (an extra reloader/watchdog process, higher
+# memory, no graceful worker management, and it executes whatever source is on
+# disk rather than the built image). This override restores the image's
+# production command: uvicorn without --reload, a single worker.
+#
+# Single worker is intentional: the leaderboard cache is in-process
+# (see backend/app/services/leaderboard.py). Scaling to multiple workers
+# requires moving that cache to a shared store first.
+#
+# NOTE: the base compose also bind-mounts ./backend/app so code edits take
+# effect on restart — convenient for the current git-pull deploy model. For a
+# fully immutable image deploy, also drop the backend `volumes:` (left in place
+# here to match the existing workflow).
+services:
+  backend:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000

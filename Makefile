@@ -120,8 +120,9 @@ lint-fix:
 	cd frontend && npm run lint -- --fix
 
 # Production (local prod-profile testing — NOT the live VPS)
+# The prod override drops the dev --reload server (see docker-compose.prod.yml).
 prod-up:
-	docker-compose --profile prod up -d
+	docker-compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d
 
 prod-down:
 	docker-compose --profile prod down
@@ -146,7 +147,7 @@ context:
 # Deploy: pull latest code on VPS, rebuild images, restart prod stack
 deploy:
 	@echo "→ Deploying to $(VPS_HOST):$(REMOTE_PATH)..."
-	ssh $(VPS_HOST) 'cd $(REMOTE_PATH) && git pull && docker compose --profile prod up -d --build'
+	ssh $(VPS_HOST) 'cd $(REMOTE_PATH) && git pull && docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build'
 	@echo "✓ Deploy complete. Tail logs with: make vps-logs"
 
 # Interactive SSH (use sparingly; most ops can use the targets below)
@@ -174,7 +175,7 @@ vps-restart-nginx:
 	docker --context predictor compose restart nginx
 
 vps-up:
-	docker --context predictor compose --profile prod up -d
+	docker --context predictor compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d
 
 vps-down:
 	@read -p "⚠  Take PRODUCTION down? Type 'yes' to confirm: " confirm; \
