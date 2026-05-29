@@ -250,9 +250,8 @@ export function setMatchWinner(
 	const match = state.matchResults[matchNumber];
 	if (!match) return state;
 
-	// Validate winner is one of the teams
+	// Validate winner is one of the teams; ignore an invalid winner.
 	if (winner !== match.homeTeam && winner !== match.awayTeam) {
-		// console.warn(`Invalid winner ${winner} for match ${matchNumber}`);
 		return state;
 	}
 

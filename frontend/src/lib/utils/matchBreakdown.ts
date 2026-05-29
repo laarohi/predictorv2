@@ -95,7 +95,8 @@ export function logarithmicRarityBonus(
 /**
  * What status bucket does this fixture fall into for the Results page?
  * Live fixtures keep showing a (possibly partial) score; locked ones are
- * scheduled-but-inside-the-5-min-window; open is scheduled-and-not-yet-locked.
+ * scheduled-but-inside-the-lock-window (default 15 min before kickoff); open
+ * is scheduled-and-not-yet-locked.
  */
 export function matchState(fixture: Fixture): MatchState {
 	if (fixture.status === 'finished') return 'finished';
