@@ -342,3 +342,34 @@ class TestBlindPoolPredictionFiltering:
 
         assert is_exact is False
         assert is_correct_outcome is True
+
+
+class TestUserReadPaid:
+    """UserRead must surface `paid` so the frontend can render the
+    pre-tournament payment banner without an extra request."""
+
+    def test_paid_true_flows_through(self):
+        from app.schemas.auth import UserRead
+        from app.models.user import User, AuthProvider
+
+        user = User(
+            email="alice@example.com",
+            name="Alice",
+            auth_provider=AuthProvider.EMAIL,
+            paid=True,
+        )
+        read = UserRead.model_validate(user)
+        assert read.paid is True
+
+    def test_paid_false_flows_through(self):
+        from app.schemas.auth import UserRead
+        from app.models.user import User, AuthProvider
+
+        user = User(
+            email="bob@example.com",
+            name="Bob",
+            auth_provider=AuthProvider.EMAIL,
+            paid=False,
+        )
+        read = UserRead.model_validate(user)
+        assert read.paid is False

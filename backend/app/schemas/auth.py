@@ -33,6 +33,7 @@ class UserRead(BaseModel):
     auth_provider: AuthProvider
     is_admin: bool
     is_active: bool
+    paid: bool
     competition_id: uuid.UUID | None
     created_at: datetime
 
