@@ -21,7 +21,7 @@
  * tight 8px gutter. */
 @media (max-width: 899px) {
 	.pn .pn-mm-only {
-		margin: -28px var(--pn-body-neg-x) 0;
+		margin: 4px var(--pn-body-neg-x) 0;
 	}
 }
 
@@ -34,7 +34,9 @@
 	display: grid;
 	grid-template-columns: 3fr 2fr;
 	gap: 0;
-	margin: -28px var(--pn-body-neg-x) 14px;
+	/* Was -28px (hero flush against the masthead — too tight). Small positive
+	   top margin gives a cream gap between the nav bar and the navy hero. */
+	margin: 4px var(--pn-body-neg-x) 14px;
 	align-items: stretch;
 }
 
