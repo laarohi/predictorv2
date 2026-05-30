@@ -2,7 +2,7 @@
  * Fixtures store for tournament matches.
  */
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import * as fixturesApi from '$api/fixtures';
 import type { Fixture, FixturesByGroup, ActualStandingsResponse, TeamStanding } from '$types';
 
@@ -41,13 +41,25 @@ export const finishedFixtures = derived(fixtures, ($fixtures) =>
 );
 
 // Actions
-export async function fetchAllFixtures(): Promise<void> {
+
+// Freshness guard for the full-fixtures fetch. Fixtures are tournament-static
+// (live score/status changes arrive via the separate /scores poll), so caching
+// them across navigations removes the per-nav loading flash without risking
+// stale data. Pass force=true to bypass.
+let fixturesFetchedAt = 0;
+const FIXTURES_TTL_MS = 60_000;
+
+export async function fetchAllFixtures(force = false): Promise<void> {
+	if (!force && get(fixtures).length > 0 && Date.now() - fixturesFetchedAt < FIXTURES_TTL_MS) {
+		return; // serve the cached store; no network call, no loading flash
+	}
 	fixturesLoading.set(true);
 	fixturesError.set(null);
 
 	try {
 		const data = await fixturesApi.getAllFixtures();
 		fixtures.set(data);
+		fixturesFetchedAt = Date.now();
 	} catch (e) {
 		fixturesError.set(e instanceof Error ? e.message : 'Failed to load fixtures');
 	} finally {
