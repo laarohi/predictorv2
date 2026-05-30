@@ -21,7 +21,10 @@
 		saveBracketPredictions,
 		phase2BracketPrediction,
 		unsavedPhase2BracketPrediction,
-		hasUnsavedPhase2BracketChanges
+		hasUnsavedPhase2BracketChanges,
+		matchPredictionsError,
+		bracketError,
+		phase2BracketError
 	} from '$stores/predictions';
 	import {
 		fetchGroupFixtures,
@@ -81,6 +84,9 @@
 	let activeGroupPill: string = '';
 
 	let saveStatus: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
+	// Detail for a failed save (FLOW-8): surfaced on the Retry button so the
+	// user knows WHY (e.g. "2 matches have already locked") instead of a bare ×.
+	let saveError: string | null = null;
 
 	// Cross-tab + cross-refresh draft persistence (silent localStorage mirror).
 	// fetchesDone gates hydration so we only overlay localStorage drafts AFTER
@@ -545,6 +551,8 @@
 
 	async function handleSaveAll() {
 		saveStatus = 'saving';
+		saveError = null;
+		let bonusErr: string | null = null;
 		const tasks: Promise<boolean>[] = [];
 
 		if ($hasUnsavedChanges) {
@@ -555,6 +563,15 @@
 			tasks.push(
 				saveBracketPredictions(bracketToPredictions(b)).then((ok) => {
 					if (ok) unsavedBracketPrediction.set(null);
+					return ok;
+				})
+			);
+		}
+		if ($hasUnsavedPhase2BracketChanges && $unsavedPhase2BracketPrediction) {
+			const p2 = $unsavedPhase2BracketPrediction;
+			tasks.push(
+				saveBracketPredictions(bracketToPredictions(p2)).then((ok) => {
+					if (ok) unsavedPhase2BracketPrediction.set(null);
 					return ok;
 				})
 			);
@@ -574,7 +591,7 @@
 						bonusAnswers = fresh;
 						bonusInitial = new Map(fresh);
 						return true;
-					} catch (_e) {
+					} catch (e) { bonusErr = e instanceof Error ? e.message : 'Bonus save failed';
 						return false;
 					}
 				})()
@@ -584,6 +601,7 @@
 		const results = await Promise.all(tasks);
 		const allOk = results.length > 0 && results.every((r) => r);
 		saveStatus = allOk ? 'saved' : 'error';
+		if (!allOk) saveError = $matchPredictionsError || $bracketError || $phase2BracketError || bonusErr || 'Some predictions could not be saved — please check your connection and Retry.';
 		if (allOk) setTimeout(() => (saveStatus = 'idle'), 2000);
 	}
 
@@ -868,17 +886,18 @@
 				{/if}
 				<button
 					class="pn-hero-save pn-hero-save--prominent"
-					class:dirty={(activePhase === 'phase1' ? hasAnyPhase1Unsaved : $hasUnsavedChanges) && saveStatus === 'idle'}
+					class:dirty={(activePhase === 'phase1' ? hasAnyPhase1Unsaved : $hasUnsavedPhase2BracketChanges) && saveStatus === 'idle'}
 					class:saving={saveStatus === 'saving'}
 					class:success={saveStatus === 'saved'}
 					class:error={saveStatus === 'error'}
 					on:click={handleSaveAll}
-					disabled={((activePhase === 'phase1' ? !hasAnyPhase1Unsaved : !$hasUnsavedChanges) && saveStatus === 'idle') || saveStatus === 'saving' || $matchPredictionsLoading}
-					title={activePhase === 'phase1' && hasAnyPhase1Unsaved
-						? `Unsaved: ${phase1DirtySources.join(' · ')}`
-						: $lastLocalSave
-							? `All saved · drafts mirrored locally at ${formatLocalTime($lastLocalSave)}`
-							: 'All predictions saved'}
+					disabled={((activePhase === 'phase1' ? !hasAnyPhase1Unsaved : !$hasUnsavedPhase2BracketChanges) && saveStatus === 'idle') || saveStatus === 'saving' || $matchPredictionsLoading}
+					title={saveError ??
+						(activePhase === 'phase1' && hasAnyPhase1Unsaved
+							? `Unsaved: ${phase1DirtySources.join(' · ')}`
+							: $lastLocalSave
+								? `All saved · drafts mirrored locally at ${formatLocalTime($lastLocalSave)}`
+								: 'All predictions saved')}
 				>
 					{#if saveStatus === 'saving'}
 						Saving…
@@ -889,9 +908,9 @@
 					{:else if activePhase === 'phase1' && hasAnyPhase1Unsaved}
 						Save Phase I
 						<span class="badge">{phase1UnsavedTotal}</span>
-					{:else if activePhase === 'phase2' && $hasUnsavedChanges}
+					{:else if activePhase === 'phase2' && $hasUnsavedPhase2BracketChanges}
 						Save Phase II
-						<span class="badge">{$unsavedChangesCount}</span>
+						<span class="badge">{countBracketChangedSlots($unsavedPhase2BracketPrediction, $phase2BracketPrediction)}</span>
 					{:else}
 						✓ All saved
 					{/if}
@@ -941,12 +960,12 @@
 				     hero save (see above for comment). -->
 				<button
 					class="pn-hero-save pn-hero-save--mobile"
-					class:dirty={(activePhase === 'phase1' ? hasAnyPhase1Unsaved : $hasUnsavedChanges) && saveStatus === 'idle'}
+					class:dirty={(activePhase === 'phase1' ? hasAnyPhase1Unsaved : $hasUnsavedPhase2BracketChanges) && saveStatus === 'idle'}
 					class:saving={saveStatus === 'saving'}
 					class:success={saveStatus === 'saved'}
 					class:error={saveStatus === 'error'}
 					on:click={handleSaveAll}
-					disabled={((activePhase === 'phase1' ? !hasAnyPhase1Unsaved : !$hasUnsavedChanges) && saveStatus === 'idle') || saveStatus === 'saving' || $matchPredictionsLoading}
+					disabled={((activePhase === 'phase1' ? !hasAnyPhase1Unsaved : !$hasUnsavedPhase2BracketChanges) && saveStatus === 'idle') || saveStatus === 'saving' || $matchPredictionsLoading}
 					title={activePhase === 'phase1' && hasAnyPhase1Unsaved
 						? `Unsaved: ${phase1DirtySources.join(' · ')}`
 						: 'All predictions saved'}
@@ -960,9 +979,9 @@
 					{:else if activePhase === 'phase1' && hasAnyPhase1Unsaved}
 						Save Phase I
 						<span class="badge">{phase1UnsavedTotal}</span>
-					{:else if activePhase === 'phase2' && $hasUnsavedChanges}
+					{:else if activePhase === 'phase2' && $hasUnsavedPhase2BracketChanges}
 						Save Phase II
-						<span class="badge">{$unsavedChangesCount}</span>
+						<span class="badge">{countBracketChangedSlots($unsavedPhase2BracketPrediction, $phase2BracketPrediction)}</span>
 					{:else}
 						✓ All saved
 					{/if}
