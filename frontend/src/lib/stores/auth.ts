@@ -32,6 +32,11 @@ export const token = writable<string | null>(getStoredToken());
 export const user = writable<User | null>(null);
 export const loading = writable<boolean>(false);
 export const error = writable<string | null>(null);
+// True once initAuth has finished resolving the session (fetched /auth/me, or
+// determined there's no token). Route guards must wait for this before
+// redirecting on role — otherwise an admin cold-loading /admin is bounced to
+// the dashboard because $user (and thus is_admin) isn't populated yet.
+export const authResolved = writable<boolean>(false);
 
 // Derived stores
 export const isAuthenticated = derived(token, ($token) => !!$token);
@@ -137,4 +142,5 @@ export async function initAuth() {
 	if (currentToken) {
 		await fetchUser();
 	}
+	authResolved.set(true);
 }

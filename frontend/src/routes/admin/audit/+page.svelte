@@ -1,12 +1,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { isAuthenticated, user } from '$stores/auth';
+	import { isAuthenticated, user, authResolved } from '$stores/auth';
 	import { getAllUsers, type UserAdminView } from '$lib/api/admin';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 
-	$: if ($isAuthenticated && !$user?.is_admin) goto('/');
-	$: if (!$isAuthenticated) goto('/login');
+	// Wait for auth to resolve before role-redirecting (see admin/+page.svelte).
+	$: if ($authResolved && !$isAuthenticated) goto('/login');
+	$: if ($authResolved && $isAuthenticated && !$user?.is_admin) goto('/');
 
 	let users: UserAdminView[] = [];
 	let loading = true;

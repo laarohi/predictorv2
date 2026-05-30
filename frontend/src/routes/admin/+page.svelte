@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { isAuthenticated, user } from '$stores/auth';
+	import { isAuthenticated, user, authResolved } from '$stores/auth';
 	import {
 		fetchPhaseStatus,
 		isPhase2Active,
@@ -40,8 +40,11 @@
 	import type { ComboOption } from '$components/panini/PnCombobox.svelte';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 
-	$: if ($isAuthenticated && !$user?.is_admin) goto('/');
-	$: if (!$isAuthenticated) goto('/login');
+	// Wait for auth to resolve before redirecting on role — otherwise an admin
+	// cold-loading or refreshing /admin is bounced to the dashboard because
+	// $user (hence is_admin) isn't populated until /auth/me returns.
+	$: if ($authResolved && !$isAuthenticated) goto('/login');
+	$: if ($authResolved && $isAuthenticated && !$user?.is_admin) goto('/');
 
 	let stats: AdminStats | null = null;
 	let competitions: CompetitionAdminView[] = [];
