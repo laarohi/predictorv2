@@ -10,6 +10,18 @@ Page-by-page visual review of every page at **desktop (1280px)** and **mobile (3
 
 - **`DESIGN-1` — admins were bounced off `/admin` on cold load.** The screenshot of `/admin` came back showing the *dashboard*; with a 5s settle the URL had redirected to `/`. Root cause: the admin route guard ran `if ($isAuthenticated && !$user?.is_admin) goto('/')`, and on a cold load/refresh the localStorage token makes `$isAuthenticated` true *before* `/auth/me` populates `$user` — so every admin was redirected before their role loaded. Fixed by gating all three admin guards on a new `authResolved` flag (commit `c2f62b7`); re-screenshotting the worktree build confirmed `/admin` now renders the **Admin Console**. The code audit's flow dimension didn't catch this — it only surfaced by actually loading the page.
 
+## 🟠 Second pass — calibrated to Luke's examples (found & fixed)
+
+After Luke flagged two examples ("more spacing between the match header and the
+nav bar"; "admin user table doesn't render nicely on mobile"), a deeper pass
+with high-fidelity element crops + a 375px overflow sweep:
+
+- **`DESIGN-2` — match-detail header crammed against the nav** (Luke's example 1). The desktop `.pn-md-top` / mobile `.pn-mm-only` used `margin-top:-28px` to sit flush against the masthead ("one continuous element"). Replaced with a small positive top margin so the shell's 14px padding shows as a cream gap. Commit `f14c5b0`. Verified desktop + mobile.
+- **`DESIGN-3` — admin user table crams on mobile** (Luke's example 2). `panini-admin.css` had **no media queries at all**; the 4-column user row (and bonus-answer row) stayed fixed-grid at 375px. Added a `≤700px` stack: name/email full width, tags wrap, action buttons full-width side-by-side. Commit `71295e1`. Verified at 375px.
+- **`DESIGN-4` — dev phase pill overlapped the mobile bottom nav.** The dev-only pill (fixed, `bottom:12px`) covered Standings/Rules/You/Admin. Lifted to `bottom:64px` on mobile. Commit `c268f7a`. (Dev-only — doesn't ship — but was blocking mobile testing.)
+
+**Sweep results (no fix needed):** 375px horizontal-overflow check across `/`, `/predictions`, `/leaderboard`, `/results`, `/profile`, `/rules`, `/results/[id]` — **0px overflow everywhere** (mobile layouts are width-safe). The results-list + dashboard "flush against the masthead" treatment is a deliberate slim full-width title bar (distinct from the match *score hero* Luke flagged) and reads fine, so left as-is. Desktop bracket (final-in-the-centre wall chart) is excellent. The admin's 7-tab mobile nav is edge-to-edge tight at 375px (fits, no overflow; the 30 non-admin friends see 6 comfortable tabs).
+
 ## Per-page notes
 
 | Page | Assessment |
