@@ -79,6 +79,14 @@
 		line-height: 1;
 	}
 
+	/* On mobile the fixed bottom nav (~56px) occupies the bottom edge — lift
+	   the dev pill above it so it doesn't obscure the Standings/Rules/You tabs. */
+	@media (max-width: 700px) {
+		.dev-pill {
+			bottom: 64px;
+		}
+	}
+
 	.trigger {
 		display: inline-flex;
 		align-items: center;
