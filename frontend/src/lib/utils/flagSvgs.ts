@@ -1,37 +1,56 @@
 /**
- * Shared accessor for the flag-icons SVG bundle.
+ * Lazy accessor for the flag-icons SVG bundle.
  *
- * Vite inlines every `flag-icons/flags/4x3/*.svg` as a raw string at build
- * time. We expose two derived forms:
+ * Previously every `flag-icons/flags/4x3/*.svg` (~270 files) was inlined into
+ * the initial JS bundle with `eager: true`. Now the glob produces on-demand
+ * `import()` factories, so Vite code-splits each flag into its own chunk and
+ * only the flags actually rendered are fetched (perf-frontend:PERF-1/PERF-4).
  *
- *  - `rawFlagSvg(iso)` — the original `<svg…>` markup, ready to embed
- *    inline as HTML (used by PnFlag).
- *  - `flagDataUrl(iso)` — a `data:image/svg+xml;utf8,…` URI suitable for
- *    `<image href="…" />` inside another SVG (used by PnAxisFlag).
- *
- * Centralising the glob in one module keeps the bundle deduped — Vite was
- * previously creating two glob maps when both PnFlag and the axis flag
- * component pulled the SVGs separately.
+ * Loading is async, but both consumers degrade gracefully while a flag is in
+ * flight: `PnFlag` shows its neutral placeholder box and `PnAxisFlag` renders
+ * nothing, so there is never a broken state — the flag just pops in when ready.
+ * Components subscribe to `flagCache` so they re-render on arrival.
  */
 
-const flagSvgs = import.meta.glob<string>(
-	'/node_modules/flag-icons/flags/4x3/*.svg',
-	{ eager: true, query: '?raw', import: 'default' }
-);
+import { get, writable } from 'svelte/store';
 
-export function rawFlagSvg(iso: string | null | undefined): string | undefined {
-	if (!iso) return undefined;
-	return flagSvgs[`/node_modules/flag-icons/flags/4x3/${iso}.svg`];
+const loaders = import.meta.glob<string>('/node_modules/flag-icons/flags/4x3/*.svg', {
+	query: '?raw',
+	import: 'default'
+});
+
+/** iso -> loaded raw `<svg…>` markup. Subscribe so views update on load. */
+export const flagCache = writable<Record<string, string>>({});
+const inflight = new Set<string>();
+
+function keyFor(iso: string): string {
+	return `/node_modules/flag-icons/flags/4x3/${iso}.svg`;
 }
 
-/** A `data:image/svg+xml` URL, ready for an SVG `<image href>` attribute.
- * Returns `null` when the ISO code is unknown. */
+/** Kick off loading a flag into the cache. Idempotent, fire-and-forget. */
+export function loadFlag(iso: string | null | undefined): void {
+	if (!iso || inflight.has(iso) || get(flagCache)[iso] !== undefined) return;
+	const loader = loaders[keyFor(iso)];
+	if (!loader) return;
+	inflight.add(iso);
+	loader()
+		.then((raw) => flagCache.update((c) => ({ ...c, [iso]: raw })))
+		.catch(() => {})
+		.finally(() => inflight.delete(iso));
+}
+
+/** Cached raw `<svg…>` markup, or undefined until loaded (call loadFlag first). */
+export function rawFlagSvg(iso: string | null | undefined): string | undefined {
+	if (!iso) return undefined;
+	return get(flagCache)[iso];
+}
+
+/** A `data:image/svg+xml` URL for an SVG `<image href>`, or null until loaded. */
 export function flagDataUrl(iso: string | null | undefined): string | null {
 	const raw = rawFlagSvg(iso);
 	if (!raw) return null;
-	// Force the flag to fill the target box (each flag-icons SVG has
-	// preserveAspectRatio="xMidYMid meet" baked in which would letterbox
-	// inside the non-4:3 boxes we put them in).
+	// Force the flag to fill the target box (flag-icons SVGs bake in
+	// preserveAspectRatio="xMidYMid meet" which would letterbox).
 	const stretched = raw.replace(/<svg\b/, '<svg preserveAspectRatio="none"');
 	return 'data:image/svg+xml;utf8,' + encodeURIComponent(stretched);
 }

@@ -15,7 +15,7 @@
 	// the layout stays stable.
 
 	import { flagIsoCode } from '$lib/utils/teamCodes';
-	import { rawFlagSvg } from '$lib/utils/flagSvgs';
+	import { loadFlag, flagCache } from '$lib/utils/flagSvgs';
 
 	export let code: string;
 	export let w: number = 18;
@@ -23,7 +23,9 @@
 	export let border: boolean = true;
 
 	$: iso = flagIsoCode(code);
-	$: rawSvg = rawFlagSvg(iso);
+	$: loadFlag(iso); // lazily fetch this flag's chunk
+	// Reactive on the cache: undefined until the chunk loads (placeholder shows).
+	$: rawSvg = iso ? $flagCache[iso] : undefined;
 	// Inject preserveAspectRatio="none" on the root <svg> tag so the
 	// browser stretches the artwork to fill our viewport instead of
 	// letterboxing it. The regex inserts the attribute right after `<svg`

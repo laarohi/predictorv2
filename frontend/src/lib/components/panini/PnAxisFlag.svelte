@@ -10,7 +10,7 @@
 	 * matching `PnFlag`'s default look.
 	 */
 	import { flagIsoCode } from '$lib/utils/teamCodes';
-	import { flagDataUrl } from '$lib/utils/flagSvgs';
+	import { loadFlag, flagCache, flagDataUrl } from '$lib/utils/flagSvgs';
 
 	export let code: string;
 	export let x: number;
@@ -19,7 +19,9 @@
 	export let h: number;
 
 	$: iso = flagIsoCode(code);
-	$: href = flagDataUrl(iso);
+	$: loadFlag(iso); // lazily fetch this flag's chunk
+	// Reactive on the cache: null until the chunk loads (renders nothing).
+	$: href = iso && $flagCache[iso] !== undefined ? flagDataUrl(iso) : null;
 </script>
 
 {#if href}
