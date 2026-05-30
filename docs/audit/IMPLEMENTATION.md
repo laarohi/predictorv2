@@ -2,7 +2,7 @@
 
 Every confirmed finding → status → commit. **Status legend:** ✅ Fixed · 📝 Documented (judgment call, recorded with rationale).
 
-Each fix is an isolated commit so you can cherry-pick into `main`. **38 fix commits.** All 58 confirmed findings are addressed: 56 fixed in code, 2 documented. The only outstanding *task* is the visual design audit (browser-blocked — see bottom).
+Each fix is an isolated commit so you can cherry-pick into `main`. **39 fix commits — all 58 confirmed findings are fixed in code.** The only outstanding *task* is the visual design audit (browser-blocked — see bottom).
 
 All commits keep the suites green: **backend pytest 329** (+24 new) · **svelte-check 0 errors** · **vitest 122**.
 
@@ -65,10 +65,9 @@ All commits keep the suites green: **backend pytest 329** (+24 new) · **svelte-
 | `clean-dead:DEAD-3` | info | Remove dead `predictionResult.ts` util | `f6004a2` |
 | `clean-dead:DEAD-5` | info | Remove unused trajectory/climbers endpoints + wrappers | `7eee194` |
 | `clean-dead:CLEAN-3` | info | Guard the kickoff-shifting dev script behind DEBUG | `edd7712` |
+| `perf-frontend:PERF-1`, `PERF-4` | low | Lazy-load flag SVGs (code-split) instead of inlining all ~270 | `0c43c8e` |
 
-## 📝 Documented (not implemented — rationale)
-
-- **`perf-frontend:PERF-1`** (≈260 flag SVGs eagerly inlined) and **`perf-frontend:PERF-4`** (bracket mounts all flags) — the only two findings left in code. Both implementation paths are poor risk/reward at this scale: the clean fix (lazy `import()`) turns synchronous flag rendering **async across the whole app** (bracket, results, predictions) — an unverifiable render change near launch; the alternative (narrow the static glob) needs a brittle ~120-entry explicit-import list keyed off a FIFA→ISO map (teamCodes.ts has ~120 teams), for a half-payload win on a LOW finding. The gzipped flag payload is acceptable for 30 users on normal connections. Revisit with the real flag-library follow-up (see `project_panini_flag_replacement`).
+_All 58 confirmed findings are now fixed in code — nothing deferred. The flag-bundle fix (`PERF-1/4-fe`) became safe once it was clear both flag consumers degrade gracefully to a placeholder while a flag's chunk loads; verified with a production build._
 
 ## Design audit
 
