@@ -2,7 +2,7 @@
 
 Every confirmed finding → status → commit. **Status legend:** ✅ Fixed · 📝 Documented (judgment call, recorded with rationale).
 
-Each fix is an isolated commit so you can cherry-pick into `main`. **39 fix commits — all 58 confirmed findings are fixed in code.** The only outstanding *task* is the visual design audit (browser-blocked — see bottom).
+Each fix is an isolated commit so you can cherry-pick into `main`. **40 fix commits — all 58 confirmed findings fixed, plus `DESIGN-1` from the visual design audit.** All four audits are complete (including the visual design pass — see bottom).
 
 All commits keep the suites green: **backend pytest 329** (+24 new) · **svelte-check 0 errors** · **vitest 122**.
 
@@ -54,6 +54,9 @@ All commits keep the suites green: **backend pytest 329** (+24 new) · **svelte-
 | `flow:FLOW-5` | low | Branded splash on cold load instead of blank screen | `f718449` |
 | `flow:FLOW-9`, `clean:CLEAN-1` | info | Wire between-phases bracket progress to real data | `08bacea` |
 | `flow:FLOW-7`, `FLOW-8` | low | Unify Phase II save + surface save-error detail | `e3ea3e3` |
+| `DESIGN-1` (visual audit) | high* | Admins no longer bounced off `/admin` on cold load (auth-guard race) | `c2f62b7` |
+
+<sub>*high-impact for admins — surfaced only by loading the page; see design.md.</sub>
 
 ### Dead code / cleanliness
 
@@ -69,8 +72,8 @@ All commits keep the suites green: **backend pytest 329** (+24 new) · **svelte-
 
 _All 58 confirmed findings are now fixed in code — nothing deferred. The flag-bundle fix (`PERF-1/4-fe`) became safe once it was clear both flag consumers degrade gracefully to a placeholder while a flag's chunk loads; verified with a production build._
 
-## Design audit
+## Design audit — complete
 
-⚠️ The **visual** design pass (page-by-page screenshots + interaction via Chrome MCP) is **blocked** — the Claude-in-Chrome extension was not connected during this session (retried 5×). A code-level design review is in [design.md](./design.md); the visual pass is ready to run the moment the extension connects (app is up at `localhost:5173` with seeded data and login tokens prepared).
+✅ The visual pass is **done**. With the Claude-in-Chrome extension unavailable, every page was captured at desktop + mobile via headless Chrome (Playwright `channel: 'chrome'`) with a real admin session, and reviewed. Findings + per-page notes are in [design.md](./design.md). The verdict: the Panini design is polished and launch-ready; the pass found one real bug (`DESIGN-1`, fixed above) and a short list of low-priority polish (chiefly the 104-fixture results scroll).
 
 One note for merge: `CLAUDE.md` still says predictions lock "5 minutes" before kickoff, but the configured/enforced value is **15** (`config/worldcup2026.yml` → `get_lock_minutes` default 15) — correct it on `main` (left untouched here per worktree policy).
