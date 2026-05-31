@@ -32,6 +32,11 @@ export const token = writable<string | null>(getStoredToken());
 export const user = writable<User | null>(null);
 export const loading = writable<boolean>(false);
 export const error = writable<string | null>(null);
+// True once initAuth has finished resolving the session (fetched /auth/me, or
+// determined there's no token). Route guards must wait for this before
+// redirecting on role — otherwise an admin cold-loading /admin is bounced to
+// the dashboard because $user (and thus is_admin) isn't populated yet.
+export const authResolved = writable<boolean>(false);
 
 // Derived stores
 export const isAuthenticated = derived(token, ($token) => !!$token);
@@ -42,6 +47,22 @@ token.subscribe((value) => {
 	api.setToken(value);
 	setStoredToken(value);
 });
+
+// When any API call returns 401, clear the dead session and bounce to login.
+// Guard on having a token so we don't hijack login/register failures (no token
+// yet) or loop when already signed out / on the login page.
+function handleUnauthorized() {
+	if (get(token) === null) return;
+	const prevId = get(user)?.id;
+	if (prevId) clearAllForUser(prevId);
+	token.set(null);
+	user.set(null);
+	error.set('Your session expired — please sign in again.');
+	if (browser && !window.location.pathname.startsWith('/login')) {
+		goto('/login');
+	}
+}
+api.setUnauthorizedHandler(handleUnauthorized);
 
 // Actions
 export async function register(data: UserCreate): Promise<boolean> {
@@ -121,4 +142,5 @@ export async function initAuth() {
 	if (currentToken) {
 		await fetchUser();
 	}
+	authResolved.set(true);
 }

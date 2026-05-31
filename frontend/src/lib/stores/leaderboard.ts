@@ -3,7 +3,7 @@
  * Supports filtering by phase (overall, phase_1, phase_2).
  */
 
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import * as leaderboardApi from '$api/leaderboard';
 import type { PhaseFilter } from '$api/leaderboard';
 import * as scoresApi from '$api/scores';
@@ -26,6 +26,21 @@ export const liveMatches = writable<LiveMatchScore[]>([]);
 
 // Polling state
 let pollInterval: ReturnType<typeof setInterval> | null = null;
+let pollMs = 60000;
+let visibilityHandler: (() => void) | null = null;
+
+function startInterval(): void {
+	if (pollInterval) return;
+	pollLiveData();
+	pollInterval = setInterval(pollLiveData, pollMs);
+}
+
+function clearIntervalOnly(): void {
+	if (pollInterval) {
+		clearInterval(pollInterval);
+		pollInterval = null;
+	}
+}
 
 // Derived stores
 export const currentUserPosition = derived([leaderboard, user], ([$leaderboard, $user]) => {
@@ -79,37 +94,51 @@ export async function setPhase(phase: LeaderboardPhase): Promise<void> {
 
 // Polling for live updates (always fetches overall for live data)
 export function startPolling(intervalMs: number = 60000): void {
-	if (pollInterval) return;
-
-	pollLiveData();
-	pollInterval = setInterval(pollLiveData, intervalMs);
+	pollMs = intervalMs;
+	startInterval();
+	// Pause polling while the tab is hidden (no point hammering the API on a
+	// backgrounded tab); resume + refresh immediately when it becomes visible.
+	if (typeof document !== 'undefined' && !visibilityHandler) {
+		visibilityHandler = () => {
+			if (document.hidden) clearIntervalOnly();
+			else startInterval();
+		};
+		document.addEventListener('visibilitychange', visibilityHandler);
+	}
 }
 
 export function stopPolling(): void {
-	if (pollInterval) {
-		clearInterval(pollInterval);
-		pollInterval = null;
+	clearIntervalOnly();
+	if (visibilityHandler && typeof document !== 'undefined') {
+		document.removeEventListener('visibilitychange', visibilityHandler);
+		visibilityHandler = null;
 	}
 }
 
 // Combined polling function (scores + leaderboard in one request)
 // Note: Polling always returns overall leaderboard for live updates
 export async function pollLiveData(): Promise<void> {
-	leaderboardLoading.set(true);
+	// Only show the loading state on the very first poll (empty board), so the
+	// header doesn't flash "LOADING…" over already-rendered rows every 60s.
+	const isFirstLoad = get(leaderboard).length === 0;
+	if (isFirstLoad) leaderboardLoading.set(true);
 	leaderboardError.set(null);
 
 	try {
 		const data = await scoresApi.pollLiveData();
-		leaderboard.set(data.leaderboard);
 		liveMatches.set(data.matches);
 		lastCalculated.set(data.last_updated);
-		totalParticipants.set(data.leaderboard.length);
-		// Reset to overall since polling returns overall data
-		leaderboardPhase.set('overall');
+		// The poll returns the OVERALL board. Only refresh the standings table
+		// from it when the user is actually viewing Overall — otherwise we'd
+		// yank them off their Phase I/II tab and show overall rows under it.
+		if (get(leaderboardPhase) === 'overall') {
+			leaderboard.set(data.leaderboard);
+			totalParticipants.set(data.leaderboard.length);
+		}
 	} catch (e) {
 		leaderboardError.set(e instanceof Error ? e.message : 'Failed to load live data');
 	} finally {
-		leaderboardLoading.set(false);
+		if (isFirstLoad) leaderboardLoading.set(false);
 	}
 }
 

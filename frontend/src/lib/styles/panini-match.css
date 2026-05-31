@@ -21,7 +21,11 @@
  * tight 8px gutter. */
 @media (max-width: 899px) {
 	.pn .pn-mm-only {
-		margin: -28px var(--pn-body-neg-x) 0;
+		/* -20px sides cancel the body's mobile horizontal padding (full-bleed);
+		   -14px top cancels the 14px top padding so the navy back-bar sits flush
+		   to the top of the page (no cream band above it). -14px exactly, not the
+		   old -28px, which over-pulled and clipped the back-bar's top 14px. */
+		margin: -14px var(--pn-body-neg-x) 0;
 	}
 }
 
@@ -34,7 +38,17 @@
 	display: grid;
 	grid-template-columns: 3fr 2fr;
 	gap: 0;
-	margin: -28px var(--pn-body-neg-x) 14px;
+	/* The navy hero + score-strip read as one continuous masthead band, so the
+	   breathing room above them must be navy too — a cream gap here looked like
+	   the block had detached from the chrome. The container itself has no
+	   background, so any margin/padding on it reveals the cream .pn-body behind
+	   it; give it a navy background and the top padding becomes navy space above
+	   both columns. -14px top margin cancels .pn-body's 14px top padding so the
+	   band sits flush under the red sub-strip — no cream seam and no overlap
+	   (the old -28px over-pulled 14px into the strip, which read as crammed). */
+	background: var(--ink);
+	margin: -14px var(--pn-body-neg-x) 14px;
+	padding-top: 12px;
 	align-items: stretch;
 }
 

@@ -2,7 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { isAuthenticated, user } from '$stores/auth';
+	import { isAuthenticated, user, authResolved } from '$stores/auth';
 	import {
 		getUserAuditHistory,
 		type AuditEvent,
@@ -10,8 +10,9 @@
 	} from '$lib/api/admin';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 
-	$: if ($isAuthenticated && !$user?.is_admin) goto('/');
-	$: if (!$isAuthenticated) goto('/login');
+	// Wait for auth to resolve before role-redirecting (see admin/+page.svelte).
+	$: if ($authResolved && !$isAuthenticated) goto('/login');
+	$: if ($authResolved && $isAuthenticated && !$user?.is_admin) goto('/');
 
 	$: userId = $page.params.user_id ?? '';
 

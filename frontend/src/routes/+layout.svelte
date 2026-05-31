@@ -22,6 +22,8 @@
 	]);
 
 	onMount(() => {
+		// Remove the cold-load splash (app.html) now that the app has mounted.
+		document.getElementById('app-splash')?.remove();
 		initAuth();
 		if (import.meta.env.DEV) {
 			const param = $page.url.searchParams.get('uxPhase');

@@ -51,14 +51,16 @@ class MatchPredictionRead(BaseModel):
 class MatchPredictionBatch(BaseModel):
     """Schema for batch updating match predictions."""
 
-    predictions: list[MatchPredictionCreate]
+    # Cap the batch well above the ~104 tournament fixtures so an absurd
+    # payload is rejected without blocking a legitimate "save all" submission.
+    predictions: list[MatchPredictionCreate] = Field(max_length=200)
 
 
 class TeamAdvancementPrediction(BaseModel):
     """Single team advancement prediction."""
 
-    team: str
-    stage: str  # "round_of_32", "round_of_16", etc.
+    team: str = Field(max_length=64)
+    stage: str = Field(max_length=32)  # "round_of_32", "round_of_16", etc.
     group_position: int | None = Field(default=None, ge=1, le=4)
 
 
@@ -77,7 +79,9 @@ class BracketPrediction(BaseModel):
 class BracketPredictionUpdate(BaseModel):
     """Schema for updating bracket predictions."""
 
-    predictions: list[TeamAdvancementPrediction]
+    # A full bracket is ~120 entries (group positions + every KO round +
+    # winner); cap above that to reject storage-abuse payloads.
+    predictions: list[TeamAdvancementPrediction] = Field(max_length=200)
 
 
 # Community predictions schemas (for the results page scatter plot)

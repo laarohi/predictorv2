@@ -17,9 +17,10 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import get_settings
+from app.database import async_session_maker
 from app.models._datetime import utc_now
 from app.services.locking import get_active_competition
 from app.services.receipts import send_phase1_receipts
@@ -33,13 +34,6 @@ logger = logging.getLogger(__name__)
 # Tunable: 60 s lines up with the frontend's leaderboard poll cadence,
 # so users see fresh scores within one frontend refresh.
 POLL_INTERVAL_SECONDS = 60.0
-
-
-def _make_session_factory() -> async_sessionmaker[AsyncSession]:
-    settings = get_settings()
-    db_url = str(settings.database_url).replace("postgresql://", "postgresql+asyncpg://")
-    engine = create_async_engine(db_url)
-    return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
 async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> None:
@@ -64,23 +58,30 @@ async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> No
         except Exception:  # noqa: BLE001
             logger.exception("score_scheduler: snapshot tick failed")
 
+        # Score sync runs BEFORE the receipt batch: it's the time-sensitive
+        # match-day operation and must not wait behind a (potentially slow)
+        # Resend send. Wrapped in its own guard so a sync error doesn't skip
+        # the receipts either.
+        try:
+            if await has_active_or_imminent_match(session):
+                result = await sync_scores_once(session)
+                if result.errors:
+                    for err in result.errors:
+                        logger.warning("score_scheduler: %s", err)
+                if result.synced or result.updated:
+                    logger.info(
+                        "score_scheduler tick: synced=%d updated=%d",
+                        result.synced,
+                        result.updated,
+                    )
+        except Exception:  # noqa: BLE001
+            logger.exception("score_scheduler: score sync tick failed")
+
+        # Receipts last — a slow/failing send can't delay the score sync above.
         try:
             await _maybe_send_phase1_receipts(session)
         except Exception:  # noqa: BLE001
             logger.exception("score_scheduler: phase1 receipt tick failed")
-
-        if not await has_active_or_imminent_match(session):
-            return
-        result = await sync_scores_once(session)
-        if result.errors:
-            for err in result.errors:
-                logger.warning("score_scheduler: %s", err)
-        if result.synced or result.updated:
-            logger.info(
-                "score_scheduler tick: synced=%d updated=%d",
-                result.synced,
-                result.updated,
-            )
 
 
 async def _maybe_send_phase1_receipts(session: AsyncSession) -> None:
@@ -122,7 +123,10 @@ async def run_scheduler_loop(
     stop_event: asyncio.Event | None = None,
 ) -> None:
     """Long-running task: poll forever (until cancelled or stop_event set)."""
-    session_factory = _make_session_factory()
+    # Reuse the app's shared engine/pool rather than constructing a second
+    # engine — two pools would double the connection footprint and could
+    # exhaust Postgres max_connections under any future multi-worker config.
+    session_factory = async_session_maker
     stop_event = stop_event or asyncio.Event()
 
     logger.info("score_scheduler started (interval=%.1fs)", interval_seconds)

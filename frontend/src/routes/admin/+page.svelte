@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { isAuthenticated, user } from '$stores/auth';
+	import { isAuthenticated, user, authResolved } from '$stores/auth';
 	import {
 		fetchPhaseStatus,
 		isPhase2Active,
@@ -40,8 +39,11 @@
 	import type { ComboOption } from '$components/panini/PnCombobox.svelte';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 
-	$: if ($isAuthenticated && !$user?.is_admin) goto('/');
-	$: if (!$isAuthenticated) goto('/login');
+	// Wait for auth to resolve before redirecting on role — otherwise an admin
+	// cold-loading or refreshing /admin is bounced to the dashboard because
+	// $user (hence is_admin) isn't populated until /auth/me returns.
+	$: if ($authResolved && !$isAuthenticated) goto('/login');
+	$: if ($authResolved && $isAuthenticated && !$user?.is_admin) goto('/');
 
 	let stats: AdminStats | null = null;
 	let competitions: CompetitionAdminView[] = [];
@@ -211,12 +213,19 @@
 		return `Resolved ${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`;
 	}
 
-	onMount(async () => {
-		if ($user?.is_admin) {
-			await loadData();
-			await loadBonusAnswers();
-		}
-	});
+	// Load admin data once auth has resolved AND confirmed an admin. Gating on
+	// onMount alone raced auth: on a cold load / refresh, $user is still null
+	// when the component mounts, so the is_admin check was false and the data
+	// never loaded — leaving "Loading admin data…" on screen forever. DESIGN-1
+	// fixed the redirect race this same way; this is its data-load counterpart.
+	// The reactive trigger fires both on client-side nav (when $user is already
+	// populated) and on cold load (when /auth/me resolves), exactly once.
+	let adminDataRequested = false;
+	$: if ($authResolved && $user?.is_admin && !adminDataRequested) {
+		adminDataRequested = true;
+		loadData();
+		loadBonusAnswers();
+	}
 
 	async function loadData() {
 		loading = true;

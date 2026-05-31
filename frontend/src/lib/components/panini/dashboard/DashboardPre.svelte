@@ -263,7 +263,7 @@
 						{
 							ix: '01',
 							name: 'Phase I — Pre-tournament',
-							desc: 'All 48 group match scores, your knockout bracket, and 9 bonus picks. Locks at first kickoff.',
+							desc: `All ${totalGroupMatches} group match scores, your knockout bracket, and ${bonusQuestionsCount ?? 9} bonus picks. Locks at first kickoff.`,
 							value: 'full reward'
 						},
 						{

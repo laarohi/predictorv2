@@ -35,35 +35,8 @@ export interface RankTrajectoryResponse {
 	total_participants: number;
 }
 
-export interface SteepestClimberEntry {
-	user_id: string;
-	user_name: string;
-	places: number;
-	current_position: number;
-	previous_position: number;
-}
-
-export interface SteepestClimbersResponse {
-	days: number;
-	entries: SteepestClimberEntry[];
-}
-
 export async function getMyRankTrajectory(days: number = 7): Promise<RankTrajectoryResponse> {
 	return api.get<RankTrajectoryResponse>(`/leaderboard/snapshots/me?days=${days}`);
-}
-
-export async function getRankTrajectory(
-	userId: string,
-	days: number = 7
-): Promise<RankTrajectoryResponse> {
-	return api.get<RankTrajectoryResponse>(`/leaderboard/snapshots/${userId}?days=${days}`);
-}
-
-export async function getSteepestClimbers(
-	days: number = 7,
-	limit: number = 5
-): Promise<SteepestClimbersResponse> {
-	return api.get<SteepestClimbersResponse>(`/leaderboard/climbers?days=${days}&limit=${limit}`);
 }
 
 // ---- Tournament winner pickers (post-competition) ---------------------------

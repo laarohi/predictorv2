@@ -38,6 +38,10 @@ class User(SQLModel, table=True):
     # entry. Default false; only mutated by /api/admin/users/{id}/paid.
     paid: bool = Field(default=False)
 
+    # Bumped to invalidate all of a user's existing JWTs (sign-out-everywhere /
+    # compromise response). Tokens carry a `tv` claim checked on every request.
+    token_version: int = Field(default=0)
+
     competition_id: uuid.UUID | None = Field(default=None, foreign_key="competitions.id")
 
     created_at: datetime = Field(default_factory=utc_now, sa_column=utc_datetime_column())

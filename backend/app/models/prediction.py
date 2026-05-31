@@ -5,6 +5,7 @@ from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from sqlalchemy import UniqueConstraint
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.models._datetime import utc_datetime_column, utc_now
@@ -43,10 +44,12 @@ class MatchPrediction(SQLModel, table=True):
     user: "User" = Relationship(back_populates="match_predictions")
     fixture: "Fixture" = Relationship(back_populates="predictions")
 
-    class Config:
-        """Pydantic config."""
-
-        unique_together = [("user_id", "fixture_id")]
+    # One score prediction per (user, fixture). Enforced at the DB level —
+    # the previous `Config.unique_together` was a SQLModel no-op, so concurrent
+    # double-tap saves could insert duplicate rows and double-count points.
+    __table_args__ = (
+        UniqueConstraint("user_id", "fixture_id", name="uq_match_predictions_user_fixture"),
+    )
 
     @property
     def predicted_outcome(self) -> str:
@@ -79,7 +82,12 @@ class TeamPrediction(SQLModel, table=True):
     # Relationships
     user: "User" = Relationship(back_populates="team_predictions")
 
-    class Config:
-        """Pydantic config."""
-
-        unique_together = [("user_id", "team", "stage")]
+    # One pick per (user, team, stage, phase). `phase` is part of the key so a
+    # user's Phase 1 and Phase 2 brackets can both hold the same team/stage.
+    # Replaces a `Config.unique_together` that SQLModel silently ignored.
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "team", "stage", "phase",
+            name="uq_team_predictions_user_team_stage_phase",
+        ),
+    )

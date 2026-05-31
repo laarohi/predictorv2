@@ -135,6 +135,24 @@
 	box-shadow: 2px 2px 0 var(--ink);
 }
 
+/* Mobile: the 4-column user row (and the 4-column bonus-answer row) cram
+   badly on a phone — name/email, tags and buttons get squeezed into fixed
+   columns. Stack each row's cells vertically so everything gets full width.
+   display:flex also neutralises the inline grid-template-columns the
+   bonus-answer rows set, so both tables linearise cleanly. */
+@media (max-width: 700px) {
+	.pn .pn-ad-user {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 10px;
+	}
+	.pn .pn-ad-user .paid-toggle { align-self: flex-start; }
+	.pn .pn-ad-user .badges { flex-wrap: wrap; }
+	.pn .pn-ad-user .actions { flex-wrap: wrap; }
+	.pn .pn-ad-user .actions .pn-btn { flex: 1 1 auto; text-align: center; }
+}
+
 .pn .pn-ad-search {
 	width: 100%;
 	max-width: 320px;

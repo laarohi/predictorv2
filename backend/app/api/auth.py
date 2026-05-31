@@ -1,10 +1,12 @@
 """Authentication API routes."""
 
+import logging
 from datetime import timedelta
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from fastapi_sso.sso.google import GoogleSSO
+from fastapi_sso.state import generate_random_state
 from pydantic import BaseModel, EmailStr
 from sqlmodel import select
 
@@ -19,6 +21,7 @@ from app.dependencies import (
 from app.models.user import AuthProvider, User
 from app.schemas.auth import PasswordChange, Token, UserCreate, UserLogin, UserRead, UserStats
 from app.services.email import EmailSendError
+from app.services.login_throttle import record_failure, record_success, seconds_locked
 from app.services.magic_link import (
     MagicLinkError,
     RateLimited,
@@ -34,21 +37,38 @@ from app.services.profile import calculate_user_stats
 
 router = APIRouter()
 
+logger = logging.getLogger(__name__)
+
 
 def get_google_sso() -> GoogleSSO:
-    """Get Google SSO instance."""
+    """Get Google SSO instance with CSRF state enforced.
+
+    get_login_redirect(state=...) sets an `sso_state` cookie and includes the
+    state in the Google auth URL; verify_and_process then rejects a callback
+    whose state query param is missing or doesn't match the cookie. This closes
+    the OAuth login-CSRF gap.
+    """
     settings = get_settings()
-    return GoogleSSO(
+    sso = GoogleSSO(
         client_id=settings.google_client_id,
         client_secret=settings.google_client_secret,
         redirect_uri=settings.google_redirect_uri,
         allow_insecure_http=settings.debug,
     )
+    sso.requires_state = True
+    return sso
 
 
 @router.post("/register", response_model=Token)
 async def register(user_data: UserCreate, session: DbSession) -> Token:
     """Register a new user with email/password."""
+    settings = get_settings()
+    if not settings.registration_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Registration is closed.",
+        )
+
     # Check if email already exists
     result = await session.execute(select(User).where(User.email == user_data.email))
     if result.scalar_one_or_none():
@@ -57,12 +77,14 @@ async def register(user_data: UserCreate, session: DbSession) -> Token:
             detail="Email already registered",
         )
 
-    # Create user
+    # Create user. Admin bootstrap: emails on the ADMIN_EMAILS allowlist are
+    # created as admins so a fresh deploy can reach admin operations.
     user = User(
         email=user_data.email,
         name=user_data.name,
         password_hash=get_password_hash(user_data.password),
         auth_provider=AuthProvider.EMAIL,
+        is_admin=user_data.email.lower() in settings.admin_emails,
     )
     session.add(user)
     await session.commit()
@@ -72,6 +94,7 @@ async def register(user_data: UserCreate, session: DbSession) -> Token:
     access_token = create_access_token(
         user_id=str(user.id),
         expires_delta=timedelta(minutes=get_settings().jwt_access_token_expire_minutes),
+        token_version=user.token_version,
     )
 
     return Token(access_token=access_token)
@@ -80,16 +103,26 @@ async def register(user_data: UserCreate, session: DbSession) -> Token:
 @router.post("/login", response_model=Token)
 async def login(credentials: UserLogin, session: DbSession) -> Token:
     """Login with email/password."""
+    # Per-account brute-force guard (complements nginx's per-IP limit).
+    locked = seconds_locked(credentials.email)
+    if locked is not None:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many failed attempts. Try again in {int(locked // 60) + 1} minute(s).",
+        )
+
     result = await session.execute(select(User).where(User.email == credentials.email))
     user = result.scalar_one_or_none()
 
     if not user or not user.password_hash:
+        record_failure(credentials.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
         )
 
     if not verify_password(credentials.password, user.password_hash):
+        record_failure(credentials.email)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password",
@@ -101,9 +134,11 @@ async def login(credentials: UserLogin, session: DbSession) -> Token:
             detail="Account is inactive",
         )
 
+    record_success(credentials.email)
     access_token = create_access_token(
         user_id=str(user.id),
         expires_delta=timedelta(minutes=get_settings().jwt_access_token_expire_minutes),
+        token_version=user.token_version,
     )
 
     return Token(access_token=access_token)
@@ -120,7 +155,7 @@ async def google_login():
         )
 
     google_sso = get_google_sso()
-    return await google_sso.get_login_redirect()
+    return await google_sso.get_login_redirect(state=generate_random_state())
 
 
 @router.get("/google/callback")
@@ -137,10 +172,14 @@ async def google_callback(request: Request, session: DbSession):
 
     try:
         google_user = await google_sso.verify_and_process(request)
-    except Exception as e:
+    except Exception:
+        # Log the real cause server-side; return a generic message so raw
+        # exception text (which can include token/URL internals) isn't
+        # reflected to the client.
+        logger.exception("Google OAuth callback failed")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Failed to authenticate with Google: {e}",
+            detail="Google sign-in failed, please try again.",
         )
 
     if not google_user or not google_user.email:
@@ -159,9 +198,13 @@ async def google_callback(request: Request, session: DbSession):
         user = result.scalar_one_or_none()
 
         if user:
-            # Link Google account to existing user
+            # Link Google to the existing account. Don't downgrade an
+            # email+password user to GOOGLE-only — that would disable their
+            # password login and password-change. Only adopt GOOGLE as the
+            # provider when there's no password to preserve.
             user.google_id = google_user.id
-            user.auth_provider = AuthProvider.GOOGLE
+            if not user.password_hash:
+                user.auth_provider = AuthProvider.GOOGLE
         else:
             # Create new user
             user = User(
@@ -169,9 +212,18 @@ async def google_callback(request: Request, session: DbSession):
                 name=google_user.display_name or google_user.email.split("@")[0],
                 google_id=google_user.id,
                 auth_provider=AuthProvider.GOOGLE,
+                is_admin=google_user.email.lower() in settings.admin_emails,
             )
             session.add(user)
 
+        await session.commit()
+        await session.refresh(user)
+
+    # Admin bootstrap: ensure allowlisted emails are admins on every login,
+    # including accounts that existed before being added to the list.
+    if not user.is_admin and user.email.lower() in settings.admin_emails:
+        user.is_admin = True
+        session.add(user)
         await session.commit()
         await session.refresh(user)
 
@@ -185,17 +237,36 @@ async def google_callback(request: Request, session: DbSession):
     access_token = create_access_token(
         user_id=str(user.id),
         expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
+        token_version=user.token_version,
     )
 
-    # Redirect to frontend with token
-    frontend_url = settings.cors_origins[0] if settings.cors_origins else "http://localhost:5173"
-    return RedirectResponse(url=f"{frontend_url}/auth/callback?token={access_token}")
+    # Redirect to the frontend with the token in the URL *fragment*, not the
+    # query string. Fragments are never sent to the server, so the bearer
+    # token can't leak into nginx/Cloudflare access logs or the Referer
+    # header. The callback page reads it from location.hash and immediately
+    # strips it from the address bar. Use the canonical public base URL so the
+    # redirect target doesn't depend on CORS list ordering.
+    frontend_url = settings.public_base_url or "http://localhost:5173"
+    return RedirectResponse(url=f"{frontend_url}/auth/callback#token={access_token}")
 
 
 @router.get("/me", response_model=UserRead)
 async def get_current_user_info(current_user: CurrentUser) -> UserRead:
     """Get current user information."""
     return UserRead.model_validate(current_user)
+
+
+@router.post("/me/logout-all")
+async def logout_all_sessions(current_user: CurrentUser, session: DbSession) -> dict[str, str]:
+    """Sign out everywhere: invalidate all of the current user's tokens.
+
+    Bumps token_version so every previously-issued JWT (including the one used
+    for this request) fails the `tv` check on its next use.
+    """
+    current_user.token_version += 1
+    session.add(current_user)
+    await session.commit()
+    return {"status": "all sessions signed out"}
 
 
 @router.post("/me/password")
@@ -259,24 +330,18 @@ async def request_magic_link(
 ) -> MagicLinkRequestResponse:
     """Generate a one-time login token and email it to the user.
 
-    Returns 200 on success. Specific failures map to:
-      - 404: unknown email
-      - 403: account inactive
+    Anti-enumeration: unknown or inactive emails return the same 200 "sent"
+    response as success, so this endpoint can't be used to probe which
+    addresses are registered. Only requester-facing failures surface:
       - 429: rate limited
       - 502: email send failure (Resend permanent error)
     """
     try:
         await create_magic_link(session, payload.email)
-    except UnknownEmail:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No account found for this email",
-        )
-    except UserInactive:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Account is inactive",
-        )
+    except (UnknownEmail, UserInactive):
+        # Mask account existence/state: return the same "sent" response as the
+        # success path so the endpoint can't be used for email enumeration.
+        return MagicLinkRequestResponse(status="sent")
     except RateLimited:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -326,5 +391,6 @@ async def verify_magic_link_endpoint(
     access_token = create_access_token(
         user_id=str(user.id),
         expires_delta=timedelta(minutes=get_settings().jwt_access_token_expire_minutes),
+        token_version=user.token_version,
     )
     return Token(access_token=access_token)

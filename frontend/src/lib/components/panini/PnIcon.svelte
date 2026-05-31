@@ -75,6 +75,9 @@
 	{:else if name === 'whistle'}
 		<circle cx="9" cy="13" r="5" fill={color} />
 		<rect x="13" y="9" width="9" height="3" fill={color} />
+	{:else if name === 'user'}
+		<circle cx="12" cy="8" r="4" fill={color} />
+		<path d="M4 21v-1a6 6 0 016-6h4a6 6 0 016 6v1" fill={color} stroke={color} />
 	{:else if name === 'cog'}
 		<circle cx="12" cy="12" r="3" fill={color} />
 		<path

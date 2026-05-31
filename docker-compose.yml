@@ -25,7 +25,10 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql://predictor:${DATABASE_PASSWORD:-predictor}@db:5432/predictor
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-super-secret-dev-key-change-in-prod}
+      # Required — no fallback. A missing/blank value fails the container at
+      # startup rather than silently booting with a forgeable committed key.
+      # Generate one into .env:  openssl rand -hex 32
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env (openssl rand -hex 32)}
       - DEBUG=${DEBUG:-false}
       - CORS_ORIGINS_STR=${CORS_ORIGINS_STR:-http://localhost:5173,http://localhost:3000}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}

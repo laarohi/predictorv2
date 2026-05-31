@@ -170,4 +170,15 @@ async def main():
 
 
 if __name__ == "__main__":
+    import os
+
+    # This script shifts real fixture kickoffs into the past (to force locks) —
+    # destructive if ever run against production data. Refuse unless explicitly
+    # in a dev environment.
+    if os.environ.get("DEBUG", "").lower() not in ("1", "true", "yes") and "--force" not in sys.argv:
+        print(
+            "Refusing to run: shifts real fixture kickoffs and is dev-only. "
+            "Set DEBUG=true (or pass --force) to run it intentionally."
+        )
+        raise SystemExit(2)
     asyncio.run(main())

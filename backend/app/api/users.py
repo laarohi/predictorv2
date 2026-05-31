@@ -14,7 +14,11 @@ from app.models.prediction import MatchPrediction, PredictionPhase, TeamPredicti
 from app.models.score import Score
 from app.models.user import User
 from app.schemas.auth import UserStats
-from app.services.locking import get_fixture_lock_view, is_phase1_locked
+from app.services.locking import (
+    get_fixture_lock_view,
+    is_phase1_locked,
+    is_phase2_bracket_locked,
+)
 from app.services.profile import calculate_user_stats
 from sqlmodel import func
 
@@ -247,7 +251,18 @@ async def get_user_predictions(
 
         match_predictions.append(view)
 
-    # Bracket summary: group team predictions by stage and phase
+    # Bracket summary: group team predictions by stage and phase.
+    #
+    # Blind pool applies to bracket picks too (group winners, knockout
+    # advancement, predicted champion) — these are the most strategic
+    # predictions in the pool. The owner always sees their own picks; any
+    # other (or anonymous) caller only sees a phase's bracket once that
+    # phase's deadline has locked. Without this gate, GET this endpoint for
+    # any user_id would leak their entire bracket before Phase 1 locks.
+    is_owner = _user is not None and _user.id == user_id
+    phase1_bracket_visible = is_owner or phase1_locked
+    phase2_bracket_visible = is_owner or await is_phase2_bracket_locked(session)
+
     result = await session.execute(
         select(TeamPrediction).where(TeamPrediction.user_id == user_id)
     )
@@ -257,11 +272,15 @@ async def get_user_predictions(
     phase1_stages: dict[str, list[str]] = {}
     phase2_stages: dict[str, list[str]] = {}
     for tp in team_preds:
-        stages.setdefault(tp.stage, []).append(tp.team)
         if tp.phase == PredictionPhase.PHASE_1:
+            if not phase1_bracket_visible:
+                continue
             phase1_stages.setdefault(tp.stage, []).append(tp.team)
         else:
+            if not phase2_bracket_visible:
+                continue
             phase2_stages.setdefault(tp.stage, []).append(tp.team)
+        stages.setdefault(tp.stage, []).append(tp.team)
 
     return UserPredictionsResponse(
         user_id=user.id,

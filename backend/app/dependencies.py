@@ -38,15 +38,24 @@ def get_password_hash(password: str) -> str:
     ).decode("utf-8")
 
 
-def create_access_token(user_id: str, expires_delta: timedelta | None = None) -> str:
-    """Create a JWT access token."""
+def create_access_token(
+    user_id: str,
+    expires_delta: timedelta | None = None,
+    token_version: int = 0,
+) -> str:
+    """Create a JWT access token.
+
+    `token_version` is embedded as the `tv` claim and compared to the user's
+    current token_version on every request, so bumping a user's token_version
+    invalidates all their outstanding tokens.
+    """
     settings = get_settings()
     if expires_delta:
         expire = utc_now() + expires_delta
     else:
         expire = utc_now() + timedelta(minutes=settings.jwt_access_token_expire_minutes)
 
-    to_encode = {"sub": user_id, "exp": expire}
+    to_encode = {"sub": user_id, "exp": expire, "tv": token_version}
     return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
@@ -78,6 +87,10 @@ async def get_current_user(
     user = result.scalar_one_or_none()
 
     if user is None:
+        raise credentials_exception
+    # Reject tokens whose version is stale (user did a sign-out-everywhere /
+    # had sessions revoked). Default 0 keeps pre-existing tokens valid.
+    if payload.get("tv", 0) != user.token_version:
         raise credentials_exception
     if not user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")

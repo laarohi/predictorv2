@@ -12,8 +12,6 @@ READ
 - get_user_trajectory(session, user_id, days) — return the last `days` of
   snapshot points for one user (oldest first). The current live position is
   NOT included; the API endpoint prepends/appends it as needed.
-- get_steepest_climbers(session, days, limit) — rank users by their position
-  improvement over the trailing N days. Used for the dashboard footer.
 """
 
 from __future__ import annotations
@@ -100,50 +98,3 @@ async def get_user_trajectory(
     stmt = stmt.order_by(LeaderboardSnapshot.captured_date.asc())
     result = await session.execute(stmt)
     return list(result.scalars().all())
-
-
-async def get_steepest_climbers(
-    session: AsyncSession,
-    days: int = 7,
-    limit: int = 5,
-) -> list[dict]:
-    """Return the users whose position improved the most over the last `days`.
-
-    Compared between each user's earliest snapshot in the window and their
-    most recent. `places` is positive when the user climbed (a lower number
-    = better rank), so a move from 14 → 8 returns places=6.
-
-    Returns a list of dicts: { user_id, user_name, places, current_position,
-    previous_position }.
-    """
-    floor_date = utc_now().date() - timedelta(days=days - 1)
-    result = await session.execute(
-        select(LeaderboardSnapshot)
-        .where(LeaderboardSnapshot.captured_date >= floor_date)
-        .order_by(LeaderboardSnapshot.user_id, LeaderboardSnapshot.captured_date.asc())
-    )
-    snaps = list(result.scalars().all())
-
-    # Group by user → (earliest, latest)
-    per_user: dict[uuid.UUID, tuple[LeaderboardSnapshot, LeaderboardSnapshot]] = {}
-    for snap in snaps:
-        if snap.user_id not in per_user:
-            per_user[snap.user_id] = (snap, snap)
-        else:
-            first, _last = per_user[snap.user_id]
-            per_user[snap.user_id] = (first, snap)
-
-    climbers = []
-    for user_id, (first, last) in per_user.items():
-        places = first.position - last.position  # positive = climbed
-        climbers.append(
-            {
-                "user_id": user_id,
-                "places": places,
-                "current_position": last.position,
-                "previous_position": first.position,
-            }
-        )
-
-    climbers.sort(key=lambda c: c["places"], reverse=True)
-    return climbers[:limit]

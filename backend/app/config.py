@@ -6,8 +6,21 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import PostgresDsn, computed_field
+from pydantic import PostgresDsn, computed_field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Placeholder/example secrets shipped in this repo (docker-compose, .env.example).
+# None of these may ever be the live signing key in production — a forgeable JWT
+# key lets anyone mint an admin token.
+_WEAK_JWT_SECRETS = frozenset(
+    {
+        "super-secret-dev-key-change-in-prod",
+        "your-super-secret-key-change-in-production",
+        "changeme",
+        "secret",
+        "test-secret-key",
+    }
+)
 
 
 class Settings(BaseSettings):
@@ -28,6 +41,17 @@ class Settings(BaseSettings):
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
+
+    # Admin bootstrap: comma-separated emails auto-granted admin on account
+    # creation or login. A fresh deploy otherwise has no admin at all
+    # (is_admin can only be toggled by an existing admin). See also
+    # scripts/make_admin.py for promoting an existing account.
+    admin_emails_str: str = ""
+
+    # Open self-registration toggle. Set false once the friend group is
+    # onboarded so outsiders can't join the live pool; existing users keep
+    # logging in via password / magic-link / Google.
+    registration_enabled: bool = True
 
     # Google OAuth
     google_client_id: str = ""
@@ -77,6 +101,31 @@ class Settings(BaseSettings):
                 pass
         # Handle comma-separated format: url1,url2
         return [origin.strip() for origin in v.split(",") if origin.strip()]
+
+    @computed_field
+    @property
+    def admin_emails(self) -> list[str]:
+        """Normalized (lowercased) admin allowlist from admin_emails_str."""
+        return [e.strip().lower() for e in self.admin_emails_str.split(",") if e.strip()]
+
+    @model_validator(mode="after")
+    def _enforce_secret_strength(self) -> "Settings":
+        """Fail closed in production if the JWT secret is weak or a known default.
+
+        Only enforced when ``debug`` is False, so local dev/test stay ergonomic.
+        The signing key is the entire trust anchor for auth, the blind pool,
+        scoring, and admin ops; booting prod with a placeholder secret should
+        crash loudly rather than start silently forgeable.
+        """
+        if not self.debug:
+            key = self.jwt_secret_key or ""
+            if key in _WEAK_JWT_SECRETS or len(key) < 32:
+                raise ValueError(
+                    "JWT_SECRET_KEY is unset, shorter than 32 chars, or a known "
+                    "default placeholder. Set a strong secret in production, e.g. "
+                    'python -c "import secrets; print(secrets.token_urlsafe(48))"'
+                )
+        return self
 
 
 @lru_cache
