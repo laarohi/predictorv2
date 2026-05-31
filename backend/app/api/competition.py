@@ -130,7 +130,8 @@ async def get_phase_status(
 
 class ScoringConfigResponse(BaseModel):
     """Scoring configuration as the frontend needs it to render per-match
-    breakdowns (Outcome / Exact / Rarity pills + Total).
+    breakdowns (Outcome / Exact / Rarity pills + Total) and the public /rules
+    page bracket-points table.
 
     The rarity formula uses per-fixture predictor counts, not a global
     player count — the frontend has those via `/predictions/agreements`
@@ -139,27 +140,51 @@ class ScoringConfigResponse(BaseModel):
         R = min(rarity_cap, round(alpha * log2(1 / (2f))))
 
     where f = agrees_outcome / total and alpha = 10/log2(15) ≈ 2.5596.
+
+    Advancement points are split by phase: `advancement` is the Phase 1
+    per-round table (round_of_32 … winner), `advancement_phase2` the Phase 2
+    table, and `group_position` the Phase 1 group-position bonus. The /rules
+    page renders both as a single round × phase table.
     """
 
     mode: str  # 'fixed' | 'hybrid' (legacy) | 'logarithmic'
     outcome_points: int
     exact_points: int
     rarity_cap: int
+    group_position: int
+    advancement: dict[str, int]
+    advancement_phase2: dict[str, int]
 
 
 @router.get("/scoring-config", response_model=ScoringConfigResponse)
-async def get_scoring_config_endpoint(
-    _current_user: CurrentUser,
-) -> ScoringConfigResponse:
+async def get_scoring_config_endpoint() -> ScoringConfigResponse:
     """Return scoring config so the Results & Fixtures page can project
     per-match rarity bonuses client-side using the same formula the backend
-    will eventually score with. Per-fixture predictor counts come from
-    /predictions/agreements."""
+    will eventually score with, and the public /rules page can render the
+    bracket-points table. Per-fixture predictor counts come from
+    /predictions/agreements.
+
+    Public (no auth) — scoring rules are the published content of the /rules
+    page, which prospective joiners read before signing up. Mirrors the public
+    posture of /info."""
     config = get_scoring_config()
     match_cfg = config.get("match", {})
+    adv = config.get("advancement", {})
+    # Split the advancement block into its Phase 1 round table, the nested
+    # Phase 2 table, and the standalone group-position bonus. The round keys
+    # (round_of_32 … winner) are everything except the two non-round entries.
+    phase2 = adv.get("phase_2", {})
+    advancement = {
+        k: v
+        for k, v in adv.items()
+        if k not in ("group_position", "phase_2") and isinstance(v, int)
+    }
     return ScoringConfigResponse(
         mode=config.get("mode", "logarithmic"),
         outcome_points=match_cfg.get("correct_outcome", 5),
         exact_points=match_cfg.get("exact_score", 10),
         rarity_cap=match_cfg.get("rarity_cap", match_cfg.get("hybrid_cap", 10)),
+        group_position=adv.get("group_position", 5),
+        advancement=advancement,
+        advancement_phase2={k: v for k, v in phase2.items() if isinstance(v, int)},
     )

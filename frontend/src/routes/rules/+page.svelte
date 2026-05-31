@@ -1,32 +1,91 @@
 <script lang="ts">
 	// Public rules page. No auth gate — prospective joiners should be able
 	// to read this before signing up. Pulls live values from the public
-	// /api/competition/info and /api/predictions/bonus/questions endpoints
-	// with sensible static fallbacks so the first paint is correct even if
-	// the API is unreachable.
+	// /api/competition/info, /api/competition/scoring-config and
+	// /api/predictions/bonus/questions endpoints with sensible static
+	// fallbacks so the first paint is correct even if the API is unreachable.
 	import { onMount } from 'svelte';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
-	import { getCompetitionInfo, type CompetitionInfo } from '$api/competition';
+	import {
+		getCompetitionInfo,
+		getScoringConfig,
+		type CompetitionInfo,
+		type ScoringConfig
+	} from '$api/competition';
 	import { getBonusQuestions, type BonusQuestion } from '$api/bonus';
 	import { logarithmicRarityBonus } from '$lib/utils/matchBreakdown';
 
 	let info: CompetitionInfo | null = null;
+	let scoring: ScoringConfig | null = null;
 	let bonusQuestions: BonusQuestion[] = [];
 
-	/** Cap of the rarity bonus — matches `match.rarity_cap` in
-	 *  config/worldcup2026.yml. Hardcoded here because the rules page is
-	 *  public (no auth → no /scoring-config call). Touch both if you tune. */
-	const RARITY_CAP = 10;
+	// Static fallbacks mirror config/worldcup2026.yml — used only for first
+	// paint and if the public /scoring-config call fails. Once `scoring`
+	// loads, the endpoint (YAML-backed) is the single source of truth, so
+	// these can't silently drift from the real scoring values.
+	const RARITY_CAP_FALLBACK = 10;
+	const ADVANCEMENT_FALLBACK: Record<string, number> = {
+		group_position: 5,
+		round_of_32: 10,
+		round_of_16: 15,
+		quarter_final: 25,
+		semi_final: 55,
+		final: 85,
+		winner: 150
+	};
+	const ADVANCEMENT_PHASE2_FALLBACK: Record<string, number> = {
+		round_of_32: 0,
+		round_of_16: 5,
+		quarter_final: 15,
+		semi_final: 40,
+		final: 60,
+		winner: 100
+	};
+
+	/** Display order + labels for the bracket-points table. `phase1Only`
+	 *  rounds (group position) show "—" in the Phase II column: group standings
+	 *  aren't re-predicted in Phase II. R32 in Phase II is a real 0 (the line-up
+	 *  is published before Phase II opens), so it renders as a number, not "—". */
+	const BRACKET_ROUNDS: Array<{ key: string; label: string; phase1Only?: boolean }> = [
+		{ key: 'group_position', label: 'Group position', phase1Only: true },
+		{ key: 'round_of_32', label: 'Round of 32' },
+		{ key: 'round_of_16', label: 'Round of 16' },
+		{ key: 'quarter_final', label: 'Quarter-final' },
+		{ key: 'semi_final', label: 'Semi-final' },
+		{ key: 'final', label: 'Final' },
+		{ key: 'winner', label: 'Tournament winner' }
+	];
+
+	$: RARITY_CAP = scoring?.rarity_cap ?? RARITY_CAP_FALLBACK;
+
+	// Phase 1 round table + the standalone group-position bonus (the endpoint
+	// keeps group_position separate from the round table). Phase 2 round table.
+	// Annotated as Record so the string-keyed lookups below typecheck — the
+	// object-spread otherwise narrows the inferred type and drops the index
+	// signature.
+	let adv1: Record<string, number> = ADVANCEMENT_FALLBACK;
+	let adv2: Record<string, number> = ADVANCEMENT_PHASE2_FALLBACK;
+	$: adv1 = {
+		...(scoring?.advancement ?? ADVANCEMENT_FALLBACK),
+		group_position: scoring?.group_position ?? ADVANCEMENT_FALLBACK.group_position
+	};
+	$: adv2 = scoring?.advancement_phase2 ?? ADVANCEMENT_PHASE2_FALLBACK;
+	$: bracketPoints = BRACKET_ROUNDS.map((r) => ({
+		round: r.label,
+		p1: adv1[r.key] ?? null,
+		p2: r.phase1Only ? null : (adv2[r.key] ?? null)
+	}));
 
 	onMount(async () => {
 		try {
-			[info, bonusQuestions] = await Promise.all([
+			[info, scoring, bonusQuestions] = await Promise.all([
 				getCompetitionInfo(),
+				getScoringConfig(),
 				getBonusQuestions()
 			]);
 		} catch (_e) {
 			// Public endpoints — failure usually means backend is down. Page
-			// still renders with hardcoded defaults below.
+			// still renders with the static fallbacks above.
 		}
 	});
 
@@ -127,31 +186,16 @@
 		</div>
 	</section>
 
-	<!-- 01 — The tournament -->
+	<!-- 01 — Phases -->
 	<section class="pn-rl-section">
-		<div class="h"><span>01 · The Tournament</span><span class="right">FIFA 2026 · 48 teams</span></div>
+		<div class="h"><span>01 · Two Phases</span><span class="right">Overall score = Phase I + Phase II</span></div>
 		<div class="body">
 			<p>
-				FIFA World Cup 2026 features <b>48 teams</b> drawn into <b>12 groups of 4</b>. Each group
-				plays a single round-robin of three matches across the group stage.
-			</p>
-			<p>
-				The top two teams from each group <b>advance directly</b> to the Round of 32. The eight
-				best-ranked third-placed teams (across all 12 groups) <b>also advance</b>, filling the
-				bracket to 32 teams. From there it's straight knockout: R32 → R16 → QF → SF → Final.
-			</p>
-		</div>
-	</section>
-
-	<!-- 02 — Phases -->
-	<section class="pn-rl-section">
-		<div class="h"><span>02 · Two Phases</span><span class="right">Phase II points set per stage</span></div>
-		<div class="body">
-			<p>
-				The competition is split into two phases. Phase I is the headline event — everything is
-				up for grabs and predictions are made blind, before a ball is kicked. Phase II opens
-				after the group stage, gives you a second crack at the bracket with full knowledge of
-				who advanced, and pays smaller per-stage rewards to keep Phase I players in the game.
+				The competition is split into two phases, and your <b>overall score is simply Phase I
+				plus Phase II added together</b>. Phase I is the blind event — you make every pick before
+				a ball is kicked. Phase II opens once the group stage is done: now that the real bracket
+				is set, everyone predicts the knockout rounds from the <b>actual</b> line-up. It's also a
+				second chance — a strong Phase II can claw back ground for anyone who had a rough Phase I.
 			</p>
 			<div class="pn-rl-phases">
 				<div class="pn-rl-phase gold">
@@ -160,7 +204,7 @@
 					<ul>
 						<li>Predict every group-stage match score</li>
 						<li>Build a full knockout bracket from group winners</li>
-						<li>Answer the 9 bonus questions</li>
+						<li>Answer the 10 bonus questions</li>
 						<li>Full advancement rewards — Phase I carries the heaviest weight</li>
 					</ul>
 				</div>
@@ -168,19 +212,19 @@
 					<h3>Phase <em>II</em></h3>
 					<div class="when">Opens after group stage · admin-activated</div>
 					<ul>
-						<li>Re-build the bracket using <b>actual</b> group standings</li>
-						<li>Predict the score of each knockout match</li>
+						<li>Re-build the bracket using the <b>actual</b> group standings</li>
+						<li>Predict the score of each knockout match — these <b>lock 15 minutes before the start of each match</b></li>
 						<li>Advancement points are set <b>per stage</b> — R32 picks pay nothing (the bracket is published) and R16 picks pay a token amount; deeper rounds carry most of the Phase II reward</li>
-						<li>Phase I picks remain frozen — Phase II is additive</li>
+						<li>Phase I picks stay frozen — Phase II points are added on top</li>
 					</ul>
 				</div>
 			</div>
 		</div>
 	</section>
 
-	<!-- 03 — Match scoring -->
+	<!-- 02 — Match scoring -->
 	<section class="pn-rl-section">
-		<div class="h"><span>03 · Scoring · Match Predictions</span><span class="right">Per match</span></div>
+		<div class="h"><span>02 · Scoring · Match Predictions</span><span class="right">Per match</span></div>
 		<div class="body">
 			<p>
 				For each match you predict (Phase I group stage, or Phase II knockout matches), three
@@ -189,7 +233,7 @@
 			</p>
 			<div class="pn-rl-rows">
 				<div class="pn-rl-row">
-					<span class="pts">5</span>
+					<span class="pts">+5</span>
 					<div>
 						<div class="lbl">Correct outcome</div>
 						<div class="desc">Picking the right side (1/X/2). Awarded even if the exact score is wrong.</div>
@@ -207,11 +251,10 @@
 					<div>
 						<div class="lbl">Rarity bonus</div>
 						<div class="desc">
-							The fewer of your fellow predictors who picked the same outcome,
-							the higher this bonus. Gated at 50% — consensus picks pay nothing
-							extra. Derived from Shannon surprisal (the same logarithmic
-							scoring rule used in forecasting tournaments), scaled so a
-							uniquely correct call out of ~30 predictors hits the cap of +10.
+							Reward for being right when most people were wrong. The fewer
+							friends who picked the same outcome as you, the bigger the bonus.
+							Popular picks that everyone got right pay nothing extra; a lone
+							correct call earns the full +10.
 						</div>
 					</div>
 				</div>
@@ -242,62 +285,50 @@
 		</div>
 	</section>
 
-	<!-- 04 — Bracket scoring -->
+	<!-- 03 — Bracket scoring -->
 	<section class="pn-rl-section">
-		<div class="h"><span>04 · Scoring · Bracket Advancements</span><span class="right">Per team-stage pick</span></div>
+		<div class="h"><span>03 · Scoring · Bracket Advancements</span><span class="right">Per team-stage pick</span></div>
 		<div class="body">
 			<p>
 				Your bracket awards points for each team you correctly predict to reach a stage —
 				cumulative through the bracket. Picking <b>Argentina</b> as champion who beat
 				<b>France</b> in the final, for example, awards you the Winner points
 				<i>plus</i> the Final points for Argentina, plus their SF / QF / R16 / R32 stage points.
+				Each round pays differently in the two phases:
 			</p>
-			<div class="pn-rl-stages">
-				<div class="pn-rl-stage">
-					<div class="lbl">Group position</div>
-					<div class="pts">5</div>
+			<div class="pn-rl-bracket">
+				<div class="pn-rl-bracket-head">
+					<span class="rnd">Round</span>
+					<span class="p">Phase I</span>
+					<span class="p">Phase II</span>
 				</div>
-				<div class="pn-rl-stage">
-					<div class="lbl">Round of 32</div>
-					<div class="pts">10</div>
-				</div>
-				<div class="pn-rl-stage">
-					<div class="lbl">Round of 16</div>
-					<div class="pts">15</div>
-				</div>
-				<div class="pn-rl-stage">
-					<div class="lbl">Quarter-final</div>
-					<div class="pts">20</div>
-				</div>
-				<div class="pn-rl-stage">
-					<div class="lbl">Semi-final</div>
-					<div class="pts">40</div>
-				</div>
-				<div class="pn-rl-stage">
-					<div class="lbl">Final</div>
-					<div class="pts">60</div>
-				</div>
-				<div class="pn-rl-stage winner">
-					<div class="lbl">Tournament winner</div>
-					<div class="pts">100</div>
+				{#each bracketPoints as row}
+					<div class="pn-rl-bracket-row" class:winner={row.round === 'Tournament winner'}>
+						<span class="rnd">{row.round}</span>
+						<span class="p1">{row.p1 ?? '—'}</span>
+						<span class="p2">{row.p2 === null ? '—' : row.p2}</span>
+					</div>
+				{/each}
+				<div class="pn-rl-bracket-foot">
+					Phase II Round of 32 pays 0 — the line-up is already published when Phase II opens,
+					so there's no advancement to predict. Group position isn't re-scored in Phase II.
 				</div>
 			</div>
 		</div>
 	</section>
 
-	<!-- 05 — Bonus questions -->
+	<!-- 04 — Bonus questions -->
 	<section class="pn-rl-section">
 		<div class="h">
-			<span>05 · Bonus Questions</span>
-			<span class="right">{bonusQuestions.length || 9} questions · lock with Phase I</span>
+			<span>04 · Bonus Questions</span>
+			<span class="right">{bonusQuestions.length || 10} questions · lock with Phase I</span>
 		</div>
 		<div class="body">
 			<p>
 				A small set of pre-tournament wagers on side-stories beyond the bracket. Submit your
 				picks before Phase I locks; the admin reveals the correct answer as each question
 				resolves (group-stage questions at the end of the group stage, awards at the FIFA
-				ceremony, etc.). Player-name answers are matched leniently — capitalisation and
-				accents don't matter.
+				ceremony, etc.).
 			</p>
 			{#each ['group_stage', 'top_flop', 'awards'] as cat (cat)}
 				{@const qs = bonusByCategory[cat] ?? []}
@@ -323,7 +354,7 @@
 
 	<!-- 06 — Buy-in & pool -->
 	<section class="pn-rl-section">
-		<div class="h"><span>06 · Buy-in & Pool</span><span class="right">Cash, paid pre-tournament</span></div>
+		<div class="h"><span>05 · Buy-in & Pool</span><span class="right">Cash, paid pre-tournament</span></div>
 		<div class="body">
 			<p>
 				Entry to the competition costs <b>{info ? fmtCurrency(info.entry_fee) : 'tbd'}</b> per
@@ -359,15 +390,17 @@
 
 	<!-- 07 — Fine print -->
 	<section class="pn-rl-section">
-		<div class="h"><span>07 · The Fine Print</span><span class="right">Read once · then never again</span></div>
+		<div class="h"><span>06 · The Fine Print</span><span class="right">Read once · then never again</span></div>
 		<div class="body">
 			<div class="pn-rl-print">
 				<div class="rule">
 					<div class="pip"></div>
 					<div>
-						<b>Per-match lock · 15 minutes before kickoff</b>
-						Once a match locks you can't change your prediction for it, regardless of phase.
-						The countdown timer in the wizard is your friend.
+						<b>Knockout per-match lock · 15 minutes before kickoff</b>
+						This per-match lock applies to the <b>Phase II knockout matches only</b> — each one
+						locks 15 minutes before its own kickoff. Phase I group-stage scores all lock together
+						at the Phase I deadline, not match-by-match. The countdown timer in the wizard is your
+						friend.
 					</div>
 				</div>
 				<div class="rule">
@@ -393,15 +426,6 @@
 						The Phase I knockout bracket only opens once all 72 group-stage matches have been
 						predicted. The bracket needs your predicted standings to seed R32, so it can't
 						work earlier.
-					</div>
-				</div>
-				<div class="rule">
-					<div class="pip"></div>
-					<div>
-						<b>Phase II is optional but recommended</b>
-						If the admin activates Phase II, you can re-build the bracket using actual group
-						results. You're not penalised for skipping it — but every Phase II point you don't
-						earn is one your rivals can.
 					</div>
 				</div>
 				<div class="rule">

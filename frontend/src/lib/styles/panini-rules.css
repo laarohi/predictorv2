@@ -225,37 +225,67 @@
 	background: var(--paper-2);
 }
 
-/* Bracket-stage point table — compact mini-grid. */
-.pn .pn-rl-stages {
-	display: grid;
-	grid-template-columns: repeat(4, 1fr);
-	gap: 8px;
-}
-@media (max-width: 699px) {
-	.pn .pn-rl-stages { grid-template-columns: repeat(2, 1fr); }
-}
-.pn .pn-rl-stage {
-	background: var(--paper-2);
+/* Bracket-stage point table — round × phase, three columns. Same
+ * header-band + rows shape as the rarity table above it. */
+.pn .pn-rl-bracket {
 	border: 2px solid var(--ink);
-	padding: 12px;
-	text-align: center;
+	background: var(--paper);
 }
-.pn .pn-rl-stage .lbl {
+.pn .pn-rl-bracket-head,
+.pn .pn-rl-bracket-row {
+	display: grid;
+	grid-template-columns: 1fr auto auto;
+	align-items: baseline;
+	column-gap: 16px;
+	padding: 8px 14px;
+}
+.pn .pn-rl-bracket-head {
+	background: var(--ink);
+	color: var(--paper);
 	font-family: var(--mono);
-	font-size: 9.5px;
+	font-size: 10px;
 	letter-spacing: 0.14em;
-	color: var(--ink-3);
 	text-transform: uppercase;
 }
-.pn .pn-rl-stage .pts {
-	font-family: var(--display);
-	font-size: 30px;
-	line-height: 1;
-	margin-top: 4px;
-	color: var(--ink);
+.pn .pn-rl-bracket-head .p {
+	min-width: 56px;
+	text-align: right;
+	font-weight: bold;
 }
-.pn .pn-rl-stage.winner { background: var(--gold); }
-.pn .pn-rl-stage.winner .pts { color: var(--ink); }
+.pn .pn-rl-bracket-row {
+	border-top: 1px solid var(--paper-3);
+}
+.pn .pn-rl-bracket-row .rnd {
+	font-family: var(--mono);
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	color: var(--ink);
+	text-transform: uppercase;
+}
+.pn .pn-rl-bracket-row .p1,
+.pn .pn-rl-bracket-row .p2 {
+	font-family: var(--display);
+	font-size: 22px;
+	line-height: 1;
+	min-width: 56px;
+	text-align: right;
+}
+.pn .pn-rl-bracket-row .p1 { color: var(--ink); }
+.pn .pn-rl-bracket-row .p2 { color: var(--ink-3); }
+.pn .pn-rl-bracket-row.winner { background: rgba(212, 154, 46, 0.18); }
+.pn .pn-rl-bracket-row.winner .rnd { color: var(--red); }
+.pn .pn-rl-bracket-row.winner .p1 { color: var(--red); }
+.pn .pn-rl-bracket-row.winner .p2 { color: var(--ink); }
+.pn .pn-rl-bracket-foot {
+	border-top: 2px solid var(--ink);
+	padding: 8px 14px;
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	color: var(--ink-3);
+	background: var(--paper-2);
+	line-height: 1.5;
+}
 
 /* Bonus questions list — same shape as the wizard's bonus row but
  * read-only and with a small category badge prepended. */
