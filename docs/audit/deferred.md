@@ -60,8 +60,11 @@ Status legend: 🆕 found in round-2 MCP walkthrough · ↩ carried over from ro
 
 ## Fixed during round 2 (for reference, already committed)
 
-- `34674b1` — leaderboard Bonus column now includes `bonus_question_points`
+_Hashes below are post-rebase (the branch was rebased onto `main` on 2026-05-31,
+which rewrote SHAs — match by message if these drift again)._
+
+- `2b8850a` — leaderboard Bonus column now includes `bonus_question_points`
   (Overall view reconciles).
-- `812bceb` — admin console loads on cold load / refresh (data-load auth race;
+- `00d20f4` — admin console loads on cold load / refresh (data-load auth race;
   the data-load twin of DESIGN-1).
-- `4dcb7e1` — match-detail header navy gap (from the prior design pass).
+- `d399fe2` — match-detail header navy gap (from the prior design pass).

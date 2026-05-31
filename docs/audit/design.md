@@ -1,5 +1,9 @@
 # Design Audit
 
+> **Note (2026-05-31):** the branch was rebased onto `main`, rewriting the commit
+> SHAs cited below — match commits by message, not hash.
+
+
 Page-by-page visual review of every page at **desktop (1280px)** and **mobile (375px)**. Captured by driving headless Chrome (Playwright `channel: 'chrome'`) against the running app with a real admin session injected, then inspecting the screenshots — the Claude-in-Chrome extension never connected this session, so this headless route was used instead. 24 screenshots across login, register, the four dashboard phases, predictions, leaderboard, results, profile, rules, and admin.
 
 ## Verdict

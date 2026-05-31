@@ -1,5 +1,10 @@
 # Implementation Map
 
+> **Note (2026-05-31):** `worktree-ultra` was rebased onto `main`, which
+> **rewrote every commit SHA below.** The commit *messages* are unchanged —
+> match by message, not hash. The branch now fast-forwards into `main`
+> (see [MERGE-NOTES.md](./MERGE-NOTES.md)).
+
 Every confirmed finding → status → commit. **Status legend:** ✅ Fixed · 📝 Documented (judgment call, recorded with rationale).
 
 Each fix is an isolated commit so you can cherry-pick into `main`. **40 fix commits — all 58 confirmed findings fixed, plus `DESIGN-1` from the visual design audit.** All four audits are complete (including the visual design pass — see bottom).

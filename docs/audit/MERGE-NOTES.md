@@ -1,53 +1,52 @@
-# Merge Notes — READ BEFORE MERGING `worktree-ultra` INTO `main`
+# Merge Notes — `worktree-ultra` → `main`
 
-_From the round-2 MCP walkthrough audit (2026-05-31). This is a **pre-merge**
-concern, not a post-launch one — see [deferred.md](./deferred.md) for the
-post-launch backlog._
+_Round-2 MCP audit (2026-05-31). **The awards-feature merge hazard described in
+the original version of this file is RESOLVED** — `worktree-ultra` was rebased
+onto `main` on 2026-05-31._
 
-## 🔴 The worktree is one commit behind `main` on the awards feature
+## ✅ Resolved: rebased onto `main`
 
-`worktree-ultra` branched from `main` at **`bfb5657`** ("feat(dashboard-pre):
-payment banner…"). The **very next** commit on `main`, **`9316ce6`**
-("feat(bonus): searchable player dropdowns for award questions"), is **not in
-the worktree**. That commit added:
+The worktree had branched one commit before `main`'s `9316ce6`
+("feat(bonus): searchable player dropdowns for award questions"), so it lacked
+`PnCombobox` + the `/bonus/players` endpoint + the `players` table, and five
+audit commits touched the same three files `9316ce6` changed.
 
-- `frontend/src/lib/components/panini/PnCombobox.svelte` (the searchable player picker)
-- `GET /api/predictions/bonus/players` consumption + `frontend/src/lib/api/bonus.ts` additions
-- the searchable picker in the **admin** bonus-answer UI
-- `backend/app/models/player.py`, `backend/scripts/sync_squads.py`, the `players` table migration
+`worktree-ultra` has now been **rebased onto current `main`**. Result:
 
-**Consequence:** on the worktree, the awards questions (Golden Ball/Boot/Boy/
-Glove) and the admin answer-key still use a **plain free-text `<input>`**.
-`main` already has the good searchable dropdown. **Production is fine** — this
-is purely a worktree artifact. Do **not** let a wholesale merge revert `main`'s
-`9316ce6`.
+- `main` is an **ancestor** of `worktree-ultra` → history is linear (`main` +
+  the audit commits on top). **Merging is a clean fast-forward:**
+  `git checkout main && git merge worktree-ultra`.
+- `PnCombobox.svelte`, `/api/predictions/bonus/players`, the admin bonus search,
+  `players` model + migration + `sync_squads.py` are all **present** (inherited
+  from `main`).
+- The three former conflict files now carry **both** feature sets — git's 3-way
+  merge auto-resolved them because the audit changes (auth guards, the admin
+  cold-load fix, input-size caps, the agreements gate) live in different regions
+  than `9316ce6`'s additions. Verified by hand + by the suites:
+  - `frontend/src/routes/admin/+page.svelte` — PnCombobox award pickers **and**
+    the `authResolved` guards + reactive cold-load fix.
+  - `frontend/src/routes/predictions/+page.svelte` — PnCombobox awards **and**
+    the unified Phase II save / save-error surfacing.
+  - `backend/app/api/predictions.py` — `/bonus/players` **and** the input-size
+    caps + the `/agreements` blind-pool gate.
 
-## Conflict hotspots
+## Verification after rebase
 
-Exactly **three files** were changed by *both* the audit and `9316ce6`. Cherry-
-picking the audit commits below onto `main` will conflict on these; resolve by
-**keeping `main`'s `PnCombobox` / players-endpoint / admin-search code** and
-layering the audit change on top.
+- `svelte-check` — **0 errors**, 2 baseline warnings.
+- `vitest` — **122 passed**.
+- `pytest` — **323 passed, 6 skipped, 0 failed** (run with `config/` + `docs/`
+  mounted into the transient backend container).
 
-| File | Audit commit(s) that touch it | What the audit change is | Resolve by |
-|---|---|---|---|
-| `frontend/src/routes/predictions/+page.svelte` | `e3ea3e3` | FLOW-7/8: unify Phase II save + surface save errors | keep main's `PnCombobox` awards block; re-apply the save-error handling |
-| `frontend/src/routes/admin/+page.svelte` | `c2f62b7` (DESIGN-1 guard), **`812bceb`** (round-2 cold-load fix) | auth-resolved guards + reactive admin data load | keep main's admin bonus search; re-apply the `authResolved`/reactive-load logic |
-| `backend/app/api/predictions.py` | `9f0afaf` (INJ caps), `84107c8` (agreements gate) | input-size caps + blind-pool gate | keep main's `/bonus/players` endpoint; re-apply both security changes |
+## Note: commit hashes were rewritten
 
-The other ~50 audit commits touch files `main` did not change since `bfb5657`
-→ they cherry-pick cleanly.
+The rebase gave every audit commit a new SHA. References elsewhere in these audit
+docs were written against the pre-rebase hashes; **match commits by their message,
+not their SHA.** A safety copy of the pre-rebase tip is at branch
+`backup/worktree-ultra-prerebase` (delete once the merge is landed).
 
-## Recommended approach
+## Still to do on `main` after merge (can't be done from a worktree)
 
-**Option A (cleanest): rebase `worktree-ultra` onto current `main`** before
-cherry-picking. Git replays the audit commits on top of `9316ce6`; you resolve
-the 3-file conflicts once, in context, and everything downstream is clean. After
-the rebase, re-run `npm run check`, `vitest`, and `pytest`.
-
-**Option B: cherry-pick individually** (the original plan). The ~50 clean
-commits apply with no fuss; the 4 commits in the table will stop with a
-conflict — resolve each keeping main's PnCombobox-related lines.
-
-Either way, after merging, **spot-check the awards questions and the admin
-answer-key still render the searchable `PnCombobox`**, not a bare text box.
+- `CLAUDE.md`: "predictions lock **5 minutes** before kickoff" → it's **15**
+  (`config/worldcup2026.yml`).
+- `CLAUDE.md`: "Flag swatches are **2/3-stripe gradient placeholders**" → they're
+  real `flag-icons` SVGs now.
