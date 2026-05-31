@@ -44,7 +44,9 @@
       "Bash(echo \"sed_exit=$?\")",
       "Bash(git fetch *)",
       "Bash(docker --context predictor compose -f /Users/lukeaarohi/pyfiles/predictorv2/docker-compose.yml --profile prod ps)",
-      "Bash(docker --context predictor compose -f /Users/lukeaarohi/pyfiles/predictorv2/docker-compose.yml --profile prod logs --tail=60 cloudflared)"
+      "Bash(docker --context predictor compose -f /Users/lukeaarohi/pyfiles/predictorv2/docker-compose.yml --profile prod logs --tail=60 cloudflared)",
+      "Bash(docker-compose -f /Users/lukeaarohi/pyfiles/predictorv2/docker-compose.yml exec -T db psql -U predictor -d predictor -c \"SELECT DISTINCT home_team FROM fixture UNION SELECT DISTINCT away_team FROM fixture ORDER BY 1;\")",
+      "WebFetch(domain:inside.fifa.com)"
     ]
   },
   "outputStyle": "Explanatory"
