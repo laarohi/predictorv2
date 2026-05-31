@@ -46,11 +46,18 @@
 	// holding the full payloads in memory would be wasteful.
 	let bonusQuestionsCount: number | null = null;
 	let bonusFilled = 0;
+	// Gate the progress meter until all inputs (fixtures, match preds, bracket,
+	// bonus) have loaded — see onMount — so the bar doesn't fill up from 0/0%.
+	let dashReady = false;
 
 	onMount(async () => {
-		fetchAllFixtures();
-		fetchMatchPredictions();
-		fetchBracketPredictions();
+		// Progress-data fetches fire immediately (the banner/roster don't wait on
+		// them) but are captured so dashReady can flip once they resolve.
+		const progressData = Promise.all([
+			fetchAllFixtures(),
+			fetchMatchPredictions(),
+			fetchBracketPredictions()
+		]);
 		// Roster + competition info fetched in parallel — they're independent
 		// requests and the banner can render without the roster.
 		const [rosterResult, infoResult] = await Promise.allSettled([
@@ -72,6 +79,10 @@
 		} catch {
 			bonusQuestionsCount = null;
 		}
+		// All progress inputs are in — reveal the real numbers so the meter
+		// doesn't visibly fill from 0% as data streamed in.
+		await progressData.catch(() => {});
+		dashReady = true;
 	});
 
 	$: groupFixtures = $fixtures.filter((f) => f.stage === 'group');
@@ -203,12 +214,13 @@
 			progressValue={overallFilled}
 			progressTotal={overallTotal}
 			progressUnit="picks"
+			progressReady={dashReady}
 			ctaLabel="Open predictions"
 			ctaHref="/predictions"
 			teasers={[
-				{ label: 'Group matches', value: String(filledGroup), outOf: String(totalGroupMatches) },
-				{ label: 'Bracket picks', value: String(bracketSlotsFilled), outOf: String(BRACKET_TOTAL_SLOTS) },
-				{ label: 'Bonus questions', value: String(bonusFilled), outOf: String(totalBonusQuestions) }
+				{ label: 'Group matches', value: dashReady ? String(filledGroup) : '—', outOf: String(totalGroupMatches) },
+				{ label: 'Bracket picks', value: dashReady ? String(bracketSlotsFilled) : '—', outOf: String(BRACKET_TOTAL_SLOTS) },
+				{ label: 'Bonus questions', value: dashReady ? String(bonusFilled) : '—', outOf: String(totalBonusQuestions) }
 			]}
 		/>
 

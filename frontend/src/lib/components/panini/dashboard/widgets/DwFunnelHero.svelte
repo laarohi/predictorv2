@@ -23,11 +23,15 @@
 	export let progressValue: number = 0;
 	export let progressTotal: number = 0;
 	export let progressUnit: string = 'picks';
+	// Hold the headline value + bar (show "—", 0% fill) until the page's data has
+	// loaded, so the meter doesn't fill up from 0 as predictions stream in.
+	// Defaults true so other callers are unaffected.
+	export let progressReady: boolean = true;
 	export let ctaLabel: string = '';
 	export let ctaHref: string = '#';
 	export let teasers: Teaser[] = [];
 
-	$: pct = progressTotal > 0 ? Math.min(100, (progressValue / progressTotal) * 100) : 0;
+	$: pct = progressReady && progressTotal > 0 ? Math.min(100, (progressValue / progressTotal) * 100) : 0;
 
 	function pad(n: number): string {
 		return String(Math.max(0, Math.floor(n))).padStart(2, '0');
@@ -60,7 +64,7 @@
 			<div class="bar-h">
 				<span class="l">{progressLabel}</span>
 				<span class="v">
-					<em>{progressValue}</em><span class="small"> / {progressTotal} {progressUnit}</span>
+					<em>{progressReady ? progressValue : '—'}</em><span class="small"> / {progressTotal} {progressUnit}</span>
 				</span>
 			</div>
 			<div class="bar"><div class="fill" style="width: {pct}%"></div></div>
