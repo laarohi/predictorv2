@@ -25,6 +25,14 @@ export async function getActualStandings(): Promise<ActualStandingsResponse> {
 	return api.get<ActualStandingsResponse>('/fixtures/standings/actual');
 }
 
+/** Ordered FIFA Rankings for our tournament teams (index 0 = rank #1).
+ *  Feeds Article 13 Step 3 in the predicted-standings tiebreaker chain so the
+ *  frontend resolves deep ties identically to the backend. Empty when the
+ *  rankings table is unsynced. */
+export async function getFifaRankings(): Promise<string[]> {
+	return (await api.get<{ rankings: string[] }>('/fixtures/fifa-rankings')).rankings;
+}
+
 export async function getFixture(fixtureId: string): Promise<Fixture> {
 	return api.get<Fixture>(`/fixtures/${fixtureId}`);
 }

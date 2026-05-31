@@ -55,6 +55,10 @@ services:
       # validate the R32 mapping, and the canonical thirdPlaceMapping.json.
       - ./docs:/app/docs:ro
       - ./frontend/src/lib/config:/app/frontend/src/lib/config:ro
+      # Cross-language golden fixtures: the standings parity test
+      # (test_standings_parity.py) and its frontend Vitest twin consume the
+      # same JSON so the two tiebreaker implementations can't silently drift.
+      - ./shared:/app/shared:ro
     ports:
       - "127.0.0.1:8000:8000"
     depends_on:
@@ -91,6 +95,10 @@ services:
     volumes:
       - ./frontend:/app
       - /app/node_modules
+      # Cross-language golden fixtures for the standings parity test
+      # (standings.parity.test.ts locates it via parent-walk). Mirrors the
+      # backend's ./shared mount so both Vitest and pytest read the same file.
+      - ./shared:/app/shared:ro
     ports:
       - "5173:5173"
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"

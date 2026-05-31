@@ -1,18 +1,34 @@
 /**
  * Utility functions for calculating group standings and qualifying teams.
  *
- * Tiebreaker chain (FIFA, partial):
- *   1. Points (descending)
- *   2. Goal difference (descending)
- *   3. Goals for (descending)
- *   4. Head-to-head points among tied teams (descending)
- *   5. Head-to-head goal difference (descending)
- *   6. Head-to-head goals scored (descending)
- *   7. Alphabetical by team name (deterministic last-resort, with TieWarning)
+ * Tiebreaker chain — FIFA World Cup 2026 Regulations, Article 13. This MUST
+ * stay byte-for-byte equivalent to the backend (`backend/app/services/
+ * standings.py`); the shared golden cases in `shared/standings-parity-cases.json`
+ * are run by both this module's Vitest suite and the backend pytest suite to
+ * guarantee it. Change one side → change both.
  *
- * FIFA's real chain continues past step 6 with fair-play points then drawing
- * of lots. We don't track either, so step 7 is alphabetical and a TieWarning
- * is emitted so the UI can prompt the user to adjust their predictions.
+ *   Among teams equal on POINTS:
+ *     Step 1 — head-to-head among the tied teams' mutual matches:
+ *       a) H2H points (desc)  b) H2H goal difference (desc)  c) H2H goals (desc)
+ *     Step 2 — if any subset is still tied after step 1:
+ *       • Re-apply a-c using ONLY the still-tied subset's mutual matches
+ *         (re-scoped H2H, modelled as recursion). If a tie still survives:
+ *       d) overall goal difference (desc)   e) overall goals scored (desc)
+ *       f) fair-play conduct — untracked, so we emit a TieWarning and proceed.
+ *       (The "second step does not restart" clause: once we descend from
+ *        step 1 to d/e/f we never loop back to H2H.)
+ *     Step 3 — FIFA Rankings (most recent edition). Listed teams rank above
+ *       unlisted by ranking index; the list comes from the backend
+ *       `/fixtures/fifa-rankings` endpoint via the `fifaRankings` store.
+ *     Last resort — alphabetical (only when FIFA Rankings cover none of the
+ *       still-tied teams).
+ *
+ * For the cross-group third-place ranking, step 1 H2H is not applicable (the
+ * teams come from different groups), so the chain collapses to overall points
+ * → GD → GF → fair-play(warn) → FIFA Rankings → alphabetical.
+ *
+ * Every fair-play-tier descent emits a TieWarning so the UI can flag "this
+ * order isn't fully FIFA-resolved — it needed conduct data we don't track."
  */
 
 import type { Fixture, MatchPrediction } from '$types';
@@ -154,23 +170,44 @@ function _segmentEnd<T>(items: T[], start: number, keyFn: (t: T) => unknown): nu
 	return j;
 }
 
-/** Resolve a segment of tied teams via H2H then alphabetical. Mutates `warnings`. */
-function _resolveTiedSegment(
+/** Generic segment walker: sort `items` by `sortCmp`, then for each maximal run
+ *  sharing the same `segKey` value call `onSegment` (singletons pass through).
+ *  Mirrors backend `_walk_segments`. */
+function _walkSegments(
+	items: TeamStanding[],
+	sortCmp: (a: TeamStanding, b: TeamStanding) => number,
+	segKey: (t: TeamStanding) => unknown,
+	onSegment: (segment: TeamStanding[]) => TeamStanding[]
+): TeamStanding[] {
+	const sorted = [...items].sort(sortCmp);
+	const out: TeamStanding[] = [];
+	let i = 0;
+	while (i < sorted.length) {
+		const j = _segmentEnd(sorted, i, segKey);
+		const segment = sorted.slice(i, j);
+		out.push(...(segment.length === 1 ? segment : onSegment(segment)));
+		i = j;
+	}
+	return out;
+}
+
+/** Article 13 Step 1 (H2H a-c) with the Step 2 "re-apply to the remaining teams
+ *  only" clause modelled as recursion: each still-tied subset recomputes its H2H
+ *  over that subset's mutual matches. Drops to Step 2 d-f/g when H2H can't
+ *  separate any team, or when H2H isn't applicable (cross-group ranking).
+ *  Mirrors backend `_resolve_points_tied_subset`. */
+function _resolvePointsTiedSubset(
 	tied: TeamStanding[],
 	fixtures: Fixture[],
 	predictions: Map<string, MatchPrediction>,
 	context: TieWarning['context'],
+	fifaRankings: string[],
 	warnings: TieWarning[]
 ): TeamStanding[] {
+	// H2H isn't applicable across groups (third-place ranking) — go to Step 2.
 	const allowH2h = fixtures.length > 0 && context === 'group_standings';
-
 	if (!allowH2h) {
-		warnings.push({
-			group: tied[0].group,
-			tiedTeams: tied.map((t) => t.team).sort((a, b) => a.localeCompare(b)),
-			context
-		});
-		return [...tied].sort((a, b) => a.team.localeCompare(b.team));
+		return _resolveStep2Overall(tied, context, fifaRankings, warnings);
 	}
 
 	const h2h = _computeH2hStats(tied, fixtures, predictions);
@@ -189,46 +226,106 @@ function _resolveTiedSegment(
 			const s = h2h.get(t.team)!;
 			return [s.points, s.goalDifference, s.goalsFor];
 		});
-		const sub = byH2h.slice(i, j);
-		if (sub.length > 1) {
-			warnings.push({
-				group: sub[0].group,
-				tiedTeams: sub.map((t) => t.team).sort((a, b) => a.localeCompare(b)),
-				context
-			});
-			sub.sort((a, b) => a.team.localeCompare(b.team));
+		const segment = byH2h.slice(i, j);
+		if (segment.length === 1) {
+			out.push(segment[0]);
+		} else if (segment.length === tied.length) {
+			// H2H separated nobody → descend to Step 2 (the "does not restart" clause).
+			out.push(..._resolveStep2Overall(segment, context, fifaRankings, warnings));
+		} else {
+			// H2H separated some → recurse on the still-tied subset (re-scoped H2H).
+			out.push(
+				..._resolvePointsTiedSubset(segment, fixtures, predictions, context, fifaRankings, warnings)
+			);
 		}
-		out.push(...sub);
 		i = j;
 	}
 	return out;
 }
 
-/** Apply FIFA's tiebreaker chain (up to H2H goals) then alphabetical-with-warning.
- *  Returns `{ sorted, warnings }`. Pass `fixtures: []` and `context: 'third_place_qualifying'`
- *  to skip H2H entirely (cross-group sorts). */
+/** Article 13 Step 2 d (overall GD) then e (overall GF). Mirrors backend
+ *  `_resolve_step_2_overall`. */
+function _resolveStep2Overall(
+	tied: TeamStanding[],
+	context: TieWarning['context'],
+	fifaRankings: string[],
+	warnings: TieWarning[]
+): TeamStanding[] {
+	return _walkSegments(
+		tied,
+		(a, b) => b.goalDifference - a.goalDifference || b.goalsFor - a.goalsFor,
+		(t) => t.goalDifference,
+		(segment) => _resolveStep2e(segment, context, fifaRankings, warnings)
+	);
+}
+
+/** Article 13 Step 2 e (overall GF). Still tied → fair-play(warn) + Step 3.
+ *  Mirrors backend `_resolve_step_2e`. */
+function _resolveStep2e(
+	tied: TeamStanding[],
+	context: TieWarning['context'],
+	fifaRankings: string[],
+	warnings: TieWarning[]
+): TeamStanding[] {
+	return _walkSegments(
+		tied,
+		(a, b) => b.goalsFor - a.goalsFor,
+		(t) => t.goalsFor,
+		(segment) => _resolveFairPlayThenRankings(segment, context, fifaRankings, warnings)
+	);
+}
+
+/** Article 13 Step 2 f (fair-play — untracked, so emit a warning) + Step 3 g/h
+ *  (FIFA Rankings). Listed teams rank above unlisted by ranking index; teams not
+ *  on the list fall to alphabetical. Mirrors backend `_resolve_fair_play_then_rankings`. */
+function _resolveFairPlayThenRankings(
+	tied: TeamStanding[],
+	context: TieWarning['context'],
+	fifaRankings: string[],
+	warnings: TieWarning[]
+): TeamStanding[] {
+	warnings.push({
+		group: tied[0].group,
+		tiedTeams: tied.map((t) => t.team).sort((a, b) => a.localeCompare(b)),
+		context
+	});
+	const rankIndex = new Map(fifaRankings.map((team, i) => [team, i] as const));
+	const notListed = fifaRankings.length + 1; // any value larger than the max listed index
+	return [...tied].sort((a, b) => {
+		const ra = rankIndex.get(a.team) ?? notListed;
+		const rb = rankIndex.get(b.team) ?? notListed;
+		return ra - rb || a.team.localeCompare(b.team);
+	});
+}
+
+/** Apply FIFA WC2026 Article 13. Returns `{ sorted, warnings }`. Pass
+ *  `fixtures: []` and `context: 'third_place_qualifying'` to skip H2H (cross-group
+ *  sorts). `fifaRankings` is the ordered ranking list (index 0 = rank #1) used by
+ *  Step 3; default `[]` falls through to alphabetical. Mirrors backend
+ *  `_apply_fifa_tiebreakers`. */
 export function applyFifaTiebreakers(
 	teams: TeamStanding[],
 	fixtures: Fixture[],
 	predictions: Map<string, MatchPrediction>,
-	context: TieWarning['context']
+	context: TieWarning['context'],
+	fifaRankings: string[] = []
 ): { sorted: TeamStanding[]; warnings: TieWarning[] } {
 	const warnings: TieWarning[] = [];
-	const byOverall = [...teams].sort((a, b) => {
-		if (b.points !== a.points) return b.points - a.points;
-		if (b.goalDifference !== a.goalDifference) return b.goalDifference - a.goalDifference;
-		return b.goalsFor - a.goalsFor;
-	});
-
+	// Sort by POINTS only and walk segments tied on points — Article 13's
+	// "equal on points → head-to-head" triggers on points equality, NOT on full
+	// (points, GD, GF) equality (the legacy bug that ranked overall GD ahead of H2H).
+	const byPoints = [...teams].sort((a, b) => b.points - a.points);
 	const out: TeamStanding[] = [];
 	let i = 0;
-	while (i < byOverall.length) {
-		const j = _segmentEnd(byOverall, i, (t) => [t.points, t.goalDifference, t.goalsFor]);
-		const segment = byOverall.slice(i, j);
+	while (i < byPoints.length) {
+		const j = _segmentEnd(byPoints, i, (t) => t.points);
+		const segment = byPoints.slice(i, j);
 		if (segment.length === 1) {
 			out.push(segment[0]);
 		} else {
-			out.push(..._resolveTiedSegment(segment, fixtures, predictions, context, warnings));
+			out.push(
+				..._resolvePointsTiedSubset(segment, fixtures, predictions, context, fifaRankings, warnings)
+			);
 		}
 		i = j;
 	}
@@ -239,24 +336,33 @@ export function applyFifaTiebreakers(
 // Public API
 // ---------------------------------------------------------------------------
 
-/** Calculate standings for a single group based on predictions. */
+/** Calculate standings for a single group based on predictions. `fifaRankings`
+ *  (ordered, index 0 = rank #1) feeds Article 13 Step 3; default `[]`. */
 export function calculateGroupStandings(
 	fixtures: Fixture[],
 	predictions: Map<string, MatchPrediction>,
-	group: string
+	group: string,
+	fifaRankings: string[] = []
 ): TeamStanding[] {
-	return calculateGroupStandingsWithWarnings(fixtures, predictions, group).standings;
+	return calculateGroupStandingsWithWarnings(fixtures, predictions, group, fifaRankings).standings;
 }
 
-/** Same as calculateGroupStandings but also returns alphabetical-tie warnings. */
+/** Same as calculateGroupStandings but also returns fair-play-tier tie warnings. */
 export function calculateGroupStandingsWithWarnings(
 	fixtures: Fixture[],
 	predictions: Map<string, MatchPrediction>,
-	group: string
+	group: string,
+	fifaRankings: string[] = []
 ): { standings: TeamStanding[]; warnings: TieWarning[] } {
 	const raw = _buildRawStandings(fixtures, predictions, group);
 	const teams = Array.from(raw.values());
-	const { sorted, warnings } = applyFifaTiebreakers(teams, fixtures, predictions, 'group_standings');
+	const { sorted, warnings } = applyFifaTiebreakers(
+		teams,
+		fixtures,
+		predictions,
+		'group_standings',
+		fifaRankings
+	);
 	return { standings: sorted, warnings };
 }
 
@@ -277,24 +383,27 @@ export function getAllTeamsFromGroups(groupFixtures: GroupFixtures[]): string[] 
 	return Array.from(teams).sort();
 }
 
-/** Compute group standings map for the bracket component. */
+/** Compute group standings map for the bracket component. `fifaRankings` feeds
+ *  Article 13 Step 3 so the bracket seeds match the backend; default `[]`. */
 export function computeGroupStandingsMap(
 	groupFixtures: GroupFixtures[],
-	predictions: Map<string, MatchPrediction>
+	predictions: Map<string, MatchPrediction>,
+	fifaRankings: string[] = []
 ): Record<string, TeamStanding[]> {
-	return computeGroupStandingsMapWithWarnings(groupFixtures, predictions).standingsMap;
+	return computeGroupStandingsMapWithWarnings(groupFixtures, predictions, fifaRankings).standingsMap;
 }
 
 /** Same as computeGroupStandingsMap but also returns all per-group tie warnings. */
 export function computeGroupStandingsMapWithWarnings(
 	groupFixtures: GroupFixtures[],
-	predictions: Map<string, MatchPrediction>
+	predictions: Map<string, MatchPrediction>,
+	fifaRankings: string[] = []
 ): { standingsMap: Record<string, TeamStanding[]>; warnings: TieWarning[] } {
 	const standingsMap: Record<string, TeamStanding[]> = {};
 	const warnings: TieWarning[] = [];
 
 	for (const { group, fixtures } of groupFixtures) {
-		const result = calculateGroupStandingsWithWarnings(fixtures, predictions, group);
+		const result = calculateGroupStandingsWithWarnings(fixtures, predictions, group, fifaRankings);
 		standingsMap[group] = result.standings;
 		warnings.push(...result.warnings);
 	}

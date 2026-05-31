@@ -86,27 +86,29 @@ export function buildGroupPositions(standings: GroupStandingsMap): Record<string
 /**
  * Determine which 8 third-place teams qualify.
  *
- * Uses FIFA's tiebreaker chain (up to head-to-head goals) via
- * `applyFifaTiebreakers`. Head-to-head isn't applicable here because the
- * third-placed teams come from different groups (they never played each
- * other), so any tie that survives points/GD/GF falls to alphabetical
- * with a TieWarning — see `getQualifyingThirdPlaceTeamsWithWarnings`.
+ * Uses FIFA Article 13 via `applyFifaTiebreakers`. Head-to-head isn't
+ * applicable here because the third-placed teams come from different groups
+ * (they never played each other), so the chain collapses to points → overall
+ * GD → overall GF → fair-play(warn) → FIFA Rankings → alphabetical.
+ * `fifaRankings` feeds the Step 3 tier — see `getQualifyingThirdPlaceTeamsWithWarnings`.
  */
 export function getQualifyingThirdPlaceTeams(
-	standings: GroupStandingsMap
+	standings: GroupStandingsMap,
+	fifaRankings: string[] = []
 ): Array<{ group: string; team: string; standing: TeamStanding }> {
-	return getQualifyingThirdPlaceTeamsWithWarnings(standings).qualifying;
+	return getQualifyingThirdPlaceTeamsWithWarnings(standings, fifaRankings).qualifying;
 }
 
 /**
- * Same as getQualifyingThirdPlaceTeams but also returns alphabetical-tie warnings.
+ * Same as getQualifyingThirdPlaceTeams but also returns fair-play-tier warnings.
  *
  * Warnings here are particularly load-bearing: a tie at the 8/9 boundary
  * affects who actually advances to R32, which the UI should prompt the user
  * to resolve by adjusting scores.
  */
 export function getQualifyingThirdPlaceTeamsWithWarnings(
-	standings: GroupStandingsMap
+	standings: GroupStandingsMap,
+	fifaRankings: string[] = []
 ): {
 	qualifying: Array<{ group: string; team: string; standing: TeamStanding }>;
 	warnings: TieWarning[];
@@ -123,7 +125,8 @@ export function getQualifyingThirdPlaceTeamsWithWarnings(
 		thirdPlaceStandings,
 		[],
 		new Map(),
-		'third_place_qualifying'
+		'third_place_qualifying',
+		fifaRankings
 	);
 
 	const qualifying = sorted.slice(0, 8).map((s) => ({
@@ -179,9 +182,12 @@ export function resolveMatchSource(
  * Initialize bracket state from group standings
  * This sets up the R32 teams based on group positions
  */
-export function initializeBracketState(standings: GroupStandingsMap): BracketState {
+export function initializeBracketState(
+	standings: GroupStandingsMap,
+	fifaRankings: string[] = []
+): BracketState {
 	const groupPositions = buildGroupPositions(standings);
-	const qualifyingThirdRaw = getQualifyingThirdPlaceTeams(standings);
+	const qualifyingThirdRaw = getQualifyingThirdPlaceTeams(standings, fifaRankings);
 	const qualifyingThirdPlace = qualifyingThirdRaw.map(({ group, team }) => ({ group, team }));
 
 	// Generate the key for the mapping table (e.g., "ABCDEFGH")
@@ -381,9 +387,10 @@ export function bracketStateToPrediction(state: BracketState): BracketPrediction
  */
 export function predictionToBracketState(
 	prediction: BracketPrediction,
-	standings: GroupStandingsMap
+	standings: GroupStandingsMap,
+	fifaRankings: string[] = []
 ): BracketState {
-	let state = initializeBracketState(standings);
+	let state = initializeBracketState(standings, fifaRankings);
 
 	// R32 winners
 	const r16Set = new Set(prediction.round_of_16?.filter(t => t) || []);

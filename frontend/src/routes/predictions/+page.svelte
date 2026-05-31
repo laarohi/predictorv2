@@ -26,6 +26,8 @@
 	import {
 		fetchGroupFixtures,
 		groupFixtures,
+		fetchFifaRankings,
+		fifaRankings,
 		fetchActualKnockoutFixtures,
 		fetchActualStandings,
 		actualKnockoutFixtures,
@@ -194,6 +196,7 @@
 			await Promise.all([
 				fetchMatchPredictions(),
 				fetchGroupFixtures(),
+				fetchFifaRankings(),
 				fetchBracketPredictions()
 			]);
 			if ($isPhase2Active) {
@@ -265,7 +268,11 @@
 		}
 		return map;
 	})();
-	$: standingsResult = computeGroupStandingsMapWithWarnings($groupFixtures, livePredictionMap);
+	$: standingsResult = computeGroupStandingsMapWithWarnings(
+		$groupFixtures,
+		livePredictionMap,
+		$fifaRankings
+	);
 	$: standingsMap = standingsResult.standingsMap;
 	$: groupStandingsWarnings = standingsResult.warnings;
 
@@ -345,16 +352,16 @@
 			: null;
 
 	// ---- Third-place qualifying standings (top 8 of 12 advance to R32) ----
-	// Uses applyFifaTiebreakers so any tie that survives points→GD→GF and
-	// can't be resolved cross-group (H2H is N/A across groups) emits a
-	// TieWarning. We surface the warnings in a banner so the user can
-	// adjust scores if they want a specific team to advance.
+	// Uses applyFifaTiebreakers (H2H is N/A across groups, so the chain is
+	// points→GD→GF→fair-play→FIFA Rankings→alphabetical). A fair-play-tier
+	// descent emits a TieWarning, surfaced in a banner so the user can adjust
+	// scores if they want a specific team to advance.
 	$: thirdPlaceResult = (() => {
 		const thirds = [];
 		for (const [group, std] of Object.entries(standingsMap)) {
 			if (std[2]) thirds.push({ ...std[2], group });
 		}
-		return applyFifaTiebreakers(thirds, [], new Map(), 'third_place_qualifying');
+		return applyFifaTiebreakers(thirds, [], new Map(), 'third_place_qualifying', $fifaRankings);
 	})();
 	$: thirdPlaceStandings = thirdPlaceResult.sorted;
 	// Only surface ties that actually change qualification (cross the 8↔9
@@ -1270,6 +1277,7 @@
 						bind:this={bracketComponent}
 						prediction={displayBracket}
 						groupStandings={standingsMap}
+						fifaRankings={$fifaRankings}
 						locked={$isPhase1Locked}
 						phase="phase_1"
 						on:update={handleBracketUpdate}
@@ -1363,6 +1371,7 @@
 					bind:this={phase2BracketComponent}
 					prediction={phase2DisplayBracket}
 					groupStandings={$actualGroupStandingsMap}
+					fifaRankings={$fifaRankings}
 					locked={$isPhase2BracketLocked}
 					phase="phase_2"
 					hideR32

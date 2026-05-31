@@ -357,6 +357,62 @@ def _compute_h2h_stats(
 # ---------------------------------------------------------------------------
 
 
+def build_and_rank_group(
+    matches: list[tuple[Fixture, Score | MatchPrediction]],
+    group: str,
+    *,
+    fifa_rankings: list[str],
+) -> tuple[list[dict], list[TieWarning]]:
+    """Aggregate a group's `(fixture, score-or-prediction)` matches into
+    standings, then rank them via the FIFA Article 13 chain.
+
+    This is the single pure (no-DB) entry point that both production DB
+    paths (`get_actual_group_standings_with_warnings`,
+    `get_predicted_group_standings`) and the cross-language parity test
+    call, so the code under test is exactly the code users hit.
+
+    Only `fixture.home_team`/`.away_team` and `score.home_score`/`.away_score`
+    are read, so any duck-typed objects exposing those attributes work
+    (Score, MatchPrediction, or test stand-ins). Matches with a `None`
+    score are skipped; a team appears only if it has at least one match.
+    """
+    standings: dict[str, TeamStanding] = {}
+    for fixture, score in matches:
+        if score is None:
+            continue
+        for name in (fixture.home_team, fixture.away_team):
+            if name not in standings:
+                standings[name] = TeamStanding(name, group)
+
+        home = standings[fixture.home_team]
+        away = standings[fixture.away_team]
+
+        home.played += 1
+        away.played += 1
+        home.goals_for += score.home_score
+        home.goals_against += score.away_score
+        away.goals_for += score.away_score
+        away.goals_against += score.home_score
+
+        if score.home_score > score.away_score:
+            home.won += 1
+            away.lost += 1
+        elif score.home_score < score.away_score:
+            away.won += 1
+            home.lost += 1
+        else:
+            home.drawn += 1
+            away.drawn += 1
+
+    teams = [t.to_dict() for t in standings.values()]
+    return _apply_fifa_tiebreakers(
+        teams,
+        group_matches=matches,
+        context="group_standings",
+        fifa_rankings=fifa_rankings,
+    )
+
+
 async def get_actual_group_standings(
     session: AsyncSession,
 ) -> dict[str, list[dict]]:
@@ -383,54 +439,23 @@ async def get_actual_group_standings_with_warnings(
     )
     rows = result.all()
 
-    # Build raw standings + collect per-group match lists for H2H lookup.
-    standings_by_group: dict[str, dict[str, TeamStanding]] = {}
+    # Collect per-group (fixture, score) match lists; build_and_rank_group
+    # turns each into ranked standings. A team appears only once it has a
+    # finished, scored match.
     matches_by_group: dict[str, list[tuple[Fixture, Score]]] = {}
-
     for fixture, score in rows:
         if not score or not fixture.group:
             continue
-        group = fixture.group
-        standings_by_group.setdefault(group, {})
-        matches_by_group.setdefault(group, []).append((fixture, score))
+        matches_by_group.setdefault(fixture.group, []).append((fixture, score))
 
-        for name in (fixture.home_team, fixture.away_team):
-            if name not in standings_by_group[group]:
-                standings_by_group[group][name] = TeamStanding(name, group)
-
-        home = standings_by_group[group][fixture.home_team]
-        away = standings_by_group[group][fixture.away_team]
-
-        home.played += 1
-        away.played += 1
-        home.goals_for += score.home_score
-        home.goals_against += score.away_score
-        away.goals_for += score.away_score
-        away.goals_against += score.home_score
-
-        if score.home_score > score.away_score:
-            home.won += 1
-            away.lost += 1
-        elif score.home_score < score.away_score:
-            away.won += 1
-            home.lost += 1
-        else:
-            home.drawn += 1
-            away.drawn += 1
-
-    # Sort each group with FIFA tiebreakers and accumulate warnings.
     # Resolve rankings once at the async boundary so the (sync) tiebreaker
     # chain doesn't need a session — DB first, YAML fallback.
     rankings = await _resolve_fifa_rankings(session)
     out_standings: dict[str, list[dict]] = {}
     out_warnings: list[TieWarning] = []
-    for group, teams_dict in standings_by_group.items():
-        teams = [t.to_dict() for t in teams_dict.values()]
-        sorted_teams, warnings = _apply_fifa_tiebreakers(
-            teams,
-            group_matches=matches_by_group.get(group, []),
-            context="group_standings",
-            fifa_rankings=rankings,
+    for group, matches in matches_by_group.items():
+        sorted_teams, warnings = build_and_rank_group(
+            matches, group, fifa_rankings=rankings
         )
         out_standings[group] = sorted_teams
         out_warnings.extend(warnings)
@@ -483,50 +508,20 @@ async def get_predicted_group_standings(
     )
     rows = result.all()
 
-    standings_by_group: dict[str, dict[str, TeamStanding]] = {}
+    # MatchPrediction duck-types as Score (both expose .home_score/.away_score),
+    # so build_and_rank_group consumes the (fixture, prediction) tuples directly.
     matches_by_group: dict[str, list[tuple[Fixture, MatchPrediction]]] = {}
-
     for fixture, prediction in rows:
         if not fixture.group:
             continue
-        group = fixture.group
-        standings_by_group.setdefault(group, {})
-        matches_by_group.setdefault(group, []).append((fixture, prediction))
-
-        for name in (fixture.home_team, fixture.away_team):
-            if name not in standings_by_group[group]:
-                standings_by_group[group][name] = TeamStanding(name, group)
-
-        home = standings_by_group[group][fixture.home_team]
-        away = standings_by_group[group][fixture.away_team]
-
-        home.played += 1
-        away.played += 1
-        home.goals_for += prediction.home_score
-        home.goals_against += prediction.away_score
-        away.goals_for += prediction.away_score
-        away.goals_against += prediction.home_score
-
-        if prediction.home_score > prediction.away_score:
-            home.won += 1
-            away.lost += 1
-        elif prediction.home_score < prediction.away_score:
-            away.won += 1
-            home.lost += 1
-        else:
-            home.drawn += 1
-            away.drawn += 1
+        matches_by_group.setdefault(fixture.group, []).append((fixture, prediction))
 
     rankings = await _resolve_fifa_rankings(session)
     out_standings: dict[str, list[dict]] = {}
     out_warnings: list[TieWarning] = []
-    for group, teams_dict in standings_by_group.items():
-        teams = [t.to_dict() for t in teams_dict.values()]
-        sorted_teams, warnings = _apply_fifa_tiebreakers(
-            teams,
-            group_matches=matches_by_group.get(group, []),
-            context="group_standings",
-            fifa_rankings=rankings,
+    for group, matches in matches_by_group.items():
+        sorted_teams, warnings = build_and_rank_group(
+            matches, group, fifa_rankings=rankings
         )
         out_standings[group] = sorted_teams
         out_warnings.extend(warnings)

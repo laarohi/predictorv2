@@ -1,0 +1,97 @@
+{
+  "_README": "Golden cross-language parity cases for the FIFA WC2026 Article 13 group-stage tiebreaker. Consumed by BOTH backend/tests/test_standings_parity.py (pytest) and frontend/src/lib/utils/standings.parity.test.ts (vitest). If you change the tiebreaker on one side, these cases must still pass on both — that is the whole point. Each case is either context 'group_standings' (provide full `group` + `matches`; both sides build standings from the matches then rank) or context 'third_place_qualifying' (provide pre-aggregated `teams` with neutral keys points/gd/gf; H2H is N/A cross-group). `fifa_rankings` is the ordered ranking list (index 0 = rank #1) for Article 13 Step 3. Warnings are compared on (tied_teams sorted, context) only — `group` is intentionally not asserted because it is ambiguous for cross-group ties.",
+  "cases": [
+    {
+      "name": "group_b_h2h_beats_overall_gd",
+      "_note": "User's real Group B case. CAN & SUI both on 6 pts; SUI beat CAN 1-0 head-to-head, so SUI ranks 1st even though CAN has the better overall GD (+5 vs +1). This is the exact bug that motivated the fix.",
+      "context": "group_standings",
+      "group": "B",
+      "fifa_rankings": [],
+      "matches": [
+        { "home": "CANADA", "away": "BOSNIA", "home_score": 6, "away_score": 1 },
+        { "home": "QATAR", "away": "SWITZERLAND", "home_score": 1, "away_score": 0 },
+        { "home": "SWITZERLAND", "away": "BOSNIA", "home_score": 2, "away_score": 1 },
+        { "home": "CANADA", "away": "QATAR", "home_score": 2, "away_score": 1 },
+        { "home": "BOSNIA", "away": "QATAR", "home_score": 1, "away_score": 1 },
+        { "home": "SWITZERLAND", "away": "CANADA", "home_score": 1, "away_score": 0 }
+      ],
+      "expected_order": ["SWITZERLAND", "CANADA", "QATAR", "BOSNIA"],
+      "expected_warnings": []
+    },
+    {
+      "name": "descent_to_overall_gd_after_h2h_draw",
+      "_note": "ZULU & ALFA both on 4 pts, drew their H2H 1-1 (H2H equal), so the chain descends to overall GD: ZULU +3 beats ALFA +1. Names chosen so the GD winner is alphabetically LAST — proves GD, not alphabetical order, decided it.",
+      "context": "group_standings",
+      "group": "C",
+      "fifa_rankings": [],
+      "matches": [
+        { "home": "ZULU", "away": "ALFA", "home_score": 1, "away_score": 1 },
+        { "home": "ZULU", "away": "CHARLIE", "home_score": 3, "away_score": 0 },
+        { "home": "ALFA", "away": "CHARLIE", "home_score": 1, "away_score": 0 }
+      ],
+      "expected_order": ["ZULU", "ALFA", "CHARLIE"],
+      "expected_warnings": []
+    },
+    {
+      "name": "descent_to_overall_gf_after_gd_tie",
+      "_note": "MIKE & NOVEMBER on 4 pts, H2H 2-2 draw (equal), overall GD both +2 (equal), so chain descends to overall GF: NOVEMBER 6 beats MIKE 5. Winner is alphabetically last — proves GF, not alphabetical.",
+      "context": "group_standings",
+      "group": "D",
+      "fifa_rankings": [],
+      "matches": [
+        { "home": "MIKE", "away": "NOVEMBER", "home_score": 2, "away_score": 2 },
+        { "home": "MIKE", "away": "PAPA", "home_score": 3, "away_score": 1 },
+        { "home": "NOVEMBER", "away": "PAPA", "home_score": 4, "away_score": 2 }
+      ],
+      "expected_order": ["NOVEMBER", "MIKE", "PAPA"],
+      "expected_warnings": []
+    },
+    {
+      "name": "fair_play_then_fifa_rankings_resolve",
+      "_note": "GOLF & HOTEL fully tied (4 pts, H2H 0-0, GD +1, GF 1). Chain reaches fair-play (untracked → warning) then FIFA Rankings. Rankings list HOTEL above GOLF, so HOTEL ranks 1st despite being alphabetically last — proves rankings drove it. JULIETT is alone in 3rd (no tie, no warning).",
+      "context": "group_standings",
+      "group": "F",
+      "fifa_rankings": ["HOTEL", "GOLF", "JULIETT"],
+      "matches": [
+        { "home": "GOLF", "away": "HOTEL", "home_score": 0, "away_score": 0 },
+        { "home": "GOLF", "away": "JULIETT", "home_score": 1, "away_score": 0 },
+        { "home": "HOTEL", "away": "JULIETT", "home_score": 1, "away_score": 0 }
+      ],
+      "expected_order": ["HOTEL", "GOLF", "JULIETT"],
+      "expected_warnings": [
+        { "tied_teams": ["GOLF", "HOTEL"], "context": "group_standings" }
+      ]
+    },
+    {
+      "name": "fair_play_unlisted_falls_to_alphabetical",
+      "_note": "WHISKEY & XRAY fully tied (4 pts, H2H 0-0, GD +1, GF 1) and neither is in fifa_rankings, so after the fair-play warning the chain falls to alphabetical: WHISKEY before XRAY.",
+      "context": "group_standings",
+      "group": "G",
+      "fifa_rankings": [],
+      "matches": [
+        { "home": "WHISKEY", "away": "XRAY", "home_score": 0, "away_score": 0 },
+        { "home": "WHISKEY", "away": "YANKEE", "home_score": 1, "away_score": 0 },
+        { "home": "XRAY", "away": "YANKEE", "home_score": 1, "away_score": 0 }
+      ],
+      "expected_order": ["WHISKEY", "XRAY", "YANKEE"],
+      "expected_warnings": [
+        { "tied_teams": ["WHISKEY", "XRAY"], "context": "group_standings" }
+      ]
+    },
+    {
+      "name": "third_place_cross_group_rankings_decide",
+      "_note": "Three third-placed teams from different groups, all identical on points/GD/GF. H2H is N/A cross-group, so the chain goes points → GD → GF → fair-play(warn) → FIFA Rankings. Rankings are reverse-alphabetical, so order follows rankings (GREENVILLE, BLUTOPIA, REDLAND), proving rankings — not alphabetical — drove it.",
+      "context": "third_place_qualifying",
+      "fifa_rankings": ["GREENVILLE", "BLUTOPIA", "REDLAND"],
+      "teams": [
+        { "team": "REDLAND", "group": "A", "points": 4, "gd": 0, "gf": 3 },
+        { "team": "BLUTOPIA", "group": "B", "points": 4, "gd": 0, "gf": 3 },
+        { "team": "GREENVILLE", "group": "C", "points": 4, "gd": 0, "gf": 3 }
+      ],
+      "expected_order": ["GREENVILLE", "BLUTOPIA", "REDLAND"],
+      "expected_warnings": [
+        { "tied_teams": ["BLUTOPIA", "GREENVILLE", "REDLAND"], "context": "third_place_qualifying" }
+      ]
+    }
+  ]
+}

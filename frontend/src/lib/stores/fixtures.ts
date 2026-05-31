@@ -13,6 +13,12 @@ export const knockoutFixtures = writable<Fixture[]>([]);
 export const fixturesLoading = writable<boolean>(false);
 export const fixturesError = writable<string | null>(null);
 
+// Ordered FIFA Rankings (index 0 = rank #1) for the tournament teams. Feeds
+// Article 13 Step 3 in the predicted-standings tiebreaker chain so the frontend
+// table + bracket resolve deep ties identically to the backend. Empty until the
+// rankings table is synced — the chain then falls through to alphabetical.
+export const fifaRankings = writable<string[]>([]);
+
 // Phase 2 actual data stores
 export const actualKnockoutFixtures = writable<Fixture[]>([]);
 export const actualStandings = writable<ActualStandingsResponse | null>(null);
@@ -66,6 +72,18 @@ export async function fetchGroupFixtures(): Promise<void> {
 		fixturesError.set(e instanceof Error ? e.message : 'Failed to load group fixtures');
 	} finally {
 		fixturesLoading.set(false);
+	}
+}
+
+export async function fetchFifaRankings(): Promise<void> {
+	try {
+		const data = await fixturesApi.getFifaRankings();
+		fifaRankings.set(data);
+	} catch {
+		// Non-fatal: an empty ranking list just means the tiebreaker chain
+		// falls through to alphabetical (its documented no-rankings behaviour),
+		// identical to the backend when its table is unsynced.
+		fifaRankings.set([]);
 	}
 }
 

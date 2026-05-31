@@ -1,13 +1,22 @@
 /**
- * Tests for utils/standings.ts — the FIFA tiebreaker chain used to compute
- * the wizard's *predicted* group standings.
+ * Tests for utils/standings.ts — the FIFA WC2026 Article 13 tiebreaker chain
+ * used to compute the wizard's *predicted* group standings.
  *
- * The chain (per the file header):
- *   points → GD → GF → H2H points → H2H GD → H2H goals → alphabetical (+warning)
+ * The chain (among teams equal on POINTS):
+ *   H2H points → H2H GD → H2H goals  (Step 1, re-scoped per still-tied subset)
+ *   → overall GD → overall GF        (Step 2 d/e — only after H2H fails)
+ *   → fair-play (untracked → warning) → FIFA Rankings → alphabetical (Step 3)
  *
- * Covered:
- *   - applyFifaTiebreakers directly with synthetic standings (3-way H2H
- *     separation, partial H2H + alphabetical sub-tie, no-H2H cross-group case)
+ * The load-bearing property is that head-to-head is applied BEFORE overall goal
+ * difference — see `applies head-to-head before overall goal difference`, the
+ * test that distinguishes Article 13 from the legacy overall-GD-first bug.
+ *
+ * Behaviour-level parity with the backend `standings.py` is pinned separately
+ * by the shared golden cases in `standings.parity.test.ts`.
+ *
+ * Covered here:
+ *   - applyFifaTiebreakers directly with synthetic standings (H2H-beats-GD,
+ *     3-way H2H separation, partial H2H + sub-tie, no-H2H cross-group case)
  *   - calculateGroupStandingsWithWarnings end-to-end through Fixture+prediction
  *   - computeGroupStandingsMapWithWarnings aggregating warnings across groups
  */
@@ -163,16 +172,54 @@ describe('applyFifaTiebreakers', () => {
 		expect(warnings[0].tiedTeams).toEqual(['Brazil', 'Chile']);
 	});
 
-	it('respects goal difference before goals-for in the overall sort', () => {
+	it('applies head-to-head before overall goal difference when level on points', () => {
+		// THE Article 13 guard. Atlas & Bolt both finish on 4 pts. Bolt beat
+		// Atlas head-to-head (1-0), but Atlas has the far better overall GD
+		// (+4 vs 0). FIFA ranks Bolt above Atlas on H2H; the legacy bug ranked
+		// Atlas first on overall GD. Crown (5) leads, Dregs (3) trails.
 		const teams = [
-			_ts('TeamHighGd', 'A', 6, +5, 5),
-			_ts('TeamLowGd', 'A', 6, +1, 5)
+			_ts('Atlas', 'A', 4, +4, 5),
+			_ts('Bolt', 'A', 4, 0, 2),
+			_ts('Crown', 'A', 5, +1, 3),
+			_ts('Dregs', 'A', 3, -5, 1)
 		];
-		const { sorted } = applyFifaTiebreakers(teams, [], new Map(), 'group_standings');
-		expect(sorted[0].team).toBe('TeamHighGd');
+		const fixtures: Fixture[] = [
+			_fixture('h1', 'Bolt', 'Atlas'),
+			_fixture('h2', 'Atlas', 'Dregs'),
+			_fixture('h3', 'Atlas', 'Crown'),
+			_fixture('h4', 'Bolt', 'Crown'),
+			_fixture('h5', 'Bolt', 'Dregs'),
+			_fixture('h6', 'Crown', 'Dregs')
+		];
+		const predictions = new Map([
+			_pred('h1', 1, 0), // Bolt beats Atlas (the decisive H2H)
+			_pred('h2', 5, 0),
+			_pred('h3', 0, 0),
+			_pred('h4', 1, 1),
+			_pred('h5', 0, 1),
+			_pred('h6', 2, 0)
+		]);
+		const { sorted, warnings } = applyFifaTiebreakers(
+			teams,
+			fixtures,
+			predictions,
+			'group_standings'
+		);
+		expect(sorted.map((t) => t.team)).toEqual(['Crown', 'Bolt', 'Atlas', 'Dregs']);
+		expect(warnings).toEqual([]);
 	});
 
-	it('respects goals-for after points and GD tie', () => {
+	it('descends to overall GD only when H2H is unavailable (level on points)', () => {
+		// No fixtures → no H2H to consult, so two teams level on points are
+		// separated by overall GD (Step 2 d). With H2H data the higher-GD team
+		// would NOT automatically win — see the test above.
+		const teams = [_ts('TeamHighGd', 'A', 6, +5, 5), _ts('TeamLowGd', 'A', 6, +1, 5)];
+		const { sorted, warnings } = applyFifaTiebreakers(teams, [], new Map(), 'group_standings');
+		expect(sorted[0].team).toBe('TeamHighGd');
+		expect(warnings).toEqual([]); // resolved cleanly at Step 2 GD — no fair-play warning
+	});
+
+	it('descends to overall GF after points and GD tie (no H2H available)', () => {
 		const teams = [_ts('Lo', 'A', 6, +2, 3), _ts('Hi', 'A', 6, +2, 5)];
 		const { sorted } = applyFifaTiebreakers(teams, [], new Map(), 'group_standings');
 		expect(sorted[0].team).toBe('Hi');

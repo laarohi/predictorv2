@@ -24,6 +24,9 @@
 
 	export let prediction: BracketPrediction | null = null;
 	export let groupStandings: GroupStandingsMap = {};
+	/** Ordered FIFA Rankings (index 0 = rank #1) for Article 13 Step 3, so the
+	 *  third-place seeding matches the backend. Empty = alphabetical fallback. */
+	export let fifaRankings: string[] = [];
 	export let locked: boolean = false;
 	export let phase: 'phase_1' | 'phase_2' = 'phase_1';
 	/** Hide R32 column (Phase 2 starts at R16). */
@@ -45,9 +48,9 @@
 	$: state = (() => {
 		if (Object.keys(groupStandings).length === 0) return null;
 		if (prediction && hasValidPrediction(prediction)) {
-			return predictionToBracketState(prediction, groupStandings);
+			return predictionToBracketState(prediction, groupStandings, fifaRankings);
 		}
-		return initializeBracketState(groupStandings);
+		return initializeBracketState(groupStandings, fifaRankings);
 	})();
 
 	$: r32 = state ? getDisplayMatches(state, 'round_of_32') : [];
@@ -64,7 +67,7 @@
 
 	export function clearAllSelections() {
 		if (!groupStandings) return;
-		const emptyState = initializeBracketState(groupStandings);
+		const emptyState = initializeBracketState(groupStandings, fifaRankings);
 		dispatch('update', bracketStateToPrediction(emptyState));
 	}
 

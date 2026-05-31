@@ -26,6 +26,7 @@ from app.services.locking import (
     get_fixture_lock_view,
     is_phase1_locked,
 )
+from app.services.bonus import get_fifa_rankings
 from app.services.standings import (
     get_actual_group_standings,
     get_group_positions,
@@ -214,6 +215,33 @@ async def get_actual_standings(
         },
         qualifying_third_place=[TeamStandingResponse(**t) for t in qualifying_third],
     )
+
+
+class FifaRankingsResponse(BaseModel):
+    """Ordered FIFA Men's World Ranking for our tournament teams.
+
+    `rankings[0]` is the highest-ranked team. Used as Article 13's final
+    tiebreaker tier (Step 3). The frontend consumes this so its predicted
+    group-standings table resolves deep ties identically to the backend —
+    keeping the two implementations byte-for-byte in agreement.
+    """
+
+    rankings: list[str]
+
+
+@router.get("/fifa-rankings", response_model=FifaRankingsResponse)
+async def get_fifa_rankings_endpoint(
+    session: DbSession,
+    _user: OptionalUser,
+) -> FifaRankingsResponse:
+    """Return the ordered FIFA Rankings for our tournament teams.
+
+    Not phase-gated: the frontend needs this during Phase 1 to mirror the
+    backend tiebreaker chain. Returns an empty list when the
+    `fifa_rankings` table is unsynced — both implementations then fall
+    through to the alphabetical last resort identically.
+    """
+    return FifaRankingsResponse(rankings=await get_fifa_rankings(session))
 
 
 @router.get("/{fixture_id}", response_model=FixtureRead)
