@@ -70,7 +70,13 @@
 	function bonusPts(b: PointBreakdown, phase: LeaderboardPhase): number {
 		if (phase === 'phase_1') return b.phase1.hybrid_bonus_points;
 		if (phase === 'phase_2') return b.phase2.hybrid_bonus_points;
-		return b.hybrid_bonus_points;
+		// Overall "Bonus" = match rarity bonus + bonus-question points. The latter
+		// is cross-phase (locked with Phase I, scored when the admin reveals award
+		// answers) and is part of total_points — so without it here the row's
+		// visible columns don't reconcile with its Total (e.g. 0+5+0+0 shown but
+		// Total 20). Phase tabs keep only the per-phase rarity bonus, since
+		// bonus-question points aren't attributed to a single phase.
+		return b.hybrid_bonus_points + b.bonus_question_points;
 	}
 	function bracketPts(b: PointBreakdown, phase: LeaderboardPhase): number {
 		if (phase === 'phase_1') return getGroupTotal(b.phase1) + b.phase1.round_of_32_points + b.phase1.round_of_16_points + b.phase1.quarter_final_points + b.phase1.semi_final_points + b.phase1.final_points + b.phase1.winner_points;
