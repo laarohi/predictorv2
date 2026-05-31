@@ -4,6 +4,16 @@
 
 import { api } from './client';
 import type { PublicProfile, UserPredictionsResponse } from '$types';
+import type { AuditEvent } from './admin';
+
+/** The caller's own prediction-change audit events (GET /users/me/history). */
+export interface MyHistoryResponse {
+	events: AuditEvent[];
+}
+
+export async function getMyHistory(): Promise<MyHistoryResponse> {
+	return api.get<MyHistoryResponse>('/users/me/history');
+}
 
 export async function getUserProfile(userId: string): Promise<PublicProfile> {
 	return api.get<PublicProfile>(`/users/${userId}/profile`);

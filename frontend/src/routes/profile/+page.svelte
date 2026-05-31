@@ -147,7 +147,18 @@
 			</section>
 		{/if}
 
-		<!-- Account info section -->
+		<!-- Prediction history (audit log) -->
+			<section class="pn-pf-section">
+				<div class="h"><span>Prediction History</span><span class="right">Audit log</span></div>
+				<div class="body">
+					<p style="font-family: var(--body); font-size: 13px; line-height: 1.5; color: var(--ink-2); margin: 0 0 12px;">
+						Every change to your predictions — scores, bracket picks and bonus answers — is recorded with a timestamp. Review your full trail any time.
+					</p>
+					<a class="pn-btn" href="/profile/history">View my history →</a>
+				</div>
+			</section>
+
+			<!-- Account info section -->
 		<section class="pn-pf-section">
 			<div class="h"><span>Account Information</span><span class="right">Read-only</span></div>
 			<div class="body">

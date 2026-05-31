@@ -20,6 +20,7 @@ from app.services.locking import (
     is_phase2_bracket_locked,
 )
 from app.services.profile import calculate_user_stats
+from app.services.audit_log import build_user_history
 from sqlmodel import func
 
 router = APIRouter()
@@ -156,6 +157,31 @@ async def get_roster(
         for u in users
     ]
     return RosterResponse(entries=entries, total_active_users=len(users))
+
+
+class MyHistoryResponse(BaseModel):
+    """The authenticated player's own prediction-change audit events."""
+
+    events: list[dict]
+
+
+@router.get("/me/history", response_model=MyHistoryResponse)
+async def get_my_history(
+    session: DbSession,
+    current_user: CurrentUser,
+) -> MyHistoryResponse:
+    """The caller's own prediction-change history (audit log).
+
+    Same prettified events as the admin dispute-resolution view
+    (/admin/users/{id}/history), but scoped to the authenticated user via
+    CurrentUser — a player can only ever see their own audit trail. Lets each
+    player verify exactly what was recorded for their predictions, including
+    any change made by an admin (events carry the actor so tampering is
+    visible). Defined before /{user_id}/* so the literal `me` path can't be
+    parsed as a user_id.
+    """
+    events = await build_user_history(session, current_user.id)
+    return MyHistoryResponse(events=[e.to_dict() for e in events])
 
 
 @router.get("/{user_id}/profile", response_model=PublicProfile)
