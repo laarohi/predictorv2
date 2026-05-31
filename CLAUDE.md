@@ -77,7 +77,7 @@ Current focus: **World Cup 2026**
 - **Phase 1**: Pre-tournament predictions
   - Group stage match scores
   - Knockout bracket advancement (predict which teams reach each round)
-  - Locks at tournament start or per-match (5 min before kickoff)
+  - Locks at tournament start or per-match (15 min before kickoff)
 
 - **Phase 2**: Knockout stage predictions (activated by admin after groups complete)
   - Knockout match scores
@@ -102,7 +102,7 @@ Configured in `config/worldcup2026.yml`. See `docs/scoring-system.md` for full d
 - 10-100 pts: knockout stage advancement (scales by round)
 
 ### Critical Constraints
-- Predictions lock 5 minutes before kickoff
+- Predictions lock 15 minutes before kickoff (`config/worldcup2026.yml` → `locking.match_lock_before_kickoff`)
 - Users cannot see others' predictions until match locks (blind pool)
 - Phase 1 and Phase 2 predictions are stored separately
 - 100% data integrity required - no lost predictions
@@ -285,6 +285,6 @@ The site uses the **Panini** design system — a sticker-album-inspired theme on
 **Bracket** gating: in Phase 1 the Knockout sub-section is locked until every group prediction is filled in (uses predicted standings to seed R32 — would otherwise show TBD slots).
 **Score inputs** are capped at 15 goals per side, enforced live in the input event so the user sees the cap immediately.
 
-**Flag swatches** are 2/3-stripe gradient placeholders (`PnFlag.svelte`) — earmarked for a real flag library in a follow-up plan.
+**Flags** are real `flag-icons` vector SVGs (`PnFlag.svelte` / `PnAxisFlag.svelte`), lazily code-split (`utils/flagSvgs.ts`) and rendered with a subtle Panini saturate/contrast filter. A neutral grey box shows only while a flag's chunk is loading or for an unknown country code.
 
 **Backend-dependent widgets** (sparklines, social signals, hot pick, bracket exposure, underdog hits, steepest climb) use deterministic stubs in `frontend/src/lib/stubs/panini.ts` until the backend supports them. Each stub logs `[panini:stub] <name>` in dev so they're greppable.
