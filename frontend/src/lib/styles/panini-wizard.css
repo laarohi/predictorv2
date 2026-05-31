@@ -752,7 +752,10 @@
 	display: grid;
 	grid-template-columns: 1fr;
 	gap: 18px;
-	margin-bottom: 22px;
+	/* Trimmed from 22px: combined with the body's 28px bottom padding, the
+	   predict page overflowed the desktop viewport by a hair, adding a tiny
+	   vertical scroll. 12px keeps clear section separation without the overflow. */
+	margin-bottom: 12px;
 	align-items: start; /* prevent flex-style row stretching */
 }
 @media (min-width: 1000px) {
