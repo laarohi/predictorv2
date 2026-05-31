@@ -7,7 +7,7 @@ tournament:
   teams: 48
   groups: 12
   teams_per_group: 4
-  entry_fee: 25      # EUR. Drives the pre-tournament payment banner and the rules-page entry-fee display via /competition/info.
+  entry_fee: 30      # EUR. Drives the pre-tournament payment banner and the rules-page entry-fee display via /competition/info.
 
 # Prediction locking rules
 locking:

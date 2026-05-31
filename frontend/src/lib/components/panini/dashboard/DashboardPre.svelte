@@ -95,10 +95,10 @@
 	$: overallTotal = totalGroupMatches + BRACKET_TOTAL_SLOTS + totalBonusQuestions;
 	$: overallFilled = filledGroup + bracketSlotsFilled + bonusFilled;
 
-	// Entry fee comes from /competition/info (YAML-backed). Fall back to 25
+	// Entry fee comes from /competition/info (YAML-backed). Fall back to 30
 	// before the fetch resolves so the banner copy and the Revolut URL stay
 	// sensible during the first render. EUR is the only supported currency.
-	$: entryFee = info?.entry_fee ?? 25;
+	$: entryFee = info?.entry_fee ?? 30;
 	$: revolutUrl = `https://revolut.me/laarohi?currency=EUR&amount=${Math.round(entryFee * 100)}&note=World%20Cup%20Predictor`;
 
 	$: countdown = (() => {
