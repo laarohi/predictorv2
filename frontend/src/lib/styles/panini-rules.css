@@ -234,10 +234,13 @@
 .pn .pn-rl-bracket-head,
 .pn .pn-rl-bracket-row {
 	display: grid;
-	grid-template-columns: 1fr auto auto;
+	/* Round gets a touch more room for "Tournament winner"; the two phase
+	   columns share the rest equally so the points sit under their headers
+	   with room to breathe, rather than crammed into the right corner. */
+	grid-template-columns: 1.6fr 1fr 1fr;
 	align-items: baseline;
-	column-gap: 16px;
-	padding: 8px 14px;
+	column-gap: 18px;
+	padding: 9px 16px;
 }
 .pn .pn-rl-bracket-head {
 	background: var(--ink);

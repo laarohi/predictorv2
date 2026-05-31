@@ -141,9 +141,12 @@
 		return bands;
 	}
 
-	// Fall back to 30 (the design anchor) before info loads, so the table
-	// renders something sensible on first paint.
-	$: rarityPredictorCount = info?.total_players ?? 30;
+	// The example pool size: use the live signed-up count once it's meaningful
+	// (>=15), otherwise anchor to 25 so the rarity bands illustrate the mechanic
+	// sensibly pre-launch (a "1 of 4" example doesn't convey the scaling). Also
+	// covers the pre-load case where info is still null.
+	$: rarityPredictorCount =
+		info?.total_players && info.total_players >= 15 ? info.total_players : 25;
 	$: rarityRows = rarityBands(rarityPredictorCount, RARITY_CAP);
 
 	const CATEGORY_LABEL: Record<string, string> = {
