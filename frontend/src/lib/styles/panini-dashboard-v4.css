@@ -2228,7 +2228,9 @@
  * v4 dashboard body padding
  * ============================================================ */
 .pn .pn-dash-v4 {
-	padding: 22px 28px;
+	/* Top padding reduced ×0.7 (22→15px) to tighten the cream gap between the
+	 * red lock strip and the hero; bottom + horizontal gutters unchanged. */
+	padding: 15px 28px 22px;
 }
 @media (max-width: 900px) {
 	.pn .pn-kpi-row-v4 {
