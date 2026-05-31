@@ -132,25 +132,18 @@ class FixedScoring:
         total_predictors: int,
         correct_predictors: int,
     ) -> tuple[int, bool, bool]:
-        outcome_points = config.get("correct_outcome", 5)
-        exact_points = config.get("exact_score", 10)
-
-        pred_outcome = prediction.predicted_outcome
-        actual_outcome = score.outcome
-
-        correct_outcome = pred_outcome == actual_outcome
-        exact_score = (
-            prediction.home_score == score.final_home_score
-            and prediction.away_score == score.final_away_score
+        return compute_match_points(
+            mode="fixed",
+            predicted_home=prediction.home_score,
+            predicted_away=prediction.away_score,
+            actual_home=score.final_home_score,
+            actual_away=score.final_away_score,
+            total_predictors=total_predictors,
+            correct_predictors=correct_predictors,
+            outcome_points=config.get("correct_outcome", 5),
+            exact_points=config.get("exact_score", 10),
+            cap=config.get("rarity_cap", config.get("hybrid_cap", 10)),
         )
-
-        points = 0
-        if correct_outcome:
-            points += outcome_points
-        if exact_score:
-            points += exact_points
-
-        return points, correct_outcome, exact_score
 
 
 class HybridScoring:
@@ -170,30 +163,18 @@ class HybridScoring:
         total_predictors: int,
         correct_predictors: int,
     ) -> tuple[int, bool, bool]:
-        outcome_points = config.get("correct_outcome", 5)
-        exact_points = config.get("exact_score", 10)
-        cap = config.get("hybrid_cap", 10)
-
-        pred_outcome = prediction.predicted_outcome
-        actual_outcome = score.outcome
-
-        correct_outcome = pred_outcome == actual_outcome
-        exact_score = (
-            prediction.home_score == score.final_home_score
-            and prediction.away_score == score.final_away_score
+        return compute_match_points(
+            mode="hybrid",
+            predicted_home=prediction.home_score,
+            predicted_away=prediction.away_score,
+            actual_home=score.final_home_score,
+            actual_away=score.final_away_score,
+            total_predictors=total_predictors,
+            correct_predictors=correct_predictors,
+            outcome_points=config.get("correct_outcome", 5),
+            exact_points=config.get("exact_score", 10),
+            cap=config.get("hybrid_cap", 10),
         )
-
-        points = 0
-        if correct_outcome:
-            points += outcome_points
-            if correct_predictors > 0:
-                bonus = min(cap, total_predictors // correct_predictors)
-                points += bonus
-
-        if exact_score:
-            points += exact_points
-
-        return points, correct_outcome, exact_score
 
 
 # Anchor: alpha chosen so that f = 1/30 (one of thirty predictors correct)
@@ -219,6 +200,63 @@ def _logarithmic_rarity_bonus(
     return min(cap, max(0, round(raw)))
 
 
+def _outcome(home: int, away: int) -> str:
+    """1/X/2 outcome from a scoreline. Convention is irrelevant as long as
+    both the predicted and actual lines are classified by the same function."""
+    if home > away:
+        return "1"
+    if home < away:
+        return "2"
+    return "X"
+
+
+def compute_match_points(
+    *,
+    mode: str,
+    predicted_home: int,
+    predicted_away: int,
+    actual_home: int,
+    actual_away: int,
+    total_predictors: int,
+    correct_predictors: int,
+    outcome_points: int,
+    exact_points: int,
+    cap: int,
+) -> tuple[int, bool, bool]:
+    """Pure match-points calculation shared with the frontend
+    (`computeMatchPoints` in `frontend/src/lib/utils/matchBreakdown.ts`).
+
+    Takes only primitives — no model objects, no config-dict key names — so
+    the two language implementations validate against the SAME shared golden
+    cases (`shared/scoring-parity-cases.json`). The three strategy classes
+    below and the frontend Results card both route through this, so the
+    tested path is the production path.
+
+    Returns (points, correct_outcome, exact_score). `cap` bounds the rarity
+    bonus; it's unused for mode 'fixed'.
+    """
+    correct_outcome = _outcome(predicted_home, predicted_away) == _outcome(
+        actual_home, actual_away
+    )
+    exact_score = predicted_home == actual_home and predicted_away == actual_away
+
+    points = 0
+    if correct_outcome:
+        points += outcome_points
+        if mode == "hybrid":
+            if correct_predictors > 0:
+                points += min(cap, total_predictors // correct_predictors)
+        elif mode == "logarithmic":
+            points += _logarithmic_rarity_bonus(
+                total_predictors, correct_predictors, cap
+            )
+        # mode "fixed": no rarity bonus.
+    if exact_score:
+        points += exact_points
+
+    return points, correct_outcome, exact_score
+
+
 class LogarithmicScoring:
     """Logarithmic rarity scoring: base points + Shannon-surprisal bonus.
 
@@ -237,26 +275,18 @@ class LogarithmicScoring:
         total_predictors: int,
         correct_predictors: int,
     ) -> tuple[int, bool, bool]:
-        outcome_points = config.get("correct_outcome", 5)
-        exact_points = config.get("exact_score", 10)
-        cap = config.get("rarity_cap", config.get("hybrid_cap", 10))
-
-        correct_outcome = prediction.predicted_outcome == score.outcome
-        exact_score = (
-            prediction.home_score == score.final_home_score
-            and prediction.away_score == score.final_away_score
+        return compute_match_points(
+            mode="logarithmic",
+            predicted_home=prediction.home_score,
+            predicted_away=prediction.away_score,
+            actual_home=score.final_home_score,
+            actual_away=score.final_away_score,
+            total_predictors=total_predictors,
+            correct_predictors=correct_predictors,
+            outcome_points=config.get("correct_outcome", 5),
+            exact_points=config.get("exact_score", 10),
+            cap=config.get("rarity_cap", config.get("hybrid_cap", 10)),
         )
-
-        points = 0
-        if correct_outcome:
-            points += outcome_points
-            points += _logarithmic_rarity_bonus(
-                total_predictors, correct_predictors, cap
-            )
-        if exact_score:
-            points += exact_points
-
-        return points, correct_outcome, exact_score
 
 
 # Registry of available scoring strategies
