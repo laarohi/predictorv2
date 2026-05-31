@@ -87,7 +87,10 @@
 	letter-spacing: 0.01em;
 	color: var(--paper);
 	transform: rotate(-4deg);
-	box-shadow: 4px 4px 0 var(--paper);
+	/* drop-shadow, not box-shadow: a hard offset box-shadow on a rotated element
+	   stair-steps along the tilted edge (aliasing). drop-shadow follows the
+	   element's antialiased alpha, so the offset stays crisp but smooth. */
+	filter: drop-shadow(4px 4px 0 var(--paper));
 }
 .pn-mast .logo-name {
 	font-family: var(--display);
@@ -596,7 +599,7 @@
 	font-size: 16px;
 	color: var(--paper);
 	transform: rotate(-4deg);
-	box-shadow: 2px 2px 0 var(--paper);
+	filter: drop-shadow(2px 2px 0 var(--paper)); /* crisp offset, no rotation aliasing */
 }
 .pn-mob-header .nm {
 	font-family: var(--display);

@@ -40,7 +40,7 @@
 	letter-spacing: 0.01em;
 	color: var(--paper);
 	transform: rotate(-4deg);
-	box-shadow: 4px 4px 0 var(--ink);
+	filter: drop-shadow(4px 4px 0 var(--ink)); /* crisp offset, no rotation aliasing */
 }
 .pn .pn-auth-crest .nm {
 	font-family: var(--display);
