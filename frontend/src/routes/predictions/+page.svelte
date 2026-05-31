@@ -304,6 +304,10 @@
 	// the gate until the user has filled the bracket they can't yet open.
 	$: phase1BracketGated = activePhase === 'phase1' && !allGroupsComplete;
 
+	// Gate the meter until groups + bracket + bonus are all loaded, so the total
+	// doesn't visibly climb (e.g. 63 → 145) as the three sources stream in post-mount.
+	$: progressReady = fetchesDone && bonusLoaded && $groupFixtures.length > 0;
+
 	$: phaseProgress = (() => {
 		let done = 0;
 		let total = 0;
@@ -695,6 +699,7 @@
 	let bonusPlayers: import('$api/bonus').BonusPlayer[] = []; // squad list for award dropdowns
 	let bonusAnswers: Map<string, string> = new Map(); // question_id → answer
 	let bonusInitial: Map<string, string> = new Map(); // for change tracking
+	let bonusLoaded = false; // true once the bonus list arrives; gates the progress meter
 
 	$: hasUnsavedBonus = (() => {
 		if (bonusQuestions.length === 0) return false;
@@ -718,6 +723,7 @@
 		for (const p of preds) map.set(p.question_id, p.answer);
 		bonusAnswers = map;
 		bonusInitial = new Map(map);
+		bonusLoaded = true;
 	}
 
 	// Reactive lambda (same pattern as groupProgress / predictionState above):
@@ -860,14 +866,14 @@
 			</div>
 			<div class="progress-stack">
 				<div class="big-num" aria-hidden="true">
-					<b>{phaseProgress.done}</b><span class="slash">/{phaseProgress.total}</span>
+					{#if progressReady}<b>{phaseProgress.done}</b><span class="slash">/{phaseProgress.total}</span>{:else}<b>—</b><span class="slash">/—</span>{/if}
 				</div>
 				<div class="bar-and-labels">
 					<div class="l">
 						<span>Matches predicted</span>
-						<span>{phaseProgress.pct}%</span>
+						<span>{progressReady ? phaseProgress.pct : 0}%</span>
 					</div>
-					<div class="bar"><div class="bar-fill" style="width: {phaseProgress.pct}%;"></div></div>
+					<div class="bar"><div class="bar-fill" style="width: {progressReady ? phaseProgress.pct : 0}%;"></div></div>
 					<div class="l">
 						<span>
 							{#if activePhase === 'phase1'}
@@ -943,14 +949,14 @@
 				</div>
 				<div class="progress-row">
 					<div class="big-num" aria-hidden="true">
-						<b>{phaseProgress.done}</b><span class="slash">/{phaseProgress.total}</span>
+						{#if progressReady}<b>{phaseProgress.done}</b><span class="slash">/{phaseProgress.total}</span>{:else}<b>—</b><span class="slash">/—</span>{/if}
 					</div>
 					<div class="bar-and-labels">
 						<div class="l">
 							<span>Matches predicted</span>
-							<span>{phaseProgress.pct}%</span>
+							<span>{progressReady ? phaseProgress.pct : 0}%</span>
 						</div>
-						<div class="bar"><div class="bar-fill" style="width: {phaseProgress.pct}%;"></div></div>
+						<div class="bar"><div class="bar-fill" style="width: {progressReady ? phaseProgress.pct : 0}%;"></div></div>
 						<div class="l">
 							<span>
 								{#if activePhase === 'phase1'}
