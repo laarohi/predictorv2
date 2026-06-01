@@ -30,6 +30,14 @@ services:
       # Generate one into .env:  openssl rand -hex 32
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env (openssl rand -hex 32)}
       - DEBUG=${DEBUG:-false}
+      # Admin bootstrap — comma-separated emails auto-granted admin on account
+      # creation/login. Without this a fresh deploy has NO admin at all
+      # (is_admin can only be toggled by an existing admin). Set your email in
+      # .env before first launch, or use scripts/make_admin.py afterwards.
+      - ADMIN_EMAILS_STR=${ADMIN_EMAILS_STR:-}
+      # Open self-registration. Leave true for launch; set false in .env once
+      # the friend group is onboarded so outsiders can't join the live pool.
+      - REGISTRATION_ENABLED=${REGISTRATION_ENABLED:-true}
       - CORS_ORIGINS_STR=${CORS_ORIGINS_STR:-http://localhost:5173,http://localhost:3000}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
