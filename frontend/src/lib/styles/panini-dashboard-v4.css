@@ -2482,5 +2482,18 @@
 		margin-top: clamp(4px, 1.3vw, 6px);
 		font-size: clamp(8px, 2.2vw, 9px);
 	}
+
+	/* DwAlert: at phone width the rigid `auto 1fr auto` grid can't shrink the
+	   CTA's intrinsic button width, so it spills past the card. Drop the third
+	   column and let the button span a full second row instead. */
+	.pn .pn-alert-v4 {
+		grid-template-columns: auto 1fr;
+		align-items: start;
+	}
+	.pn .pn-alert-v4 .pn-btn {
+		grid-column: 1 / -1;
+		justify-content: center;
+		margin-top: 6px;
+	}
 }
 
