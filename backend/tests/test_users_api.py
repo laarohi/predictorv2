@@ -407,6 +407,7 @@ class TestRosterEntryPaid:
             name="Alice",
             match_predictions_filled=3,
             bracket_picks_filled=2,
+            bonus_picks_filled=1,
             is_current_user=False,
             paid=True,
         )
@@ -421,6 +422,7 @@ class TestRosterEntryPaid:
             name="Bob",
             match_predictions_filled=0,
             bracket_picks_filled=0,
+            bonus_picks_filled=0,
             is_current_user=False,
             paid=False,
         )

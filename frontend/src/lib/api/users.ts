@@ -29,6 +29,7 @@ export interface RosterEntry {
 	name: string;
 	match_predictions_filled: number;
 	bracket_picks_filled: number;
+	bonus_picks_filled: number;
 	is_current_user: boolean;
 	paid: boolean;
 }

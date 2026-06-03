@@ -135,7 +135,7 @@
 				handle: e.is_current_user
 					? 'YOU'
 					: `@${e.name.split(' ')[0].toLowerCase()}`,
-				filled: e.match_predictions_filled + e.bracket_picks_filled,
+				filled: e.match_predictions_filled + e.bracket_picks_filled + e.bonus_picks_filled,
 				total: overallTotal,
 				isCurrentUser: e.is_current_user,
 				paid: e.paid

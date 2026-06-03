@@ -10,6 +10,7 @@ from sqlmodel import select
 
 from app.dependencies import CurrentUser, DbSession, OptionalUser
 from app.models.fixture import Fixture, MatchStatus
+from app.models.bonus import BonusPrediction
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.score import Score
 from app.models.user import User
@@ -94,6 +95,7 @@ class RosterEntry(BaseModel):
     name: str
     match_predictions_filled: int
     bracket_picks_filled: int
+    bonus_picks_filled: int
     is_current_user: bool
     paid: bool
 
@@ -114,10 +116,13 @@ async def get_roster(
     public-safe fields. Sorted alphabetically by name so the order is
     stable across requests (signup order would leak join time).
 
-    The two count fields are deliberately granular: a player who's
+    The three count fields are deliberately granular: a player who's
     finished group-stage picks but hasn't touched the bracket shows as
-    "48 + 0" rather than a single 48/92 ratio that conflates two
-    different completeness signals.
+    "48 + 0 + 0" rather than a single ratio that conflates the three
+    different completeness signals. Their sum is the numerator the
+    dashboard renders against the same overall total (group matches +
+    bracket slots + bonus questions) the funnel hero uses, so the roster
+    row and the top progress bar agree by construction.
     """
     # Active users only — drops `is_active=False` rows (admin-disabled
     # or otherwise sidelined). Sorted by name for stability.
@@ -145,12 +150,24 @@ async def get_roster(
     )
     bracket_counts: dict[uuid.UUID, int] = dict(bracket_counts_result.all())
 
+    # Bonus answers — count only non-empty saved answers, mirroring the
+    # client's `bonusFilled` (DashboardPre: predictions with answer length > 0).
+    # A saved-but-blank answer is not a completed pick, so the roster numerator
+    # matches the funnel hero's `overallFilled`.
+    bonus_counts_result = await session.execute(
+        select(BonusPrediction.user_id, func.count(BonusPrediction.id))
+        .where(BonusPrediction.answer != "")
+        .group_by(BonusPrediction.user_id)
+    )
+    bonus_counts: dict[uuid.UUID, int] = dict(bonus_counts_result.all())
+
     entries = [
         RosterEntry(
             user_id=u.id,
             name=u.name,
             match_predictions_filled=match_counts.get(u.id, 0),
             bracket_picks_filled=bracket_counts.get(u.id, 0),
+            bonus_picks_filled=bonus_counts.get(u.id, 0),
             is_current_user=(u.id == current_user.id),
             paid=u.paid,
         )
