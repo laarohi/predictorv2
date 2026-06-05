@@ -195,7 +195,7 @@
 			/>
 		{/if}
 
-		{#if overallFilled < overallTotal && overallFilled > 0}
+		{#if dashReady && overallFilled < overallTotal && overallFilled > 0}
 			<DwAlert
 				variant="gold"
 				title={`${overallTotal - overallFilled} predictions still to fill`}
