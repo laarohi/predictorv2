@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Panini home-screen icon: full-bleed red field (no disc), large cream
+       "CxF" wordmark over a navy hard offset shadow — the design system's
+       sticker-shadow signature, in the exact brand palette (red/cream/navy).
+       iOS squircle-masks the red square's corners. -->
+  <rect width="512" height="512" fill="#c8281f"/>
+  <text x="264" y="332"
+        font-family="'Arial Black','Helvetica Neue',Helvetica,Arial,sans-serif"
+        font-weight="900" font-size="190" letter-spacing="1"
+        text-anchor="middle" fill="#0e1d40">CxF</text>
+  <text x="256" y="324"
+        font-family="'Arial Black','Helvetica Neue',Helvetica,Arial,sans-serif"
+        font-weight="900" font-size="190" letter-spacing="1"
+        text-anchor="middle" fill="#f1ebde">CxF</text>
+</svg>
