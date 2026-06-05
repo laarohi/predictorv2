@@ -396,12 +396,26 @@
 	const MAX_GOALS = 15;
 
 	function clampScoreInput(el: HTMLInputElement): void {
-		const n = parseInt(el.value || '0', 10);
-		if (Number.isNaN(n) || n < 0) {
-			el.value = '0';
-		} else if (n > MAX_GOALS) {
-			el.value = String(MAX_GOALS);
-		}
+		// Normalise the visible value to a canonical 0–15 integer on every
+		// keystroke, so the box never shows a nonsensical leading-zero string:
+		//   ""        -> ""          (a genuinely empty box stays empty)
+		//   "01","02" -> "1","2"     "00","000" -> "0"     "007" -> "7"
+		//   ">15"     -> "15"        (the per-side goal cap, MAX_GOALS)
+		//   non-digit characters are stripped entirely
+		const digits = el.value.replace(/\D/g, '');
+		el.value = digits === '' ? '' : String(Math.min(MAX_GOALS, parseInt(digits, 10)));
+	}
+
+	// Highlight the cell's current value when it gains focus, so the next
+	// keystroke REPLACES the digit instead of appending — the user no longer
+	// has to backspace the auto-filled "0" in the partner box before typing
+	// (the friction that surfaced on mobile). Deferred one frame because iOS
+	// Safari collapses the selection to a caret immediately after the tap that
+	// triggered focus; selecting on the next frame wins that race. The inputs
+	// are type="text" (not number) precisely so this highlight renders on iOS.
+	function selectScoreOnFocus(e: FocusEvent): void {
+		const el = e.currentTarget as HTMLInputElement;
+		requestAnimationFrame(() => el.select());
 	}
 
 	// ---- Score input handlers --------------------------------------------
@@ -1222,13 +1236,14 @@
 									</div>
 									<div class="pn-score">
 										<input
-											type="number"
+											type="text"
 											class="pn-score-cell"
 											class:empty={state === 'empty'}
-											min="0"
-											max={MAX_GOALS}
 											inputmode="numeric"
+											maxlength="2"
+											pattern="[0-9]*"
 											disabled={f.is_locked}
+											on:focus={selectScoreOnFocus}
 											value={scoreValue(f.id, 'home')}
 											on:input={(e) => {
 												clampScoreInput(e.currentTarget);
@@ -1238,13 +1253,14 @@
 										/>
 										<span class="dash">–</span>
 										<input
-											type="number"
+											type="text"
 											class="pn-score-cell"
 											class:empty={state === 'empty'}
-											min="0"
-											max={MAX_GOALS}
 											inputmode="numeric"
+											maxlength="2"
+											pattern="[0-9]*"
 											disabled={f.is_locked}
+											on:focus={selectScoreOnFocus}
 											value={scoreValue(f.id, 'away')}
 											on:input={(e) => {
 												clampScoreInput(e.currentTarget);
@@ -1441,13 +1457,14 @@
 									</div>
 									<div class="pn-score">
 										<input
-											type="number"
+											type="text"
 											class="pn-score-cell"
 											class:empty={state === 'empty'}
-											min="0"
-											max={MAX_GOALS}
 											inputmode="numeric"
+											maxlength="2"
+											pattern="[0-9]*"
 											disabled={f.is_locked}
+											on:focus={selectScoreOnFocus}
 											value={scoreValue(f.id, 'home')}
 											on:input={(e) => {
 												clampScoreInput(e.currentTarget);
@@ -1457,13 +1474,14 @@
 										/>
 										<span class="dash">–</span>
 										<input
-											type="number"
+											type="text"
 											class="pn-score-cell"
 											class:empty={state === 'empty'}
-											min="0"
-											max={MAX_GOALS}
 											inputmode="numeric"
+											maxlength="2"
+											pattern="[0-9]*"
 											disabled={f.is_locked}
+											on:focus={selectScoreOnFocus}
 											value={scoreValue(f.id, 'away')}
 											on:input={(e) => {
 												clampScoreInput(e.currentTarget);

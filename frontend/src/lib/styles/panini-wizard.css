@@ -1100,7 +1100,10 @@
 	text-align: center;
 	line-height: 46px;
 	box-shadow: 3px 3px 0 var(--ink);
-	user-select: none;
+	/* `text` (not `none`) so the value highlights when the cell is focused —
+	 * `selectScoreOnFocus` selects it so the next keystroke replaces the digit
+	 * rather than the user having to backspace the auto-filled "0" first. */
+	user-select: text;
 	-moz-appearance: textfield;
 	appearance: textfield;
 }
