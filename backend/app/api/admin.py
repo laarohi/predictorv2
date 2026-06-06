@@ -350,6 +350,10 @@ async def activate_phase2(
 
     await session.commit()
 
+    # The "knockouts are live" push is fired by the scheduler tick
+    # (send_phase2_opened), not here, so activation returns instantly instead
+    # of blocking on a fan-out of sends.
+
     return {
         "status": "Phase 2 activated",
         "bracket_deadline": request.bracket_deadline.isoformat(),

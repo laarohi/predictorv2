@@ -57,6 +57,11 @@ export async function sendTestPush(): Promise<number> {
 	return res.sent;
 }
 
+/** Admin QA: fire one of every alert shape to your own devices, ~10s apart (background). */
+export async function sendTestSamples(): Promise<{ scheduled: number; interval_seconds: number }> {
+	return api.post('/push/test-samples');
+}
+
 /** Is THIS device's subscription active server-side (vs merely present in the browser)? */
 export async function getPushStatus(endpoint: string): Promise<boolean> {
 	const res = await api.post<{ active: boolean }>('/push/status', { endpoint });

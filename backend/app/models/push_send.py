@@ -4,10 +4,15 @@ Mirrors :class:`EmailSend`. One row per (user, kind, ref_id) *successful*
 push, so the scheduler can evaluate a trigger every tick without ever
 re-notifying:
 
-    kind            ref_id          fires
-    lock_reminder   fixture_id      once per user per imminent match
-    result          fixture_id      once per user per finished match
-    phase2_opened   competition_id  once per user when knockouts open
+    kind                 ref_id          fires
+    phase1_deadline_24h  competition_id  24h-out "predictions close" nudge
+    phase1_deadline_2h   competition_id  2h-out last-call nudge
+    ko_lock_reminder     fixture_id      a KO match locks soon (Phase 2)
+    result               fixture_id      a predicted match finished + scored
+    phase2_opened        competition_id  knockouts activated
+
+    (The kind strings are defined as KIND_* in services/push_triggers.py — the
+    single source of truth; renaming one there resets idempotency.)
 
 Written only after the push service accepts the send (transient failures
 deliberately do NOT write a row, so the next tick retries — same contract
@@ -36,7 +41,7 @@ class PushSend(SQLModel, table=True):
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     user_id: uuid.UUID = Field(foreign_key="users.id", index=True)
-    # "lock_reminder" | "result" | "phase2_opened"
+    # See KIND_* in app/services/push_triggers.py (single source of truth).
     kind: str = Field(index=True, max_length=32)
     # fixture_id for lock_reminder/result, competition_id for phase2_opened.
     ref_id: uuid.UUID = Field(index=True)

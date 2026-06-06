@@ -16,6 +16,8 @@ SSRF sink). Re-subscribing re-points the device's channel at the current
 user (a device's push channel follows whoever is logged in on it).
 """
 
+import asyncio
+import logging
 import uuid
 from urllib.parse import urlparse
 
@@ -25,10 +27,13 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlmodel import select
 
 from app.config import get_settings
-from app.dependencies import CurrentUser, DbSession
+from app.database import async_session_maker
+from app.dependencies import AdminUser, CurrentUser, DbSession
 from app.models._datetime import utc_now
 from app.models.push_subscription import PushSubscription
 from app.services.push import send_to_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -183,3 +188,55 @@ async def test_push(current_user: CurrentUser, session: DbSession) -> dict:
     }
     sent = await send_to_user(session, current_user.id, payload)
     return {"sent": sent}
+
+
+# One of every alert shape, mirroring the copy in services/push_triggers.py —
+# an admin QA tool to preview rendering/delivery on-device without waiting for
+# the real events. Keep in sync with the trigger payloads.
+_SAMPLE_INTERVAL_SECONDS = 10
+SAMPLE_ALERTS: list[dict] = [
+    {
+        "title": "⏰ Predictions close in ~24 hours",
+        "body": "You've still got 5 picks to fill before kickoff.",
+        "url": "/predictions",
+    },
+    {
+        "title": "⏰ Predictions lock soon",
+        "body": "Brazil v Croatia kicks off shortly — get your score in.",
+        "url": "/predictions",
+    },
+    {"title": "England 2–1 France", "body": "You predicted 2–1 — +15 pts 🎯", "url": "/results"},
+    {"title": "Spain 3–0 Japan", "body": "You predicted 2–0 — +5 pts ✅", "url": "/results"},
+    {"title": "Brazil 1–2 Argentina", "body": "You predicted 1–1 — +0 pts ❌", "url": "/results"},
+    {
+        "title": "Knockouts are live 🏆",
+        "body": "Phase 2 is open — make your knockout picks.",
+        "url": "/predictions",
+    },
+]
+
+# Hold references to in-flight sample tasks so they aren't garbage-collected
+# mid-run (asyncio only keeps weak refs to bare create_task results).
+_sample_tasks: set[asyncio.Task] = set()
+
+
+async def _send_sample_alerts(user_id: uuid.UUID) -> None:
+    """Send each sample alert to the user's devices, ~10s apart, in its own session."""
+    async with async_session_maker() as session:
+        for i, payload in enumerate(SAMPLE_ALERTS):
+            if i:
+                await asyncio.sleep(_SAMPLE_INTERVAL_SECONDS)
+            try:
+                await send_to_user(session, user_id, payload)
+            except Exception:  # noqa: BLE001
+                logger.exception("push: sample alert send failed")
+
+
+@router.post("/test-samples")
+async def test_samples(current_user: AdminUser) -> dict:
+    """Admin QA: fire one of every alert shape to the caller's own devices,
+    spaced ~10s apart, in the background (so they land on a locked screen)."""
+    task = asyncio.create_task(_send_sample_alerts(current_user.id))
+    _sample_tasks.add(task)
+    task.add_done_callback(_sample_tasks.discard)
+    return {"scheduled": len(SAMPLE_ALERTS), "interval_seconds": _SAMPLE_INTERVAL_SECONDS}

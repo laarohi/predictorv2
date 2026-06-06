@@ -7,8 +7,10 @@
 		enablePush,
 		disablePush,
 		sendTestPush,
+		sendTestSamples,
 		getPushStatus
 	} from '$api/push';
+	import { isAdmin } from '$stores/auth';
 
 	let supported = false;
 	let ios = false;
@@ -18,6 +20,7 @@
 
 	let busy = false;
 	let testBusy = false;
+	let sampleBusy = false;
 	let message: string | null = null;
 	let messageKind: 'ok' | 'error' = 'ok';
 
@@ -97,6 +100,20 @@
 		}
 		testBusy = false;
 	}
+
+	async function handleSampleTest() {
+		sampleBusy = true;
+		message = null;
+		try {
+			const res = await sendTestSamples();
+			message = `Sending ${res.scheduled} sample alerts ~${res.interval_seconds}s apart — lock your phone and watch.`;
+			messageKind = 'ok';
+		} catch {
+			message = 'Could not start the sample alerts.';
+			messageKind = 'error';
+		}
+		sampleBusy = false;
+	}
 </script>
 
 <section class="pn-pf-section">
@@ -135,6 +152,11 @@
 				<button class="pn-btn" type="button" on:click={handleTest} disabled={testBusy}>
 					{testBusy ? 'Sending…' : 'Send test'}
 				</button>
+				{#if $isAdmin}
+					<button class="pn-btn ghost" type="button" on:click={handleSampleTest} disabled={sampleBusy}>
+						{sampleBusy ? 'Starting…' : 'Preview all alerts'}
+					</button>
+				{/if}
 			</div>
 		{:else}
 			<button class="pn-btn" type="button" on:click={handleEnable} disabled={busy}>

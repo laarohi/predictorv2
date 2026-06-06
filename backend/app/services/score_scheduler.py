@@ -24,6 +24,12 @@ from app.database import async_session_maker
 from app.models._datetime import utc_now
 from app.services.locking import get_active_competition
 from app.services.receipts import send_phase1_receipts
+from app.services.push_triggers import (
+    send_knockout_lock_reminders,
+    send_match_result_pushes,
+    send_phase1_deadline_reminders,
+    send_phase2_opened,
+)
 from app.services.score_sync import has_active_or_imminent_match, sync_scores_once
 from app.services.snapshots import take_daily_snapshots
 
@@ -82,6 +88,29 @@ async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> No
             await _maybe_send_phase1_receipts(session)
         except Exception:  # noqa: BLE001
             logger.exception("score_scheduler: phase1 receipt tick failed")
+
+        # Push-notification triggers — each guarded so one failure can't skip
+        # the others. Results run after the score sync above so a match that
+        # just finished this tick is picked up immediately.
+        try:
+            await send_phase1_deadline_reminders(session)
+        except Exception:  # noqa: BLE001
+            logger.exception("score_scheduler: phase1 deadline push tick failed")
+
+        try:
+            await send_knockout_lock_reminders(session)
+        except Exception:  # noqa: BLE001
+            logger.exception("score_scheduler: KO lock reminder push tick failed")
+
+        try:
+            await send_match_result_pushes(session)
+        except Exception:  # noqa: BLE001
+            logger.exception("score_scheduler: result push tick failed")
+
+        try:
+            await send_phase2_opened(session)
+        except Exception:  # noqa: BLE001
+            logger.exception("score_scheduler: phase2-opened push tick failed")
 
 
 async def _maybe_send_phase1_receipts(session: AsyncSession) -> None:
