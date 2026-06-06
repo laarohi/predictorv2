@@ -79,6 +79,15 @@ class Settings(BaseSettings):
     # real users from a cloned DB.
     email_to_allowlist: str = ""
 
+    # Web Push (VAPID). Blank public/private keys disable push entirely —
+    # the push sender treats it as a no-op (mirrors resend_api_key). The
+    # private key signs each push JWT; the public key is served to browsers
+    # as the applicationServerKey. vapid_subject MUST be a real mailto: or
+    # https: URL — iOS rejects a junk/placeholder subject with 403 BadJwtToken.
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_subject: str = "mailto:aarohiluke@gmail.com"
+
     # Public-facing base URL for the frontend — used to construct
     # links in outbound emails (magic-link login etc.). No trailing
     # slash. Defaults to localhost dev so things work out of the box;

@@ -2,7 +2,17 @@
 
 from fastapi import APIRouter
 
-from app.api import admin, auth, competition, fixtures, leaderboard, predictions, scores, users
+from app.api import (
+    admin,
+    auth,
+    competition,
+    fixtures,
+    leaderboard,
+    predictions,
+    push,
+    scores,
+    users,
+)
 
 api_router = APIRouter()
 
@@ -13,4 +23,5 @@ api_router.include_router(fixtures.router, prefix="/fixtures", tags=["fixtures"]
 api_router.include_router(scores.router, prefix="/scores", tags=["scores"])
 api_router.include_router(leaderboard.router, prefix="/leaderboard", tags=["leaderboard"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
+api_router.include_router(push.router, prefix="/push", tags=["push"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

@@ -21,6 +21,8 @@ from app.models import (  # noqa: F401
     Fixture,
     LeaderboardSnapshot,
     MatchPrediction,
+    PushSend,
+    PushSubscription,
     Score,
     TeamPrediction,
     User,

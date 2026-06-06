@@ -16,6 +16,8 @@ from app.models.prediction_history import (
     PredictionSource,
     TeamPredictionHistory,
 )
+from app.models.push_send import PushSend
+from app.models.push_subscription import PushSubscription
 from app.models.score import Score
 from app.models.user import AuthProvider, User
 
@@ -40,5 +42,7 @@ __all__ = [
     "TeamPrediction",
     "TeamPredictionHistory",
     "PredictionPhase",
+    "PushSend",
+    "PushSubscription",
     "Score",
 ]

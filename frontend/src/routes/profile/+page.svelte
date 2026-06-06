@@ -5,6 +5,7 @@
 	import { getUserStats, changePassword } from '$api/auth';
 	import type { UserStats } from '$types';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
+	import PnPushToggle from '$components/panini/PnPushToggle.svelte';
 
 	$: if (!$isAuthenticated) goto('/login');
 
@@ -157,6 +158,8 @@
 					<a class="pn-btn" href="/profile/history">View my history →</a>
 				</div>
 			</section>
+
+			<PnPushToggle />
 
 			<!-- Account info section -->
 		<section class="pn-pf-section">
