@@ -53,6 +53,11 @@ services:
       # Public frontend URL — used as the base for links in outbound
       # emails (magic-link login, etc.). Override in production .env.
       - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-http://localhost:5173}
+      # Web Push (VAPID). Blank keys disable push (no-op, like a blank
+      # RESEND_API_KEY). Generate into .env on the VPS: python -m scripts.gen_vapid
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
+      - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:aarohiluke@gmail.com}
     volumes:
       - ./backend/app:/app/app
       - ./backend/scripts:/app/scripts
