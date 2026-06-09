@@ -23,6 +23,11 @@
 	 */
 	export let rows: GroupSummaryRow[] = [];
 	export let bonusPoints: number = 0;
+	/** Aggregate qualification points (group_advance + group_position) from
+	 *  the authoritative backend PointBreakdown. Rendered as its own summary
+	 *  row — the per-group split isn't exposed by the backend (best-thirds
+	 *  attribution is genuinely cross-group), so we don't fake one. */
+	export let qualPoints: number | null = null;
 	export let phaseTotal: number = 0;
 	export let title: string = 'Group stage';
 	export let titleEm: string = 'summary';
@@ -59,6 +64,15 @@
 					<td class="total">{r.total}</td>
 				</tr>
 			{/each}
+			{#if qualPoints !== null}
+				<tr class="bonus">
+					<td>+ qualification (R32 entries)</td>
+					<td>—</td>
+					<td>—</td>
+					<td>{qualPoints}</td>
+					<td>{qualPoints}</td>
+				</tr>
+			{/if}
 			{#if bonusPoints > 0}
 				<tr class="bonus">
 					<td>+ bonus questions</td>

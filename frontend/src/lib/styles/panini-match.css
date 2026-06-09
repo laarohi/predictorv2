@@ -1326,3 +1326,18 @@
 	cursor: not-allowed;
 }
 .pn .pn-md-card-blocked > * { pointer-events: none; }
+
+/* ── Group standings mini-panel (PnGroupStandingsMini wrappers) ─────────────
+ * Desktop: under the bubble plate (in-plate) or under the blocked panel.
+ * Mobile: its own card with the page's standard side margins. */
+.pn .pn-md-standings {
+	max-width: 560px;
+	margin: 18px 0 0;
+}
+.pn .pn-md-standings.in-plate {
+	margin: 18px 0 4px;
+	max-width: none;
+}
+.pn .pn-mm-standings {
+	margin: 14px 12px 0;
+}

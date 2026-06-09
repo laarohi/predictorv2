@@ -121,13 +121,20 @@
 				group: g,
 				outcome: b.outcome,
 				exact: b.exact,
-				qual: 0,           // pending backend per-group breakdown
+				// Qualification points are shown as one aggregate row below the
+				// group rows (qualPoints prop) — the backend doesn't expose a
+				// per-group split, and best-thirds attribution is cross-group.
+				qual: 0,
 				total: b.outcome + b.exact,
-				qualPending: true
+				qualPending: false
 			};
 		});
 		return rows;
 	})();
+
+	$: qualPts =
+		($currentUserPosition?.breakdown?.phase1?.group_advance_points ?? 0) +
+		($currentUserPosition?.breakdown?.phase1?.group_position_points ?? 0);
 
 	$: groupOutcomeTotal = groupRows.reduce((acc, r) => acc + r.outcome, 0);
 	$: groupExactTotal = groupRows.reduce((acc, r) => acc + r.exact, 0);
@@ -239,6 +246,7 @@
 				<DwGroupSummaryTable
 					rows={groupRows}
 					bonusPoints={bonusPts}
+					qualPoints={qualPts}
 					phaseTotal={phaseTotal}
 					title="Group stage"
 					titleEm="summary"

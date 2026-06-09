@@ -25,7 +25,9 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { isAuthenticated, user } from '$stores/auth';
+	import { currentTime } from '$stores/phase';
 	import { fetchAllFixtures, fixtureById } from '$stores/fixtures';
+	import { getActualStandings } from '$api/fixtures';
 	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
 	import {
 		getAgreements,
@@ -51,6 +53,7 @@
 	import { displayTeamName } from '$lib/utils/teamName';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import PnFlag from '$components/panini/PnFlag.svelte';
+	import PnGroupStandingsMini from '$components/panini/PnGroupStandingsMini.svelte';
 	import PnBubbleGrid from '$components/panini/PnBubbleGrid.svelte';
 	import PnPointsBar from '$components/panini/PnPointsBar.svelte';
 	import PnMatchLeaderboard from '$components/panini/PnMatchLeaderboard.svelte';
@@ -59,7 +62,8 @@
 		CommunityPredictionsResponse,
 		Fixture,
 		LeaderboardEntry,
-		LeaderboardResponse
+		LeaderboardResponse,
+		TeamStanding
 	} from '$types';
 
 	$: if (browser && !$isAuthenticated) goto('/login');
@@ -79,9 +83,9 @@
 		rarity_cap: 10
 	};
 	let blocked = false;
+	let groupStandings: TeamStanding[] | null = null;
 
-	onMount(async () => {
-		if (!$isAuthenticated) return;
+	async function loadData() {
 		try {
 			// Make sure fixtures + own predictions are loaded.
 			await Promise.all([fetchAllFixtures(), fetchMatchPredictions()]);
@@ -91,6 +95,19 @@
 				loadError = 'Fixture not found.';
 				loading = false;
 				return;
+			}
+
+			// Group fixtures get a live standings panel for tournament context.
+			// Hidden until at least one match in the group has been played.
+			if (f.group) {
+				getActualStandings()
+					.then((s) => {
+						const rows = s.standings[f.group as string] ?? [];
+						groupStandings = rows.some((t) => t.played > 0) ? rows : null;
+					})
+					.catch(() => {
+						groupStandings = null;
+					});
 			}
 
 			const state = matchState(f);
@@ -106,6 +123,7 @@
 				return;
 			}
 
+			blocked = false;
 			const [comm, cfg, ags, lb] = await Promise.all([
 				getCommunityPredictions(fixtureId),
 				getScoringConfig().catch(() => scoringConfig),
@@ -123,6 +141,11 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	onMount(() => {
+		if (!$isAuthenticated) return;
+		void loadData();
 	});
 
 	// Build the GridPlayer[] for the bubble grid + leaderboard.
@@ -166,6 +189,39 @@
 	$: awayWon = !!(state === 'finished' && actualScore && actualScore.away_score > actualScore.home_score);
 
 	$: kickoff = fixture ? fmtKickoff(fixture.kickoff) : { dow: '', date: '', time: '' };
+
+	// ---- Live countdowns (driven by the 1 Hz currentTime store) -----------
+	// Mirrors `locking.match_lock_before_kickoff` and the copy in the
+	// blocked panel below. Display-only — the server decides actual locks.
+	const LOCK_MINUTES = 15;
+
+	function fmtCountdown(ms: number): string {
+		const s = Math.max(0, Math.floor(ms / 1000));
+		const d = Math.floor(s / 86_400);
+		const h = Math.floor((s % 86_400) / 3600);
+		const m = Math.floor((s % 3600) / 60);
+		if (d > 0) return `${d}d ${h}h`;
+		if (h > 0) return `${h}h ${m}m`;
+		if (m > 0) return `${m}m ${s % 60}s`;
+		return `${s}s`;
+	}
+
+	$: kickoffMs = fixture ? new Date(fixture.kickoff).getTime() : 0;
+	$: lockMs = kickoffMs - LOCK_MINUTES * 60_000;
+	$: nowMs = $currentTime.getTime();
+	$: koCountdown =
+		state === 'locked' && kickoffMs > nowMs ? fmtCountdown(kickoffMs - nowMs) : null;
+	$: lockCountdown = state === 'open' && lockMs > nowMs ? fmtCountdown(lockMs - nowMs) : null;
+
+	// When the lock moment passes while the blocked page is open, reload —
+	// the community plot + per-match leaderboard become visible at lock.
+	// Retries every 30s while still blocked (covers client/server clock skew;
+	// the server-computed is_locked on the refreshed fixture is what decides).
+	let lastLockReloadMs = 0;
+	$: if (blocked && !loading && fixture && nowMs >= lockMs && nowMs - lastLockReloadMs > 30_000) {
+		lastLockReloadMs = nowMs;
+		void loadData();
+	}
 
 	function statePillLabel(): string {
 		if (state === 'finished') return 'FULL TIME';
@@ -255,6 +311,13 @@
 										<b>{stageShort(fixture.stage)}</b>
 									{/if}
 								</span>
+								{#if koCountdown}
+									<span class="pip">·</span>
+									<span>KO IN <b>{koCountdown}</b></span>
+								{:else if lockCountdown}
+									<span class="pip">·</span>
+									<span>LOCKS IN <b>{lockCountdown}</b></span>
+								{/if}
 							</div>
 						</div>
 
@@ -338,8 +401,20 @@
 							Community predictions become visible <b>15 minutes before kickoff</b>. Come back when
 							the match locks to see the full pool, the score-distribution plot, and the per-match
 							leaderboard.
+							{#if lockCountdown}
+								This match locks in <b>{lockCountdown}</b> — the page will update by itself.
+							{/if}
 						</div>
 					</div>
+					{#if groupStandings && fixture.group}
+						<div class="pn-md-standings">
+							<PnGroupStandingsMini
+								rows={groupStandings}
+								group={fixture.group}
+								highlight={[fixture.home_team, fixture.away_team]}
+							/>
+						</div>
+					{/if}
 				{:else}
 					<div class="pn-md-bottom">
 						<!-- LEFT — bubble plate -->
@@ -385,6 +460,15 @@
 									pointsOutcome={scoringConfig.outcome_points}
 								/>
 							</div>
+							{#if groupStandings && fixture.group}
+								<div class="pn-md-standings in-plate">
+									<PnGroupStandingsMini
+										rows={groupStandings}
+										group={fixture.group}
+										highlight={[fixture.home_team, fixture.away_team]}
+									/>
+								</div>
+							{/if}
 						</section>
 
 						<!-- RIGHT — leaderboard. Wrapped so the inner panel can be
@@ -437,6 +521,11 @@
 					<div class="meta-line">
 						{fixture.group ? 'Group ' : ''}<b>{fixture.group ?? stageShort(fixture.stage)}</b>
 						· <b>{kickoff.date}</b> · KO <b>{kickoff.time}</b>
+						{#if koCountdown}
+							· in <b>{koCountdown}</b>
+						{:else if lockCountdown}
+							· locks in <b>{lockCountdown}</b>
+						{/if}
 					</div>
 				</div>
 
@@ -445,8 +534,20 @@
 						<div class="h">Predictions are blind until lock</div>
 						<div class="b">
 							Community predictions become visible <b>15 minutes before kickoff</b>.
+							{#if lockCountdown}
+								Locks in <b>{lockCountdown}</b>.
+							{/if}
 						</div>
 					</div>
+					{#if groupStandings && fixture.group}
+						<div class="pn-mm-standings">
+							<PnGroupStandingsMini
+								rows={groupStandings}
+								group={fixture.group}
+								highlight={[fixture.home_team, fixture.away_team]}
+							/>
+						</div>
+					{/if}
 				{:else}
 					<!-- Mobile breakdown strip -->
 					{#if breakdown}
@@ -549,6 +650,16 @@
 							/>
 						</div>
 					</div>
+
+					{#if groupStandings && fixture.group}
+						<div class="pn-mm-standings">
+							<PnGroupStandingsMini
+								rows={groupStandings}
+								group={fixture.group}
+								highlight={[fixture.home_team, fixture.away_team]}
+							/>
+						</div>
+					{/if}
 
 					<!-- Mobile leaderboard — compact layout (own component) -->
 					<PnMatchLeaderboardMobile
