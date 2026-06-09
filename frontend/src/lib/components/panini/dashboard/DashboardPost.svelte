@@ -21,7 +21,6 @@
 	import DwKpiRow from './widgets/DwKpiRow.svelte';
 	import DwPointsBySource, { type Source } from './widgets/DwPointsBySource.svelte';
 	import DwHighlights from './widgets/DwHighlights.svelte';
-	import DwMemorialStrip from './widgets/DwMemorialStrip.svelte';
 
 	import { user } from '$stores/auth';
 	import { fetchAllFixtures, fixtures } from '$stores/fixtures';
@@ -181,8 +180,8 @@
 			const s = highlights.best_exact_streak;
 			cards.push({
 				label: 'Best exact streak',
-				valueHtml: `<em>${s.count}</em> matches`,
-				desc: `Run of ${s.count} consecutive exacts · <b>+${s.count * 15} pts</b>`,
+				valueHtml: `<em>${s.count}</em> ${s.count === 1 ? 'match' : 'matches'}`,
+				desc: `Run of ${s.count} consecutive exact${s.count === 1 ? '' : 's'} · <b>+${s.count * 15} pts</b>`,
 				tag: { label: '★ STREAK', tone: 'green' }
 			});
 		}
@@ -219,13 +218,15 @@
 		return cards;
 	})();
 
-	// ---- Memorial strip ----------------------------------------------------
-	$: memorialLeft = (() => {
+	// ---- Sign-off (podium header meta) -------------------------------------
+	// Was a standalone DwMemorialStrip below the fold; folded into the
+	// podium's top-right meta so the page fits one 900px screen.
+	$: signoffLine = (() => {
 		const final = $fixtures.find((f) => f.stage === 'final' && f.status === 'finished');
-		if (!final || !final.score) return '<b>VOL. I CLOSED</b>';
+		if (!final || !final.score) return 'Vol. I closed';
 		const ko = new Date(final.kickoff);
 		const dateStr = ko.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-		return `<b>VOL. I CLOSED</b> · ${dateStr} · ${teamCode(final.home_team)} ${final.score.home_score}–${final.score.away_score} ${teamCode(final.away_team)}`;
+		return `Final · ${teamCode(final.home_team)} ${final.score.home_score}–${final.score.away_score} ${teamCode(final.away_team)} · ${dateStr}`;
 	})();
 
 	$: stripYou = rank
@@ -243,8 +244,8 @@
 			title="It's a wrap."
 			titleEm="wrap"
 			label="Vol. I · CxF Predictaa"
-			metaLine1={`${rankOf} players · ${$fixtures.length} matches`}
-			metaLine2=""
+			metaLine1={`${rankOf} players · ${$fixtures.length} matches · ${signoffLine}`}
+			metaLine2="Vol. I closed · next edition 2030"
 			{champion}
 			{groupsWinner}
 			{bracketWinner}
@@ -254,6 +255,7 @@
 		/>
 
 		<DwKpiRow
+			compact
 			rank={rank}
 			rankOf={rankOf}
 			rankDelta={0}
@@ -273,7 +275,7 @@
 			trajectoryTodayPts={0}
 		/>
 
-		<section class="pn-dash-cols two">
+		<section class="pn-dash-cols two" style="margin-bottom: 0;">
 			<div class="col">
 				{#if pointsSources.length > 0}
 					<DwPointsBySource sources={pointsSources} total={total} meta="final" />
@@ -286,9 +288,5 @@
 			</div>
 		</section>
 
-		<DwMemorialStrip
-			leftHtml={memorialLeft}
-			rightHtml='Next edition · <b style="color: var(--red);">2030</b>'
-		/>
 	</div>
 </PnPageShell>

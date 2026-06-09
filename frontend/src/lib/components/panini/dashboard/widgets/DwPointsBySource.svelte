@@ -51,9 +51,10 @@
 		</div>
 	{/each}
 
+	<!-- Total + breakdown link share one closing line — a stacked total
+	     row plus a separate foot pushed the post dashboard past 900px. -->
 	<div class="total">
-		<span>Total</span>
-		<span class="v">{totalSum} pts</span>
+		<span>Total <span class="v">{totalSum} pts</span></span>
+		<a class="foot-link" href={footHref}>{footLabel}</a>
 	</div>
-	<div class="foot"><a href={footHref}>{footLabel}</a></div>
 </div>

@@ -1825,9 +1825,9 @@
 	color: var(--paper);
 	border: 3px solid var(--ink);
 	box-shadow: 10px 10px 0 var(--ink);
-	padding: 28px 36px 26px;
+	padding: 14px 26px 10px;
 	position: relative;
-	margin-bottom: 22px;
+	margin-bottom: 12px;
 	overflow: hidden;
 }
 .pn .pn-podium::before {
@@ -1844,9 +1844,9 @@
 	gap: 24px;
 	position: relative;
 	z-index: 1;
-	padding-bottom: 18px;
+	padding-bottom: 8px;
 	border-bottom: 2px solid var(--gold);
-	margin-bottom: 26px;
+	margin-bottom: 14px;
 }
 .pn .pn-podium .pod-h .label {
 	font-family: var(--mono);
@@ -1866,7 +1866,7 @@
 }
 .pn .pn-podium .pod-h h1 {
 	font-family: var(--display);
-	font-size: 48px;
+	font-size: 30px;
 	line-height: 0.95;
 	letter-spacing: -0.015em;
 	text-transform: uppercase;
@@ -1904,22 +1904,22 @@
 	background: var(--paper);
 	color: var(--ink);
 	border: 2.5px solid var(--ink);
-	padding: 16px 18px 14px;
+	padding: 12px 16px 10px;
 	position: relative;
 	box-shadow: 5px 5px 0 var(--ink);
 }
 .pn .pn-podium .pod-step.first {
 	background: var(--gold);
-	padding: 26px 22px 20px;
+	padding: 16px 18px 12px;
 	box-shadow: 6px 6px 0 var(--red);
 }
 .pn .pn-podium .pod-step.second {
 	background: var(--paper-2);
-	transform: translateY(14px);
+	transform: translateY(4px);
 }
 .pn .pn-podium .pod-step.third {
 	background: var(--paper);
-	transform: translateY(14px);
+	transform: translateY(4px);
 }
 .pn .pn-podium .pod-step .rank-badge {
 	position: absolute;
@@ -1957,13 +1957,13 @@
 }
 .pn .pn-podium .pod-step .nm {
 	font-family: var(--display);
-	font-size: 24px;
+	font-size: 20px;
 	line-height: 1;
 	text-transform: uppercase;
 	letter-spacing: 0.01em;
 	margin-top: 8px;
 }
-.pn .pn-podium .pod-step.first .nm { font-size: 32px; }
+.pn .pn-podium .pod-step.first .nm { font-size: 26px; }
 .pn .pn-podium .pod-step .h {
 	font-family: var(--mono);
 	font-size: 10.5px;
@@ -1973,20 +1973,20 @@
 	text-transform: none;
 }
 .pn .pn-podium .pod-step .pts {
-	margin-top: 14px;
+	margin-top: 5px;
 	display: flex;
 	align-items: baseline;
 	gap: 6px;
 	font-family: var(--display);
 }
 .pn .pn-podium .pod-step .pts .v {
-	font-size: 44px;
+	font-size: 36px;
 	line-height: 1;
 	letter-spacing: -0.02em;
 	color: var(--red);
 }
 .pn .pn-podium .pod-step.first .pts .v {
-	font-size: 56px;
+	font-size: 44px;
 	color: var(--ink);
 }
 .pn .pn-podium .pod-step .pts .u {
@@ -2007,8 +2007,8 @@
 	color: var(--ink-2);
 }
 .pn .pn-podium .winner-line {
-	margin-top: 22px;
-	padding-top: 16px;
+	margin-top: 10px;
+	padding-top: 8px;
 	border-top: 2px solid var(--gold);
 	display: flex;
 	justify-content: space-between;
@@ -2064,11 +2064,11 @@
 	background: var(--paper);
 	border: 2.5px solid var(--ink);
 	box-shadow: 5px 5px 0 var(--ink);
-	padding: 16px 18px;
+	padding: 12px 16px;
 	display: flex;
 	flex-direction: column;
 }
-.pn .pn-source .src-row + .src-row { margin-top: 11px; }
+.pn .pn-source .src-row + .src-row { margin-top: 8px; }
 .pn .pn-source .src-row .lbl {
 	display: flex;
 	justify-content: space-between;
@@ -2115,19 +2115,30 @@
 .pn .pn-source .src-row .bar .fill.bonus { background: var(--gold); }
 .pn .pn-source .total {
 	margin-top: auto;
-	padding-top: 12px;
+	padding-top: 9px;
 	border-top: 2px solid var(--ink);
 	display: flex;
 	justify-content: space-between;
 	align-items: baseline;
 	font-family: var(--display);
-	font-size: 16px;
+	font-size: 14px;
 	text-transform: uppercase;
+	gap: 12px;
 }
 .pn .pn-source .total .v {
-	font-size: 24px;
+	font-size: 20px;
 	color: var(--red);
 	letter-spacing: -0.02em;
+	margin-left: 6px;
+}
+.pn .pn-source .total .foot-link {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-2);
+	text-decoration: underline;
+	text-underline-offset: 3px;
 }
 .pn .pn-source .foot {
 	font-family: var(--mono);
@@ -2152,7 +2163,7 @@
 	background: var(--paper);
 	border: 2.5px solid var(--ink);
 	box-shadow: 5px 5px 0 var(--ink);
-	padding: 18px 20px;
+	padding: 12px 16px;
 	display: flex;
 	flex-direction: column;
 }
@@ -2184,7 +2195,7 @@
 .pn .pn-hlights .h-card {
 	background: var(--paper-2);
 	border: 2px solid var(--ink);
-	padding: 12px 14px;
+	padding: 8px 12px;
 	position: relative;
 }
 .pn .pn-hlights .h-card .h-l {
@@ -2196,7 +2207,7 @@
 }
 .pn .pn-hlights .h-card .h-v {
 	font-family: var(--display);
-	font-size: 28px;
+	font-size: 24px;
 	line-height: 0.95;
 	letter-spacing: -0.02em;
 	margin-top: 4px;
@@ -2243,8 +2254,8 @@
 .pn .pn-final-strip {
 	background: var(--paper-2);
 	border: 2px solid var(--ink);
-	padding: 12px 18px;
-	margin-top: 22px;
+	padding: 8px 16px;
+	margin-top: 14px;
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
