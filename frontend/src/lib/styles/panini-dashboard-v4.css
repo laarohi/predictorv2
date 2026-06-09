@@ -1591,6 +1591,9 @@
 @media (max-width: 700px) {
 	.pn .pn-summary .halves { grid-template-columns: 1fr; }
 	.pn .pn-summary .halves table + table { border-left: none; }
+	/* Stacked halves read as one continuous list — repeating the column
+	 * header mid-list looks like a rendering glitch. */
+	.pn .pn-summary .halves table + table thead { display: none; }
 }
 .pn .pn-summary th {
 	font-family: var(--mono);
@@ -2311,6 +2314,22 @@
 	padding: 8px 28px 12px;
 }
 @media (max-width: 900px) {
+	/* Podium header: the meta block (players · matches · final score ·
+	 * sign-off) follows the title at mono size instead of looming above
+	 * it; the winner line stacks. */
+	.pn .pn-podium .pod-h { grid-template-columns: 1fr; gap: 8px; align-items: start; }
+	.pn .pn-podium .pod-h .meta { text-align: left; font-size: 10px; }
+	.pn .pn-podium .pod-h .meta b { font-size: 11px; display: inline; }
+	.pn .pn-podium .winner-line {
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 10px;
+	}
+	.pn .pn-podium .winner-line > div:last-child {
+		flex-wrap: wrap;
+		gap: 10px !important;
+	}
+	.pn .pn-podium .winner-line .picked { white-space: normal; }
 	.pn .pn-kpi-row-v4 {
 		/* 3 cells across × 2 rows on mobile. Source order yields:
 		 *   Row 1 — Rank · Total · Trajectory

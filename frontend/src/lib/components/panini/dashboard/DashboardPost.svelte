@@ -74,7 +74,7 @@
 	$: champion = $leaderboard[0]
 		? {
 				name: $leaderboard[0].user_name,
-				hint: `${$leaderboard[0].exact_scores} exact · final · led ${$leaderboard.length > 0 ? '—' : '—'}`,
+				hint: `${$leaderboard[0].exact_scores} exact · ${$leaderboard[0].correct_outcomes} outc · final`,
 				points: $leaderboard[0].total_points,
 				unit: 'pts'
 			}

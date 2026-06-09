@@ -207,7 +207,7 @@
 			titleHtml="Real groups are in. Re-pick the <em>knockout</em>."
 			lede={`Phase 1 ended. Group stage scored you <b style="color: var(--gold);">${phaseTotal} pts</b>. Your original bracket carries over until you update it — but the real R32 matchups are now set.`}
 			{countdown}
-			progressLabel="Phase 2 bracket — picks set"
+			progressLabel="Phase 2 bracket"
 			progressValue={bracketFilled}
 			progressTotal={BRACKET_TOTAL_SLOTS_PHASE2}
 			progressUnit="set"
