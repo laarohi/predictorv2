@@ -21,8 +21,12 @@ export function getGoogleAuthUrl(): string {
 	return '/api/auth/google';
 }
 
-export async function changePassword(data: PasswordChange): Promise<{ message: string }> {
-	return api.post<{ message: string }>('/auth/me/password', data);
+export async function changePassword(
+	data: PasswordChange
+): Promise<{ message: string; access_token: string }> {
+	// The backend revokes all outstanding tokens (token_version bump) and
+	// returns a fresh one so this session can stay signed in.
+	return api.post<{ message: string; access_token: string }>('/auth/me/password', data);
 }
 
 export async function getUserStats(): Promise<UserStats> {

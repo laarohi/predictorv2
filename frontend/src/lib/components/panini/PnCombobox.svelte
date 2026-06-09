@@ -34,6 +34,7 @@
 	/** Cap on rendered results — large lists (~1.2k players) stay snappy and
 	 *  the user is nudged to keep typing to narrow down. */
 	export let limit: number = 50;
+	export let disabled: boolean = false;
 
 	const dispatch = createEventDispatcher<{ change: string }>();
 
@@ -67,7 +68,7 @@
 	})();
 
 	async function open() {
-		if (isOpen) return;
+		if (isOpen || disabled) return;
 		isOpen = true;
 		query = '';
 		activeIndex = 0;
@@ -151,6 +152,7 @@
 				query = e.currentTarget.value;
 				onInput();
 			}}
+			{disabled}
 			on:focus={open}
 			on:keydown={handleKeydown}
 			role="combobox"
@@ -158,7 +160,7 @@
 			aria-controls="pn-cb-list"
 			aria-autocomplete="list"
 		/>
-		{#if selected && !isOpen}
+		{#if selected && !isOpen && !disabled}
 			<button type="button" class="pn-cb-clear" title="Clear" on:click={clear}>×</button>
 		{:else}
 			<span class="caret" aria-hidden="true">▾</span>

@@ -11,7 +11,11 @@ from app.dependencies import CurrentUser, DbSession
 from app.models._datetime import utc_now
 from app.models.competition import Competition
 from app.models.user import User
-from app.services.locking import get_current_phase, is_phase2_bracket_locked
+from app.services.locking import (
+    get_current_phase,
+    is_phase1_locked,
+    is_phase2_bracket_locked,
+)
 from app.config import get_tournament_config
 from app.services.scoring import get_scoring_config
 
@@ -113,10 +117,9 @@ async def get_phase_status(
     current_phase = await get_current_phase(session)
     bracket_locked = await is_phase2_bracket_locked(session)
 
-    # Check if phase 1 is locked (past deadline)
-    phase1_locked = False
-    if competition and competition.phase1_deadline:
-        phase1_locked = utc_now() >= competition.phase1_deadline
+    # Check if phase 1 is locked (past deadline) — single source of truth
+    # in the locking service, same rule the write endpoints enforce.
+    phase1_locked = await is_phase1_locked(session)
 
     return PhaseStatus(
         current_phase=current_phase.value,

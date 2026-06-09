@@ -31,9 +31,19 @@ export const phase1Deadline = derived(
 	($phaseStatus) => $phaseStatus?.phase1_deadline ?? null
 );
 
+// Composed with the ticking clock so a tab left open across the deadline
+// flips to locked at the exact second, even though phaseStatus itself is
+// only re-fetched periodically. The server stays authoritative at save
+// time; this only keeps the UI honest. (Booleans short-circuit in Svelte's
+// equality check, so the 1 Hz tick doesn't re-notify subscribers.)
 export const isPhase1Locked = derived(
-	phaseStatus,
-	($phaseStatus) => $phaseStatus?.phase1_locked ?? false
+	[phaseStatus, currentTime],
+	([$phaseStatus, $now]) => {
+		if (!$phaseStatus) return false;
+		if ($phaseStatus.phase1_locked) return true;
+		const deadline = $phaseStatus.phase1_deadline;
+		return deadline !== null && new Date(deadline).getTime() <= $now.getTime();
+	}
 );
 
 // Derived stores - Phase 2
@@ -47,9 +57,16 @@ export const isPhase2Active = derived(
 	($phaseStatus) => $phaseStatus?.is_phase2_active ?? false
 );
 
+// Same live-deadline composition as isPhase1Locked above.
 export const isPhase2BracketLocked = derived(
-	phaseStatus,
-	($phaseStatus) => $phaseStatus?.phase2_bracket_locked ?? false
+	[phaseStatus, currentTime],
+	([$phaseStatus, $now]) => {
+		if (!$phaseStatus) return false;
+		if ($phaseStatus.phase2_bracket_locked) return true;
+		if (!$phaseStatus.is_phase2_active) return false;
+		const deadline = $phaseStatus.phase2_bracket_deadline;
+		return deadline !== null && new Date(deadline).getTime() <= $now.getTime();
+	}
 );
 
 export const phase2BracketDeadline = derived(
@@ -152,6 +169,33 @@ export async function fetchPhaseStatus(): Promise<void> {
 	} finally {
 		phaseLoading.set(false);
 	}
+}
+
+/**
+ * Keep phaseStatus fresh in long-lived tabs: re-fetch every 60s and on
+ * tab-refocus. The deadline-composed lock stores above handle the exact
+ * flip moment; this true-up catches server-side changes (admin moves a
+ * deadline, activates Phase 2) and refreshes per-fixture lock state
+ * consumers that re-read on phaseStatus changes.
+ *
+ * Returns a cleanup function; call from the root layout's onMount.
+ */
+export function startPhaseStatusRefresh(intervalMs = 60_000): () => void {
+	if (!browser) return () => {};
+
+	const interval = setInterval(() => {
+		void fetchPhaseStatus();
+	}, intervalMs);
+
+	const onVisible = () => {
+		if (document.visibilityState === 'visible') void fetchPhaseStatus();
+	};
+	document.addEventListener('visibilitychange', onVisible);
+
+	return () => {
+		clearInterval(interval);
+		document.removeEventListener('visibilitychange', onVisible);
+	};
 }
 
 // Utility functions

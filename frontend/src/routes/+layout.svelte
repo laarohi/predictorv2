@@ -3,7 +3,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { isAuthenticated, initAuth } from '$stores/auth';
-	import { fetchPhaseStatus, uxPhaseOverride } from '$stores/phase';
+	import { fetchPhaseStatus, startPhaseStatusRefresh, uxPhaseOverride } from '$stores/phase';
 	import type { ComponentType } from 'svelte';
 	import type { UxPhase } from '$types';
 
@@ -30,6 +30,8 @@
 		// Remove the cold-load splash (app.html) now that the app has mounted.
 		document.getElementById('app-splash')?.remove();
 		initAuth();
+		// Long-lived tabs: keep lock/phase state honest across the deadline.
+		const stopPhaseRefresh = startPhaseStatusRefresh();
 		if (import.meta.env.DEV) {
 			const param = $page.url.searchParams.get('uxPhase');
 			if (param && VALID_UX_PHASES.has(param as UxPhase)) {
@@ -45,6 +47,7 @@
 				DevPhasePill = m.default;
 			});
 		}
+		return stopPhaseRefresh;
 	});
 
 	$: if ($isAuthenticated && !hasLoadedPhase) {

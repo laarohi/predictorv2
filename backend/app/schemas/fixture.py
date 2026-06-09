@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime, timedelta
 
-from pydantic import BaseModel, Field
+from pydantic import AwareDatetime, BaseModel, Field
 
 from app.models.fixture import MatchStatus
 
@@ -65,7 +65,9 @@ class FixtureCreate(BaseModel):
     competition_id: uuid.UUID
     home_team: str = Field(..., min_length=1, max_length=100)
     away_team: str = Field(..., min_length=1, max_length=100)
-    kickoff: datetime
+    # AwareDatetime: kickoff drives the lock window; a naive timestamp would
+    # silently shift the lock by the sender's UTC offset.
+    kickoff: AwareDatetime
     stage: str = Field(..., min_length=1, max_length=50)
     group: str | None = Field(None, max_length=10)
     match_number: int | None = None
@@ -77,7 +79,7 @@ class FixtureUpdate(BaseModel):
 
     home_team: str | None = Field(None, min_length=1, max_length=100)
     away_team: str | None = Field(None, min_length=1, max_length=100)
-    kickoff: datetime | None = None
+    kickoff: AwareDatetime | None = None
     stage: str | None = Field(None, min_length=1, max_length=50)
     group: str | None = Field(None, max_length=10)
     match_number: int | None = None

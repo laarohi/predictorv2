@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { isAuthenticated, user, logout } from '$stores/auth';
+	import { isAuthenticated, user, logout, token } from '$stores/auth';
 	import { getUserStats, changePassword } from '$api/auth';
 	import type { UserStats } from '$types';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
@@ -54,6 +54,9 @@
 		passwordChanging = true;
 		try {
 			const r = await changePassword({ current_password: currentPassword, new_password: newPassword });
+			// The change revoked every outstanding token (other devices are
+			// signed out); adopt the fresh one so this session survives.
+			if (r.access_token) token.set(r.access_token);
 			passwordSuccess = r.message;
 			currentPassword = '';
 			newPassword = '';

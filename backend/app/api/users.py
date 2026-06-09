@@ -233,7 +233,8 @@ async def get_user_predictions(
     """Get all visible predictions for a user.
 
     Blind pool enforced: only includes predictions for fixtures that are
-    locked (5 min before kickoff) or finished.
+    locked (configured `locking.match_lock_before_kickoff` window before
+    kickoff) or finished.
     """
     # Verify user exists
     result = await session.execute(select(User).where(User.id == user_id))

@@ -166,7 +166,22 @@ export async function saveAllPredictions(): Promise<boolean> {
 			return current;
 		});
 
-		unsavedChanges.set({});
+		// The batch endpoint silently SKIPS locked/unknown fixtures and only
+		// returns the rows it wrote. Clearing all unsaved state on a 200
+		// would show "saved" for picks that never persisted — keep the
+		// skipped ones dirty and surface the miss.
+		const savedIds = new Set(updated.map((p) => p.fixture_id));
+		const skipped = Object.fromEntries(
+			changeEntries.filter(([fixtureId]) => !savedIds.has(fixtureId))
+		);
+		unsavedChanges.set(skipped);
+		const skippedCount = Object.keys(skipped).length;
+		if (skippedCount > 0) {
+			matchPredictionsError.set(
+				`${skippedCount} prediction${skippedCount === 1 ? '' : 's'} could not be saved — the match${skippedCount === 1 ? ' has' : 'es have'} locked.`
+			);
+			return false;
+		}
 		return true;
 	} catch (e) {
 		matchPredictionsError.set(e instanceof Error ? e.message : 'Failed to save predictions');

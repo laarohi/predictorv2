@@ -4,12 +4,12 @@ import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import AwareDatetime, BaseModel
 from sqlalchemy import func
 from sqlmodel import select
 
 from app.dependencies import AdminUser, DbSession
-from app.models._datetime import utc_now
+from app.models._datetime import aware_utc, utc_now
 from app.models.bonus import BonusAnswer
 from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
@@ -88,13 +88,15 @@ class CompetitionAdminView(BaseModel):
 class Phase1DeadlineRequest(BaseModel):
     """Request to set Phase 1 deadline."""
 
-    deadline: datetime  # When Phase 1 predictions lock
+    # AwareDatetime: a naive timestamp here would silently shift the lock by
+    # the sender's UTC offset — the single most lock-critical field there is.
+    deadline: AwareDatetime  # When Phase 1 predictions lock
 
 
 class Phase2ActivateRequest(BaseModel):
     """Request to activate Phase 2."""
 
-    bracket_deadline: datetime  # When Phase 2 bracket predictions lock
+    bracket_deadline: AwareDatetime  # When Phase 2 bracket predictions lock
 
 
 @router.get("/stats", response_model=AdminStats)
@@ -342,6 +344,33 @@ async def activate_phase2(
             detail="Phase 2 is already active"
         )
 
+    if request.bracket_deadline <= utc_now():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="bracket_deadline must be in the future",
+        )
+
+    # The bracket must lock before the first knockout match kicks off:
+    # scoring counts every TeamPrediction row once a fixture finishes, so a
+    # deadline after kickoff would let still-editable picks score (and leak
+    # onto the leaderboard while others can still counter-pick).
+    result = await session.execute(
+        select(func.min(Fixture.kickoff)).where(
+            Fixture.competition_id == competition.id,
+            Fixture.stage != "group",
+            Fixture.status == "scheduled",
+        )
+    )
+    first_ko_kickoff = result.scalar_one_or_none()
+    if first_ko_kickoff and request.bracket_deadline > aware_utc(first_ko_kickoff):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "bracket_deadline must not be after the first knockout "
+                f"kickoff ({aware_utc(first_ko_kickoff).isoformat()})"
+            ),
+        )
+
     # Activate Phase 2
     competition.is_phase2_active = True
     competition.phase2_activated_at = utc_now()
@@ -417,6 +446,18 @@ async def set_phase1_deadline(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No active competition found"
+        )
+
+    # One-way after lock: once the deadline has passed, predictions are
+    # locked and the deadline must never move again — re-posting a later
+    # deadline would silently reopen every Phase 1 prediction.
+    if competition.phase1_deadline and utc_now() >= aware_utc(competition.phase1_deadline):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Phase 1 deadline has already passed; predictions are locked "
+                "and the deadline can no longer be changed."
+            ),
         )
 
     competition.phase1_deadline = request.deadline
