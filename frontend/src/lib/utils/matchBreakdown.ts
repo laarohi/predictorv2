@@ -347,6 +347,18 @@ export function computeBreakdown(
 	};
 }
 
+/**
+ * Kickoff label for the dashboard match-table score chip ("WED 21:00",
+ * rendered in the user's local timezone). Lives inside the chip that
+ * otherwise shows "VS" on upcoming rows, so it adds no table column.
+ */
+export function koChipLabel(kickoff: string): string {
+	const d = new Date(kickoff);
+	const dow = d.toLocaleDateString('en-GB', { weekday: 'short' }).toUpperCase();
+	const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+	return `${dow} ${time}`;
+}
+
 /** Format a stage code (round_of_32, quarter_final, etc.) for display. */
 export function stageLabel(stage: string): string {
 	const map: Record<string, string> = {

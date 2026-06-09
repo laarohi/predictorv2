@@ -144,6 +144,14 @@
 	min-height: 140px;
 	min-width: 0;
 }
+/* Compact variant for the busy phases (KO / between / post) where the
+ * 140px cells push the page past one 900px screen. The group-stage
+ * dashboard keeps the tall cells — it has the spare vertical space. */
+.pn .pn-kpi-row-v4.compact { margin-bottom: 16px; }
+.pn .pn-kpi-row-v4.compact .pn-kpi-v4 { min-height: 96px; padding: 8px 14px; }
+.pn .pn-kpi-row-v4.compact .pn-kpi-v4 .v { font-size: 40px; }
+.pn .pn-kpi-row-v4.compact .pn-kpi-v4.trajectory .spark-wrap,
+.pn .pn-kpi-row-v4.compact .pn-kpi-v4.trajectory .spark-wrap svg { height: 40px; }
 .pn .pn-kpi-v4 .l {
 	/* Stat label ("Rank", "Total", "Exact", …). Scaled to 11px to track
 	 * the overall size reduction, but the weight 600 + --ink-2 contrast
@@ -538,6 +546,14 @@
 	font-size: 11px;
 	letter-spacing: 0.14em;
 }
+/* Kickoff variant — "WED 21:00" replaces the VS placeholder on upcoming
+ * rows. Slightly tighter tracking than VS so the longer label keeps the
+ * same visual weight without widening the chip footprint much. */
+.pn .mtab .sc.vs.ko {
+	letter-spacing: 0.03em;
+	font-size: 10.5px;
+	padding: 4px 7px 3px;
+}
 
 /* ---- Pick cell — color-coded pill (or dashed empty) --------------- */
 .pn .mtab .c-pick {
@@ -721,6 +737,30 @@
 	box-sizing: border-box;
 }
 .pn .pn-top5 .row:last-child { border-bottom: 0; }
+/* Dense rows — name + hint share one line (hint ellipsized). ~80px
+ * shorter over six rows; used where the dashboard must fit 900px. */
+.pn .pn-top5.dense .row {
+	min-height: 38px;
+	padding: 6px 16px;
+}
+.pn .pn-top5.dense .row .ident {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+.pn .pn-top5.dense .row .ident .nm {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	flex-shrink: 1;
+}
+.pn .pn-top5.dense .row .ident .h {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	margin-top: 0;
+}
 .pn .pn-top5 .row.gold { background: rgba(212, 154, 46, 0.18); }
 .pn .pn-top5 .row.you {
 	background: var(--red);
@@ -786,10 +826,10 @@
 	box-shadow: 5px 5px 0 var(--ink);
 	display: grid;
 	grid-template-columns: auto 1fr auto;
-	gap: 18px;
+	gap: 16px;
 	align-items: center;
-	padding: 12px 18px 12px 16px;
-	margin-bottom: 18px;
+	padding: 8px 16px 8px 14px;
+	margin-bottom: 14px;
 	position: relative;
 }
 .pn .pn-alert-v4::before {
@@ -804,8 +844,8 @@
 .pn .pn-alert-v4.red { border-color: var(--red); }
 .pn .pn-alert-v4.red::before { background: var(--red); }
 .pn .pn-alert-v4 .ico {
-	width: 42px;
-	height: 42px;
+	width: 30px;
+	height: 30px;
 	border: 2.5px solid var(--ink);
 	background: var(--gold);
 	color: var(--ink);
@@ -1565,209 +1605,154 @@
 }
 
 /* ============================================================
- * SCORING JOURNEY (Phase 4) — stages as rows, EARNED / AVAILABLE cols
+ * SCORING JOURNEY (Phase 4) — per-phase strip of stage sticker cells.
+ * Hero number = gold points still in play at that stage; sublines =
+ * alive picks + banked points. No tooltips (they broke 375px), no
+ * fixed widths — the 5 cells share the row via an equal grid.
  * ============================================================ */
-.pn .pn-sj2 {
+.pn .pn-sj3 {
 	background: var(--paper);
 	border: 2.5px solid var(--ink);
-	box-shadow: 5px 5px 0 var(--ink);
-	padding: 16px 20px 18px;
-	display: flex;
-	flex-direction: column;
-	gap: 16px;
+	box-shadow: 6px 6px 0 var(--ink);
+	padding: 10px 16px 6px;
 }
-.pn .pn-sj2 .sj2-h {
+.pn .pn-sj3 .sj3-h {
 	display: flex;
 	justify-content: space-between;
 	align-items: baseline;
-	border-bottom: 2px solid var(--ink);
-	padding-bottom: 8px;
+	margin-bottom: 9px;
 }
-.pn .pn-sj2 .sj2-h .ttl {
+.pn .pn-sj3 .sj3-h .ttl {
 	font-family: var(--display);
-	font-size: 18px;
+	font-size: 17px;
 	text-transform: uppercase;
-	letter-spacing: 0.02em;
-	line-height: 1;
+	letter-spacing: 0.01em;
 }
-.pn .pn-sj2 .sj2-h .ttl em {
+.pn .pn-sj3 .sj3-h .ttl em {
 	color: var(--red);
 	font-style: normal;
 }
-.pn .pn-sj2 .sj2-h .breakdown {
+.pn .pn-sj3 .sj3-h .breakdown {
 	font-family: var(--mono);
 	font-size: 10px;
-	letter-spacing: 0.12em;
+	letter-spacing: 0.1em;
 	text-transform: uppercase;
-	color: var(--ink);
-	border-bottom: 1px solid var(--ink);
-	text-decoration: none;
-	padding-bottom: 1px;
-	cursor: pointer;
+	color: var(--ink-2);
+	text-decoration: underline;
+	text-underline-offset: 3px;
 }
-.pn .pn-sj2 .sj2-phase {
-	display: flex;
-	flex-direction: column;
-	gap: 8px;
+/* Phases sit side-by-side on wide screens (the widget renders as a slim
+ * full-width strip under the 3-col row), stacked below 1100px. */
+.pn .pn-sj3 .sj3-phases {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0 28px;
 }
-.pn .pn-sj2 .sj2-phase-h {
+.pn .pn-sj3 .sj3-phase + .sj3-phase {
+	border-left: 2px dashed var(--paper-3);
+	padding-left: 28px;
+	margin-left: -14px;
+}
+@media (max-width: 1100px) {
+	.pn .pn-sj3 .sj3-phases { grid-template-columns: 1fr; }
+	.pn .pn-sj3 .sj3-phase + .sj3-phase {
+		border-left: none;
+		padding-left: 0;
+		margin-left: 0;
+		margin-top: 12px;
+		padding-top: 12px;
+		border-top: 2px dashed var(--paper-3);
+	}
+}
+.pn .pn-sj3 .sj3-phase-h {
 	display: flex;
 	justify-content: space-between;
 	align-items: baseline;
-	padding-bottom: 6px;
-	border-bottom: 1.5px dashed var(--paper-3);
+	margin-bottom: 6px;
+	gap: 10px;
+	flex-wrap: wrap;
 }
-.pn .pn-sj2 .sj2-phase-h .ttl {
+.pn .pn-sj3 .sj3-phase-h .ttl {
 	font-family: var(--mono);
 	font-size: 11px;
 	letter-spacing: 0.12em;
 	text-transform: uppercase;
-	color: var(--ink-2);
-	display: flex;
-	align-items: baseline;
-	gap: 4px;
-}
-.pn .pn-sj2 .sj2-phase-h .ttl b {
-	font-family: var(--display);
-	font-size: 16px;
-	letter-spacing: 0.02em;
 	color: var(--ink);
-	margin-right: 4px;
 }
-.pn .pn-sj2 .sj2-phase-h .ttl .kind {
-	color: var(--ink-3);
-	font-family: var(--mono);
-	font-size: 11px;
-}
-.pn .pn-sj2 .sj2-phase-h .totals {
-	display: flex;
-	gap: 18px;
-	font-family: var(--mono);
-	font-size: 11px;
+.pn .pn-sj3 .sj3-phase-h .ttl b {
+	font-family: var(--display);
 	letter-spacing: 0.04em;
-	color: var(--ink-3);
-	text-transform: lowercase;
 }
-.pn .pn-sj2 .sj2-phase-h .totals b {
+.pn .pn-sj3 .sj3-phase-h .ttl .kind { color: var(--ink-3); }
+.pn .pn-sj3 .sj3-phase-h .totals {
+	display: flex;
+	gap: 14px;
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.06em;
+	color: var(--ink-3);
+}
+.pn .pn-sj3 .sj3-phase-h .totals b {
 	font-family: var(--display);
 	font-size: 13px;
-	letter-spacing: -0.01em;
-	margin-left: 4px;
+	letter-spacing: 0;
 }
-.pn .pn-sj2 .sj2-phase-h .totals b.g { color: var(--green); }
-.pn .pn-sj2 .sj2-phase-h .totals b.y { color: var(--gold); }
-.pn .pn-sj2 .sj2-grid {
+.pn .pn-sj3 .sj3-phase-h .totals .g { color: var(--green); }
+.pn .pn-sj3 .sj3-phase-h .totals .y { color: var(--gold); }
+.pn .pn-sj3 .sj3-cells {
 	display: grid;
-	grid-template-columns: 64px 1fr 1fr;
-	gap: 6px 14px;
-	align-items: center;
+	grid-template-columns: repeat(5, 1fr);
+	gap: 8px;
 }
-.pn .pn-sj2 .sj2-col-hd {
+.pn .pn-sj3 .sj3-cell {
+	border: 2px solid var(--ink);
+	background: var(--paper-2);
+	box-shadow: 3px 3px 0 var(--ink);
+	padding: 5px 5px 5px;
+	text-align: center;
+	min-width: 0;
+}
+.pn .pn-sj3 .sj3-cell.dead {
+	border-color: var(--paper-3);
+	box-shadow: none;
+	background: transparent;
+}
+.pn .pn-sj3 .sj3-cell .stage {
 	font-family: var(--mono);
-	font-size: 9.5px;
+	font-size: 9px;
 	letter-spacing: 0.14em;
 	text-transform: uppercase;
 	color: var(--ink-3);
-	padding-bottom: 4px;
-	border-bottom: 1.5px solid var(--ink);
+	margin-bottom: 3px;
+	white-space: nowrap;
 }
-.pn .pn-sj2 .sj2-col-hd.empty { border-bottom: none; }
-.pn .pn-sj2 .sj2-row-lbl {
+.pn .pn-sj3 .sj3-cell .hero {
 	font-family: var(--display);
-	font-size: 14px;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-	color: var(--ink);
-}
-.pn .pn-sj2 .sj2-cell { position: relative; }
-.pn .pn-sj2 .sj2-bar {
-	height: 22px;
-	background: var(--paper-3);
-	border: 1.5px solid var(--ink);
-	position: relative;
-	display: flex;
-	align-items: center;
-}
-.pn .pn-sj2 .sj2-bar .fill {
-	position: absolute;
-	left: 0;
-	top: 0;
-	bottom: 0;
-	display: flex;
-	align-items: center;
-	justify-content: flex-end;
-	padding-right: 8px;
-	min-width: 8%;
-}
-.pn .pn-sj2 .sj2-cell.earned .sj2-bar .fill { background: var(--green); }
-.pn .pn-sj2 .sj2-cell.available .sj2-bar .fill {
-	background: var(--gold);
-	background-image: repeating-linear-gradient(45deg, var(--gold) 0 8px, #b9831f 8px 10px);
-}
-.pn .pn-sj2 .sj2-bar .fill .lbl {
-	font-family: var(--display);
-	font-size: 12px;
-	letter-spacing: -0.005em;
-	color: var(--paper);
+	font-size: 21px;
 	line-height: 1;
+	color: var(--gold);
+	letter-spacing: -0.01em;
+}
+.pn .pn-sj3 .sj3-cell .hero.earned-only { color: var(--green); }
+.pn .pn-sj3 .sj3-cell.dead .hero { color: var(--ink-3); font-size: 16px; }
+.pn .pn-sj3 .sj3-cell .hero .unit {
+	font-family: var(--mono);
+	font-size: 9px;
+	letter-spacing: 0.08em;
+	color: var(--ink-3);
+	margin-left: 1px;
+}
+.pn .pn-sj3 .sj3-cell .sub {
+	margin-top: 4px;
+	font-family: var(--mono);
+	font-size: 9px;
+	letter-spacing: 0.05em;
+	color: var(--ink-2);
 	white-space: nowrap;
-	text-shadow: 0 1px 0 rgba(0, 0, 0, 0.15);
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
-.pn .pn-sj2 .sj2-cell.available .sj2-bar .fill .lbl {
-	color: var(--ink);
-	text-shadow: none;
-}
-.pn .pn-sj2 .sj2-bar .fill .lbl .frac {
-	font-family: var(--mono);
-	font-size: 10px;
-	letter-spacing: 0.04em;
-	opacity: 0.85;
-	margin-left: 2px;
-}
-.pn .pn-sj2 .sj2-bar .empty {
-	margin: 0 auto;
-	font-family: var(--mono);
-	font-size: 11px;
-	letter-spacing: 0.04em;
-	color: var(--paper-3);
-}
-.pn .pn-sj2 .sj2-cell .sj2-tip {
-	position: absolute;
-	bottom: calc(100% + 8px);
-	left: 50%;
-	transform: translateX(-50%);
-	background: var(--paper);
-	color: var(--ink);
-	border: 2px solid var(--ink);
-	box-shadow: 3px 3px 0 var(--ink);
-	padding: 8px 11px 7px;
-	font-family: var(--mono);
-	font-size: 10px;
-	letter-spacing: 0.02em;
-	line-height: 1.45;
-	white-space: nowrap;
-	pointer-events: none;
-	opacity: 0;
-	visibility: hidden;
-	transition: opacity 0.12s ease, visibility 0.12s ease;
-	z-index: 20;
-}
-.pn .pn-sj2 .sj2-cell .sj2-tip b {
-	font-family: var(--display);
-	font-size: 11px;
-	letter-spacing: 0.04em;
-	color: var(--ink);
-}
-.pn .pn-sj2 .sj2-cell .sj2-tip em {
-	color: var(--green);
-	font-style: normal;
-	font-weight: 600;
-}
-.pn .pn-sj2 .sj2-cell.available .sj2-tip em { color: var(--gold); }
-.pn .pn-sj2 .sj2-cell:hover .sj2-tip {
-	opacity: 1;
-	visibility: visible;
-}
+.pn .pn-sj3 .sj3-cell .sub .banked { color: var(--green); font-weight: 700; }
 
 /* ============================================================
  * PODIUM (Phase 5)
@@ -2228,9 +2213,10 @@
  * v4 dashboard body padding
  * ============================================================ */
 .pn .pn-dash-v4 {
-	/* Top padding reduced ×0.7 (22→15px) to tighten the cream gap between the
-	 * red lock strip and the hero; bottom + horizontal gutters unchanged. */
-	padding: 15px 28px 22px;
+	/* Top padding reduced ×0.7 (22→15px→8px) to tighten the cream gap between
+	 * the red lock strip and the hero; bottom gutter trimmed 22→12 so the busy
+	 * phases (KO / between / post) clear one 900px screen. */
+	padding: 8px 28px 12px;
 }
 @media (max-width: 900px) {
 	.pn .pn-kpi-row-v4 {
@@ -2410,6 +2396,7 @@
 	}
 	.pn .mtab .sc.live { box-shadow: 1.5px 1.5px 0 var(--red); }
 	.pn .mtab .sc.vs { font-size: 10px; padding: 2px 6px; }
+	.pn .mtab .sc.vs.ko { font-size: 9px; letter-spacing: 0.02em; padding: 3px 5px 2px; }
 	.pn .mtab .pick { font-size: 12px; padding: 2px 6px 1px; border-width: 1.5px; }
 	.pn .mtab .pick.empty { font-size: 12px; }
 	.pn .mtab .pts {

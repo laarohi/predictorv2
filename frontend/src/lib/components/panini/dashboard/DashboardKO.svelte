@@ -39,6 +39,7 @@
 	import { getMyRankTrajectory, type RankTrajectoryResponse } from '$api/leaderboard';
 	import { getBracketExposure, type BracketExposureResponse } from '$api/predictions';
 	import { teamCode } from '$lib/utils/teamCodes';
+	import { koChipLabel } from '$lib/utils/matchBreakdown';
 	import type { Fixture } from '$types';
 
 	let trajectoryData: RankTrajectoryResponse | null = null;
@@ -174,7 +175,9 @@
 			};
 		}
 		// Upcoming. Status cell stays empty (countdown dropped per UX
-		// feedback). CTA in the points column does the work.
+		// feedback — it squashed the row). The kickoff rides inside the
+		// score chip instead, replacing the dead "VS" placeholder; the CTA
+		// in the points column does the call-to-action work.
 		const lockedNow = f.is_locked;
 		const cta = lockedNow ? undefined : (pick ? 'edit' : 'pick') as 'edit' | 'pick' | undefined;
 		return {
@@ -182,6 +185,7 @@
 			statusText: '',
 			statusVariant: 'cd',
 			grpLabel, home, away, score, pick, pickResult: null,
+			koLabel: koChipLabel(f.kickoff),
 			pointsText: cta ? null : '—',
 			pointsVariant: 'dash',
 			cta,
@@ -230,11 +234,14 @@
 		? `<b>next lock in ${formatDuration(nextLockFixture.time_until_lock)}</b> · ${teamCode(nextLockFixture.home_team)} vs ${teamCode(nextLockFixture.away_team)}`
 		: '';
 
-	function formatDuration(ms: number | null): string {
-		if (!ms || ms <= 0) return '—';
-		const totalMin = Math.floor(ms / 60000);
+	// time_until_lock is SECONDS until lock (see schemas/fixture.py) — the
+	// same contract PnResultsCard.formatLockIn consumes.
+	function formatDuration(secs: number | null): string {
+		if (!secs || secs <= 0) return '—';
+		const totalMin = Math.floor(secs / 60);
 		const h = Math.floor(totalMin / 60);
 		const m = totalMin % 60;
+		if (h >= 48) return `${Math.floor(h / 24)}d ${h % 24}h`;
 		if (h > 0) return `${h}h ${m}m`;
 		return `${m}m`;
 	}
@@ -336,6 +343,7 @@
 		{/if}
 
 		<DwKpiRow
+			compact
 			{rank}
 			{rankOf}
 			{rankDelta}
@@ -355,7 +363,10 @@
 			trajectoryNowLabel={`Last ${PAST_SHOW}`}
 		/>
 
-		<section class="pn-dash-cols two" style="margin-bottom: 22px;">
+		<!-- Same 3-col rhythm as the group-stage dashboard — the layout that
+		     actually fits 1440×900. The journey rides below as a slim
+		     full-width strip (phases side-by-side on wide screens). -->
+		<section class="pn-dash-cols spectator" style="margin-bottom: 16px;">
 			<div class="col">
 				<div class="pn-sec-h">
 					<span class="ttl"><span class="pip"></span> Past <em>{PAST_SHOW}</em> matches</span>
@@ -384,14 +395,10 @@
 					emptyText="No upcoming KO matches."
 				/>
 			</div>
-		</section>
 
-		<section class="pn-dash-cols two-thirds">
-			<div class="col">
-				<DwScoringJourney p1={journeyP1} p2={journeyP2} footHref="/leaderboard" />
-			</div>
 			<div class="col">
 				<DwTop5
+					dense
 					title="Top"
 					titleEm="5"
 					subtitle={`of ${rankOf || $leaderboard.length} players`}
@@ -400,5 +407,7 @@
 				/>
 			</div>
 		</section>
+
+		<DwScoringJourney p1={journeyP1} p2={journeyP2} footHref="/leaderboard" />
 	</div>
 </PnPageShell>

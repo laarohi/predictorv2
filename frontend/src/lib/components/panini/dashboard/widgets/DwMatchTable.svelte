@@ -32,6 +32,10 @@
 		score: [number, number] | null;
 		/** User's pick (h, a). null = no pick → empty pill. */
 		pick: [number, number] | null;
+		/** Kickoff label ("WED 21:00", user-local) shown inside the score
+		 * chip on upcoming rows — replaces the "VS" placeholder, so the
+		 * kickoff costs no extra column. Omit to render "VS". */
+		koLabel?: string;
 		/** Pick result colouring on the pick pill. null = not yet scored. */
 		pickResult: PickResult | null;
 		/** Number shown inside the points badge (e.g. "+15", "+5", "0", "—"). */
@@ -135,7 +139,7 @@
 						<span>{r.score[0]}</span><span class="dash">–</span><span>{r.score[1]}</span>
 					</span>
 				{:else}
-					<span class="sc vs">VS</span>
+					<span class="sc vs" class:ko={!!r.koLabel}>{r.koLabel ?? 'VS'}</span>
 				{/if}
 				<span class="team away">
 					{r.away}

@@ -31,6 +31,7 @@
 	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
 	import { getMyRankTrajectory, type RankTrajectoryResponse } from '$api/leaderboard';
 	import { teamCode } from '$lib/utils/teamCodes';
+	import { koChipLabel } from '$lib/utils/matchBreakdown';
 	import type { Fixture } from '$types';
 
 	let trajectoryData: RankTrajectoryResponse | null = null;
@@ -149,11 +150,11 @@
 				onClick: navigate
 			};
 		}
-		// Upcoming. Status cell stays empty (countdown was dropped per UX
-		// feedback). The CTA in the points column carries the call-to-
-		// action signal; the score chip's "VS" carries the not-yet-played
-		// signal. Anything time-related lives on /predictions and the
-		// site's masthead strip.
+		// Upcoming. Status cell stays empty (a countdown there was dropped
+		// per UX feedback — it squashed the row). Instead the kickoff rides
+		// inside the score chip, replacing the "VS" placeholder: that cell
+		// is otherwise dead space, so the time costs no width. The CTA in
+		// the points column still carries the call-to-action signal.
 		const lockedNow = f.is_locked;
 		const cta = lockedNow ? undefined : (pick ? 'edit' : 'pick') as 'edit' | 'pick' | undefined;
 		return {
@@ -161,6 +162,7 @@
 			statusText: '',
 			statusVariant: 'cd',
 			grpLabel, home, away, score, pick, pickResult: null,
+			koLabel: koChipLabel(f.kickoff),
 			pointsText: cta ? null : '—',
 			pointsVariant: 'dash',
 			cta,

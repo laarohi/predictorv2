@@ -20,9 +20,12 @@
 
 <script lang="ts">
 	/**
-	 * Phase 4 + Phase 5 widget — combines what used to be `points by source`
-	 * and `bracket alive` into one. Two stacked phase cards (Phase 1, Phase 2),
-	 * each rendered as a 5-row × 2-col table.
+	 * Phase 4 + Phase 5 widget. One horizontal strip per phase: five
+	 * sticker cells (R16 → Winner), each leading with the GOLD points
+	 * still in play at that stage, with alive-pick fraction and banked
+	 * points as a mono subline. Replaces the old 5-row × 2-col bar
+	 * table, which was ~3× taller, mostly empty early in the KO stage,
+	 * and whose hover tooltips forced a 750px layout width on phones.
 	 */
 	export let p1: JourneyPhase = {};
 	export let p2: JourneyPhase = {};
@@ -36,18 +39,6 @@
 		{ key: 'w', label: 'Winner' }
 	] as const;
 
-	function flatten(phase: JourneyPhase): JourneyCell[] {
-		const out: JourneyCell[] = [];
-		for (const s of STAGES) {
-			const row = phase[s.key];
-			if (row?.earned) out.push(row.earned);
-			if (row?.available) out.push(row.available);
-		}
-		return out;
-	}
-
-	$: maxPts = Math.max(1, ...flatten(p1).map((c) => c.pts || 0), ...flatten(p2).map((c) => c.pts || 0));
-
 	function totals(phase: JourneyPhase) {
 		let earned = 0;
 		let available = 0;
@@ -59,83 +50,56 @@
 		return { earned, available };
 	}
 
-	function teamsList(arr: string[] | undefined): string {
-		return arr && arr.length ? arr.join(' · ') : '—';
-	}
-
 	$: p1Totals = totals(p1);
 	$: p2Totals = totals(p2);
 </script>
 
-<div class="pn-sj2">
-	<div class="sj2-h">
+<div class="pn-sj3">
+	<div class="sj3-h">
 		<div class="ttl">Your scoring <em>journey</em></div>
 		<a class="breakdown" href={footHref}>See full breakdown →</a>
 	</div>
 
+	<div class="sj3-phases">
 	{#each [{ phase: p1, label: 'PHASE 1', kind: 'ORIGINAL', t: p1Totals }, { phase: p2, label: 'PHASE 2', kind: 'RE-PICK', t: p2Totals }] as block}
-		<div class="sj2-phase">
-			<div class="sj2-phase-h">
+		<div class="sj3-phase">
+			<div class="sj3-phase-h">
 				<div class="ttl">
 					<b>{block.label}</b>
 					<span class="kind">· {block.kind}</span>
 				</div>
 				<div class="totals">
-					<span>earned <b class="g">{block.t.earned} pts</b></span>
-					<span>available <b class="y">{block.t.available} pts</b></span>
+					<span>banked <b class="g">{block.t.earned}</b></span>
+					<span>in play <b class="y">{block.t.available}</b></span>
 				</div>
 			</div>
-			<div class="sj2-grid">
-				<div class="sj2-col-hd empty"></div>
-				<div class="sj2-col-hd">Earned</div>
-				<div class="sj2-col-hd">Available</div>
+			<div class="sj3-cells">
 				{#each STAGES as s (s.key)}
 					{@const row = block.phase[s.key] ?? {}}
-					{@const earned = row.earned}
-					{@const available = row.available}
-					{@const eW = earned?.pts ? (earned.pts / maxPts) * 100 : 0}
-					{@const aW = available?.pts ? (available.pts / maxPts) * 100 : 0}
-					<div class="sj2-row-lbl">{s.label}</div>
-
-					<div class="sj2-cell earned">
-						<div class="sj2-bar">
-							{#if earned && earned.pts > 0}
-								<div class="fill" style="width: {eW}%">
-									<span class="lbl">{earned.pts} pts <span class="frac">({earned.n}/{earned.of})</span></span>
-								</div>
-							{:else}
-								<span class="empty">—</span>
-							{/if}
-						</div>
-						{#if earned && earned.pts > 0}
-							<div class="sj2-tip">
-								<b>EARNED · {s.label}</b><br />
-								{teamsList(earned.teams)}<br />
-								<em>earned {earned.pts} pts</em>
+					{@const earnedPts = row.earned?.pts ?? 0}
+					{@const avail = row.available}
+					{@const availPts = avail?.pts ?? 0}
+					{@const dead = availPts === 0 && earnedPts === 0}
+					<div class="sj3-cell" class:dead>
+						<div class="stage">{s.label}</div>
+						{#if availPts > 0}
+							<div class="hero">{availPts}<span class="unit">pts</span></div>
+							<div class="sub">
+								{avail?.n ?? 0}/{avail?.of ?? 0} alive{#if earnedPts > 0}&nbsp;· <span class="banked">+{earnedPts}</span>{/if}
 							</div>
-						{/if}
-					</div>
-
-					<div class="sj2-cell available">
-						<div class="sj2-bar">
-							{#if available && available.pts > 0}
-								<div class="fill" style="width: {aW}%">
-									<span class="lbl">{available.pts} pts <span class="frac">({available.n}/{available.of})</span></span>
-								</div>
-							{:else}
-								<span class="empty">—</span>
-							{/if}
-						</div>
-						{#if available && available.pts > 0}
-							<div class="sj2-tip">
-								<b>AVAILABLE · {s.label}</b><br />
-								{teamsList(available.teams)}<br />
-								<em>potential {available.pts} pts</em>
+						{:else if earnedPts > 0}
+							<div class="hero earned-only">+{earnedPts}<span class="unit">pts</span></div>
+							<div class="sub">
+								{row.earned?.n ?? 0}/{row.earned?.of ?? 0} hit · banked
 							</div>
+						{:else}
+							<div class="hero">—</div>
+							<div class="sub">out</div>
 						{/if}
 					</div>
 				{/each}
 			</div>
 		</div>
 	{/each}
+	</div>
 </div>

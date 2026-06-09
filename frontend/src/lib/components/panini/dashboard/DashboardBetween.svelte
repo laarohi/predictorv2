@@ -29,7 +29,7 @@
 		workingPhase2BracketPrediction,
 		hasUnsavedPhase2BracketChanges
 	} from '$stores/predictions';
-	import { countBracketSlotsFilled, BRACKET_TOTAL_SLOTS } from '$lib/utils/bracketProgress';
+	import { countBracketSlotsFilled, BRACKET_TOTAL_SLOTS_PHASE2 } from '$lib/utils/bracketProgress';
 	import {
 		phase2BracketDeadline,
 		currentTime
@@ -210,7 +210,7 @@
 			{countdown}
 			progressLabel="Phase 2 bracket — picks set"
 			progressValue={bracketFilled}
-			progressTotal={BRACKET_TOTAL_SLOTS}
+			progressTotal={BRACKET_TOTAL_SLOTS_PHASE2}
 			progressUnit="set"
 			ctaLabel="Update bracket"
 			ctaHref="/predictions"

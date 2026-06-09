@@ -35,6 +35,9 @@
 	export let you: Top5Row | null = null;
 	export let footHref: string = '/leaderboard';
 	export let footLabel: string = 'See full standings →';
+	/** Single-line rows (hint inline after the name, ellipsized) for
+	 *  dashboards that need the column ~80px shorter to fit one screen. */
+	export let dense: boolean = false;
 </script>
 
 <!--
@@ -53,7 +56,7 @@
 	<span class="meta">{subtitle}</span>
 </div>
 
-<div class="pn-top5">
+<div class="pn-top5" class:dense>
 	<!-- Internal navy header bar with column labels — mirrors .mtab-head
 	     in the sibling match-table card so the two cards share the same
 	     structure (section header outside, column-labels bar inside, data
@@ -71,7 +74,7 @@
 			class:you={r.isCurrentUser}
 		>
 			<div class="pos">{r.position}</div>
-			<div>
+			<div class="ident">
 				<div class="nm">{r.name}</div>
 				{#if r.hint}<div class="h">{r.hint}</div>{/if}
 			</div>
@@ -82,7 +85,7 @@
 	{#if you}
 		<div class="row you you-pinned">
 			<div class="pos">{you.position}</div>
-			<div>
+			<div class="ident">
 				<div class="nm">{you.name}</div>
 				{#if you.hint}<div class="h">{you.hint}</div>{/if}
 			</div>

@@ -9,15 +9,23 @@
  * dashboard's "44 to fill" and the wizard's "you're done" badges
  * contradict each other.
  *
- * The 63 = 16 (R32) + 8 (R16) + 4 (QF) + 2 (SF) + 1 (Final) + 1 (Winner)
- * = sum of the per-round picks across the FIFA 2026 bracket. Group-stage
- * predictions are scored separately (group fixtures + group_position
- * picks) and don't roll into this count.
+ * The 63 = 32 (R32 entrants) + 16 (R16) + 8 (QF) + 4 (SF) + 2 (Final)
+ * + 1 (Winner) = sum of the per-round team picks across the FIFA 2026
+ * bracket. Group-stage predictions are scored separately (group fixtures
+ * + group_position picks) and don't roll into this count.
  */
 
 import type { BracketPrediction } from '$types';
 
 export const BRACKET_TOTAL_SLOTS = 63;
+
+/**
+ * Phase 2 re-pick total. By the time Phase 2 opens the 32 R32 entrants
+ * are known facts, so the re-pick covers R16 onward only:
+ * 16 + 8 + 4 + 2 + 1 = 31. Counting a complete Phase 2 bracket against
+ * 63 would show "31/63 set" forever.
+ */
+export const BRACKET_TOTAL_SLOTS_PHASE2 = 31;
 
 export interface BracketProgress {
 	done: number;

@@ -59,6 +59,11 @@
 	export let footHref: string | null = null;
 	export let footLabel: string = 'See full breakdown →';
 
+	/** Compact cells (106px instead of 140px) for the dashboards that
+	 *  carry more sections than the group stage and must still fit one
+	 *  900px desktop screen. */
+	export let compact: boolean = false;
+
 	$: outcomeRate = outcomesOf > 0 ? Math.round((outcomes / outcomesOf) * 100) : 0;
 	$: exactRate = exactOf > 0 ? Math.round((exact / exactOf) * 100) : 0;
 	$: rarityShare = rarityShareOf > 0 ? Math.round((rarity / rarityShareOf) * 100) : 0;
@@ -78,7 +83,7 @@
 	$: trajPlaces = trajectory.length >= 2 ? trajectory[0] - trajectory[trajectory.length - 1] : 0;
 </script>
 
-<section class="pn-kpi-row-v4">
+<section class="pn-kpi-row-v4" class:compact>
 	<!-- Row 1 -->
 	<div class="pn-kpi-v4">
 		<div class="l"><span class="pip red"></span>Rank</div>
