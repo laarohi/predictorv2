@@ -1,9 +1,11 @@
 """Prediction schemas."""
 
 import uuid
+from collections import Counter
 from datetime import datetime
+from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.models.prediction import PredictionPhase
 from app.schemas.fixture import FixtureScore
@@ -48,19 +50,36 @@ class MatchPredictionRead(BaseModel):
         from_attributes = True
 
 
-class MatchPredictionBatch(BaseModel):
-    """Schema for batch updating match predictions."""
+# Stored stage values are singular, matching Fixture.stage and the scoring
+# service. "group" rows carry a group_position; the rest are knockout rounds.
+BracketStage = Literal[
+    "group",
+    "round_of_32",
+    "round_of_16",
+    "quarter_final",
+    "semi_final",
+    "final",
+    "winner",
+]
 
-    # Cap the batch well above the ~104 tournament fixtures so an absurd
-    # payload is rejected without blocking a legitimate "save all" submission.
-    predictions: list[MatchPredictionCreate] = Field(max_length=200)
+# Maximum plausible picks per stage for a 48-team World Cup. Anything above
+# is junk-row pollution (e.g. three "winner" rows) — reject at the schema.
+_STAGE_PICK_LIMITS: dict[str, int] = {
+    "group": 48,
+    "round_of_32": 32,
+    "round_of_16": 16,
+    "quarter_final": 8,
+    "semi_final": 4,
+    "final": 2,
+    "winner": 1,
+}
 
 
 class TeamAdvancementPrediction(BaseModel):
     """Single team advancement prediction."""
 
-    team: str = Field(max_length=64)
-    stage: str = Field(max_length=32)  # "round_of_32", "round_of_16", etc.
+    team: str = Field(min_length=1, max_length=64)
+    stage: BracketStage
     group_position: int | None = Field(default=None, ge=1, le=4)
 
 
@@ -82,6 +101,21 @@ class BracketPredictionUpdate(BaseModel):
     # A full bracket is ~120 entries (group positions + every KO round +
     # winner); cap above that to reject storage-abuse payloads.
     predictions: list[TeamAdvancementPrediction] = Field(max_length=200)
+
+    @model_validator(mode="after")
+    def _validate_picks(self) -> "BracketPredictionUpdate":
+        # Duplicate (team, stage) pairs would otherwise hit the DB unique
+        # constraint and surface as a 500 with full rollback.
+        pairs = [(p.team, p.stage) for p in self.predictions]
+        if len(pairs) != len(set(pairs)):
+            raise ValueError("duplicate (team, stage) picks in payload")
+        for stage, count in Counter(p.stage for p in self.predictions).items():
+            if count > _STAGE_PICK_LIMITS[stage]:
+                raise ValueError(
+                    f"too many '{stage}' picks: {count} "
+                    f"(max {_STAGE_PICK_LIMITS[stage]})"
+                )
+        return self
 
 
 # Community predictions schemas (for the results page scatter plot)

@@ -9,6 +9,7 @@
 	export let value: string = '';
 	export let options: { value: string; label: string; flag?: string }[] = [];
 	export let placeholder: string = 'Select…';
+	export let disabled: boolean = false;
 
 	const dispatch = createEventDispatcher<{ change: string }>();
 
@@ -20,7 +21,7 @@
 	$: isEmpty = !value;
 
 	async function open() {
-		if (isOpen) return;
+		if (isOpen || disabled) return;
 		isOpen = true;
 		await tick();
 		// Scroll the selected option into view when opening.
@@ -71,6 +72,7 @@
 		bind:this={triggerEl}
 		class="pn-dd-trigger"
 		class:empty={isEmpty}
+		{disabled}
 		on:click={toggle}
 		aria-haspopup="listbox"
 		aria-expanded={isOpen}

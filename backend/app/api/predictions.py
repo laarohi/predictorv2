@@ -328,6 +328,14 @@ async def batch_update_predictions(
     ctx: RequestCtx,
 ) -> list[MatchPredictionRead]:
     """Batch update multiple match predictions."""
+    # Cap well above the ~104 tournament fixtures: each entry costs two DB
+    # queries, so an unbounded payload is a trivial DoS vector.
+    if len(predictions_data) > 200:
+        raise HTTPException(
+            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+            detail="Too many predictions in one batch (max 200)",
+        )
+
     results = []
     phase1_locked = await is_phase1_locked(session)
 

@@ -449,36 +449,38 @@
 
 	$: predictionStateMap = (() => {
 		const map = new Map<string, FixtureState>();
+		const stateOf = (f: Fixture, phase1Applies: boolean): FixtureState => {
+			// $isPhase1Locked: group fixtures all lock at the Phase 1
+			// deadline; the live store catches a tab left open across it
+			// (f.is_locked is only as fresh as the last fixtures fetch).
+			if (f.is_locked || (phase1Applies && $isPhase1Locked)) return 'locked';
+			if ($unsavedChanges[f.id]) return 'draft';
+			if ($predictionsByFixture.get(f.id)) return 'saved';
+			return 'empty';
+		};
 		for (const g of $groupFixtures) {
-			for (const f of g.fixtures) {
-				let s: FixtureState;
-				if (f.is_locked) s = 'locked';
-				else if ($unsavedChanges[f.id]) s = 'draft';
-				else if ($predictionsByFixture.get(f.id)) s = 'saved';
-				else s = 'empty';
-				map.set(f.id, s);
-			}
+			for (const f of g.fixtures) map.set(f.id, stateOf(f, true));
 		}
+		// Phase 2 knockout fixtures lock per-match only — the Phase 1
+		// deadline doesn't apply to them.
+		for (const f of $actualKnockoutFixtures) map.set(f.id, stateOf(f, false));
 		return map;
 	})();
 
 	$: scoreValueMap = (() => {
 		const map = new Map<string, { home: string; away: string }>();
+		const valueOf = (f: Fixture): { home: string; away: string } => {
+			const u = $unsavedChanges[f.id];
+			if (u) return { home: String(u.home_score), away: String(u.away_score) };
+			const p = $predictionsByFixture.get(f.id);
+			if (p) return { home: String(p.home_score), away: String(p.away_score) };
+			return { home: '', away: '' };
+		};
 		for (const g of $groupFixtures) {
-			for (const f of g.fixtures) {
-				const u = $unsavedChanges[f.id];
-				if (u) {
-					map.set(f.id, { home: String(u.home_score), away: String(u.away_score) });
-					continue;
-				}
-				const p = $predictionsByFixture.get(f.id);
-				if (p) {
-					map.set(f.id, { home: String(p.home_score), away: String(p.away_score) });
-					continue;
-				}
-				map.set(f.id, { home: '', away: '' });
-			}
+			for (const f of g.fixtures) map.set(f.id, valueOf(f));
 		}
+		// Phase 2 knockout score inputs read from the same map.
+		for (const f of $actualKnockoutFixtures) map.set(f.id, valueOf(f));
 		return map;
 	})();
 
@@ -1242,7 +1244,7 @@
 											inputmode="numeric"
 											maxlength="2"
 											pattern="[0-9]*"
-											disabled={f.is_locked}
+											disabled={state === 'locked'}
 											on:focus={selectScoreOnFocus}
 											value={scoreValue(f.id, 'home')}
 											on:input={(e) => {
@@ -1259,7 +1261,7 @@
 											inputmode="numeric"
 											maxlength="2"
 											pattern="[0-9]*"
-											disabled={f.is_locked}
+											disabled={state === 'locked'}
 											on:focus={selectScoreOnFocus}
 											value={scoreValue(f.id, 'away')}
 											on:input={(e) => {
@@ -1325,6 +1327,11 @@
 					/>
 				{/if}
 			{:else if activeSection === 'bonus'}
+				{#if $isPhase1Locked}
+					<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; margin: 14px 0 0;">
+						Phase 1 has locked — bonus answers can no longer be changed.
+					</p>
+				{/if}
 				{#each Object.entries(bonusByCategory) as [cat, qs] (cat)}
 					{#if qs.length > 0}
 						<div class="pn-banner" style="margin-top: 18px;">
@@ -1360,6 +1367,7 @@
 												value={answer}
 												options={opts}
 												placeholder="— Select a team —"
+												disabled={$isPhase1Locked}
 												on:change={(e) => setBonusAnswer(bq.id, e.detail)}
 											/>
 											{#if answer}
@@ -1375,6 +1383,7 @@
 												value={answer}
 												options={popts}
 												placeholder="Type a player name…"
+												disabled={$isPhase1Locked}
 												on:change={(e) => setBonusAnswer(bq.id, e.detail)}
 											/>
 											{#if answer && playerFlagFor(answer)}
@@ -1463,7 +1472,7 @@
 											inputmode="numeric"
 											maxlength="2"
 											pattern="[0-9]*"
-											disabled={f.is_locked}
+											disabled={state === 'locked'}
 											on:focus={selectScoreOnFocus}
 											value={scoreValue(f.id, 'home')}
 											on:input={(e) => {
@@ -1480,7 +1489,7 @@
 											inputmode="numeric"
 											maxlength="2"
 											pattern="[0-9]*"
-											disabled={f.is_locked}
+											disabled={state === 'locked'}
 											on:focus={selectScoreOnFocus}
 											value={scoreValue(f.id, 'away')}
 											on:input={(e) => {

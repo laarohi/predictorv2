@@ -289,10 +289,20 @@ async def change_password(
         )
 
     current_user.password_hash = get_password_hash(data.new_password)
+    # Revoke every outstanding JWT: a stolen token must not survive a
+    # password change. The bumped version invalidates the caller's current
+    # token too, so hand back a fresh one to keep this session alive.
+    current_user.token_version += 1
     session.add(current_user)
     await session.commit()
 
-    return {"message": "Password updated successfully"}
+    access_token = create_access_token(
+        user_id=str(current_user.id),
+        expires_delta=timedelta(minutes=get_settings().jwt_access_token_expire_minutes),
+        token_version=current_user.token_version,
+    )
+
+    return {"message": "Password updated successfully", "access_token": access_token}
 
 
 @router.get("/me/stats", response_model=UserStats)
