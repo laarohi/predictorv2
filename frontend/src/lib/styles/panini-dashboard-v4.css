@@ -820,6 +820,16 @@
 /* ============================================================
  * ALERT — gold (unsaved) / red (urgent)
  * ============================================================ */
+/* Two simultaneous alerts share one row on desktop (stacked, the pair
+ * alone would eat ~165px of a one-screen page). */
+.pn .pn-alert-pair.both {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 14px;
+}
+@media (max-width: 1100px) {
+	.pn .pn-alert-pair.both { grid-template-columns: 1fr; gap: 0; }
+}
 .pn .pn-alert-v4 {
 	background: var(--paper);
 	border: 3px solid var(--gold);
@@ -980,7 +990,7 @@
 /* Compact hero — used by Between-phases (and any other funnel state that
  * must share the screen with a KPI row + data columns). Same drama,
  * roughly 60% of the vertical budget. */
-.pn .pn-hero-v4.compact { padding: 16px 24px 14px; margin-bottom: 14px; }
+.pn .pn-hero-v4.compact { padding: 16px 24px 12px; margin-bottom: 14px; }
 .pn .pn-hero-v4.compact h1 { font-size: 30px; }
 .pn .pn-hero-v4.compact .label { margin-bottom: 8px; }
 .pn .pn-hero-v4.compact .lede { margin-top: 6px; max-width: 560px; }
@@ -990,6 +1000,9 @@
 	padding: 8px 7px 6px;
 }
 .pn .pn-hero-v4.compact .progress-block { margin-top: 14px; }
+.pn .pn-hero-v4.compact .teaser-row { margin-top: 8px; }
+.pn .pn-hero-v4.compact .teaser { padding: 6px 12px 5px; }
+.pn .pn-hero-v4.compact .teaser .v { font-size: 18px; margin-top: 2px; }
 @media (max-width: 700px) {
 	.pn .pn-hero-v4.compact h1 { font-size: 24px; }
 	.pn .pn-hero-v4.compact .lede { font-size: 11px; }
@@ -1109,7 +1122,7 @@
 	background: var(--paper);
 	border: 2.5px solid var(--ink);
 	box-shadow: 5px 5px 0 var(--ink);
-	padding: 18px 20px;
+	padding: 12px 16px;
 	display: flex;
 	flex-direction: column;
 	position: relative;
@@ -1124,8 +1137,8 @@
 	justify-content: space-between;
 	align-items: baseline;
 	border-bottom: 2px solid var(--ink);
-	padding-bottom: 8px;
-	margin-bottom: 14px;
+	padding-bottom: 7px;
+	margin-bottom: 10px;
 }
 .pn .pn-peek .hd .ttl {
 	font-family: var(--display);
@@ -1150,15 +1163,15 @@
 	text-transform: uppercase;
 	color: var(--ink-3);
 }
-.pn .pn-peek .rules-list { display: grid; gap: 10px; }
+.pn .pn-peek .rules-list { display: grid; gap: 6px; }
 .pn .pn-peek .rule {
 	display: grid;
 	/* 95px on the pts column fits range labels like "+0–10" or "10–150"
 	 * at the 28px display font on one line. Single values ("+5", "+10")
 	 * just right-align with extra whitespace; the grid stays uniform so
 	 * the rule names line up across rows. */
-	grid-template-columns: 95px 1fr;
-	gap: 14px;
+	grid-template-columns: 108px 1fr;
+	gap: 12px;
 	align-items: baseline;
 	padding: 4px 0;
 	/* Belt-and-braces: prevent wrapping inside the pts cell so a value
@@ -1170,11 +1183,12 @@
 }
 .pn .pn-peek .rule + .rule {
 	border-top: 1.5px dashed var(--paper-3);
-	padding-top: 10px;
+	padding-top: 5px;
 }
 .pn .pn-peek .rule .pts {
 	font-family: var(--display);
-	font-size: 28px;
+	font-size: 20px;
+	white-space: nowrap;
 	line-height: 1;
 	color: var(--red);
 	text-align: right;
@@ -1188,8 +1202,9 @@
 	font-size: 10px;
 	color: var(--ink-3);
 	letter-spacing: 0.04em;
-	display: block;
-	margin-top: 2px;
+	/* Inline (not stacked) — a second line under every number made each
+	 * rule row 56px and pushed the pre dashboard past one screen. */
+	margin-left: 2px;
 }
 .pn .pn-peek .rule .nm {
 	font-family: var(--display);
@@ -1200,17 +1215,17 @@
 .pn .pn-peek .rule .nm .desc {
 	display: block;
 	font-family: var(--mono);
-	font-size: 11px;
+	font-size: 10.5px;
 	color: var(--ink-3);
 	letter-spacing: 0.02em;
 	text-transform: none;
 	font-weight: 400;
-	margin-top: 3px;
-	line-height: 1.4;
+	margin-top: 2px;
+	line-height: 1.3;
 }
 .pn .pn-peek .foot {
 	margin-top: auto;
-	padding-top: 12px;
+	padding-top: 8px;
 	font-family: var(--mono);
 	font-size: 11px;
 	letter-spacing: 0.1em;
@@ -1299,6 +1314,9 @@
 .pn .pn-roster .roster-scroll {
 	flex: 1 1 0;
 	min-height: 0;
+	/* Hard cap so the 25-row roster can never out-negotiate the grid row
+	 * height against its sibling card — rows beyond the cap scroll. */
+	max-height: 290px;
 	overflow-y: auto;
 }
 /* Roster column is the only one that may have more natural content than
@@ -2513,9 +2531,12 @@
 		flex: 0 0 auto;
 		overflow: visible;
 	}
+	/* Cap the roster on mobile — the full 25-row table made the page
+	 * ~5 screens tall. All rows stay reachable via internal scroll. */
 	.pn .pn-roster .roster-scroll {
 		flex: 0 0 auto;
-		overflow: visible;
+		max-height: 340px;
+		overflow-y: auto;
 	}
 }
 

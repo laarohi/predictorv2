@@ -169,6 +169,11 @@
 	// they're effectively new to the prediction flow even if they've
 	// logged in before.
 	$: firstName = $user?.name?.split(' ')[0] ?? 'predictor';
+	// When both alerts fire they share one row — stacked, the pair alone
+	// would eat ~165px of a one-screen page.
+	$: showUnpaid = $user !== null && $user.paid === false;
+	$: showUnfilled = dashReady && overallFilled < overallTotal && overallFilled > 0;
+
 	$: heroGreeting = overallFilled === 0 ? 'Welcome' : 'Welcome back';
 	$: heroTitleHtml = `${heroGreeting}, <em>${firstName}</em>.`;
 	$: heroLede =
@@ -183,29 +188,33 @@
 
 <PnPageShell lockLabel={stripLock}>
 	<div class="pn-dash-v4">
-		{#if $user && $user.paid === false}
-			<DwAlert
-				variant="red"
-				icon="€"
-				title="Entry fee unpaid"
-				meta={`Send <b>€${entryFee}</b> to <b>+356 9929 0197</b> on Revolut before the competition starts.`}
-				ctaLabel={`Pay €${entryFee} now`}
-				ctaHref={revolutUrl}
-				ctaExternal
-			/>
-		{/if}
-
-		{#if dashReady && overallFilled < overallTotal && overallFilled > 0}
-			<DwAlert
-				variant="gold"
-				title={`${overallTotal - overallFilled} predictions still to fill`}
-				meta="Lock in before the whistle · <b>switch devices &amp; partial drafts are gone</b>"
-				ctaLabel="Open predictions →"
-				ctaHref="/predictions"
-			/>
+		{#if showUnpaid || showUnfilled}
+			<div class="pn-alert-pair" class:both={showUnpaid && showUnfilled}>
+				{#if showUnpaid}
+					<DwAlert
+						variant="red"
+						icon="€"
+						title="Entry fee unpaid"
+						meta={`Send <b>€${entryFee}</b> to <b>+356 9929 0197</b> on Revolut before the competition starts.`}
+						ctaLabel={`Pay €${entryFee} now`}
+						ctaHref={revolutUrl}
+						ctaExternal
+					/>
+				{/if}
+				{#if showUnfilled}
+					<DwAlert
+						variant="gold"
+						title={`${overallTotal - overallFilled} predictions still to fill`}
+						meta="Lock in before the whistle · <b>switch devices &amp; partial drafts are gone</b>"
+						ctaLabel="Open predictions →"
+						ctaHref="/predictions"
+					/>
+				{/if}
+			</div>
 		{/if}
 
 		<DwFunnelHero
+			compact
 			label="Phase 1 — Predictions due"
 			titleHtml={heroTitleHtml}
 			lede={heroLede}
@@ -224,7 +233,11 @@
 			]}
 		/>
 
-		<section class="pn-dash-cols">
+		<!-- Two columns, not three: the old "Tournament structure" card was
+		     rules-page content (the hero teasers already enumerate the
+		     Phase 1 duties); its Phase II awareness survives as the last
+		     rules row. The roster pins to the rules card's height. -->
+		<section class="pn-dash-cols two">
 			<div class="col">
 				<DwPeek
 					mode="rules"
@@ -237,52 +250,35 @@
 							ptsUnit: 'pts',
 							ptsTone: 'gold',
 							name: 'Correct outcome',
-							desc: 'Right side (1/X/2) — even if the scoreline is off. The bread-and-butter payout, per match.'
+							desc: 'Right side (1/X/2), even if the scoreline is off — per match.'
 						},
 						{
 							pts: '+10',
 							ptsUnit: 'pts',
 							ptsTone: 'green',
 							name: 'Exact-score bonus',
-							desc: 'Stacks on top of the outcome — 15 pts on a match where you nail both goals.'
+							desc: 'Stacks on the outcome — 15 pts when you nail both goals.'
 						},
 						{
 							pts: '+0–10',
 							ptsUnit: 'pts',
 							ptsTone: 'red',
 							name: 'Rarity bonus',
-							desc: 'Picks the room mostly missed pay more. Consensus picks earn nothing extra.'
+							desc: 'Picks the room missed pay more; consensus earns no extra.'
 						},
 						{
 							pts: '10–150',
 							ptsUnit: 'pts',
 							ptsTone: 'navy',
 							name: 'Bracket advance',
-							desc: 'Each team reaching its predicted round, scaling from R32 (10) up to Winner (150).'
-						}
-					]}
-					footLabel="Read full rules →"
-					footHref="/rules"
-				/>
-			</div>
-			<div class="col">
-				<DwPeek
-					mode="items"
-					title="Tournament"
-					titleEm="structure"
-					meta="vol. I"
-					items={[
-						{
-							ix: '01',
-							name: 'Phase I — Pre-tournament',
-							desc: `All ${totalGroupMatches} group match scores, your knockout bracket, and ${bonusQuestionsCount ?? 9} bonus picks. Locks at first kickoff.`,
-							value: 'full reward'
+							desc: 'Each team reaching its predicted round — R32 (10) to Winner (150).'
 						},
 						{
-							ix: '02',
-							name: 'Phase II — Re-pick the bracket',
-							desc: 'After groups, refresh your bracket with real teams. You also predict the scoreline of each knockout match — each one locks 15 minutes before kickoff.',
-							value: 'per-stage'
+							pts: '×0.7',
+							ptsUnit: '',
+							ptsTone: 'red',
+							name: 'Phase II — re-pick after groups',
+							desc: 'After groups: re-pick the bracket with the real R32 + KO scores.'
 						}
 					]}
 					footLabel="Read full rules →"
