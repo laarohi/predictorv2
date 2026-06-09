@@ -30,6 +30,9 @@
 	export let ctaLabel: string = '';
 	export let ctaHref: string = '#';
 	export let teasers: Teaser[] = [];
+	/** Tighter type + clock scale for dashboards that carry more sections
+	 *  below the hero and must still fit one 900px desktop screen. */
+	export let compact: boolean = false;
 
 	$: pct = progressReady && progressTotal > 0 ? Math.min(100, (progressValue / progressTotal) * 100) : 0;
 
@@ -38,7 +41,7 @@
 	}
 </script>
 
-<div class="pn-hero-v4">
+<div class="pn-hero-v4" class:compact>
 	<div class="hero-row">
 		<div>
 			{#if label}

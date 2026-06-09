@@ -121,12 +121,7 @@
 				group: g,
 				outcome: b.outcome,
 				exact: b.exact,
-				// Qualification points are shown as one aggregate row below the
-				// group rows (qualPoints prop) — the backend doesn't expose a
-				// per-group split, and best-thirds attribution is cross-group.
-				qual: 0,
-				total: b.outcome + b.exact,
-				qualPending: false
+				total: b.outcome + b.exact
 			};
 		});
 		return rows;
@@ -203,9 +198,13 @@
 			/>
 		{/if}
 
+		<!-- Compact hero, no teaser row: "Phase 1 total" is the KPI Total
+		     cell directly below, the ×0.7 multiplier is a static fact for
+		     the rules page, and "bracket in play" had no backend value. -->
 		<DwFunnelHero
+			compact
 			label="Phase 2 — Re-pick bracket"
-			titleHtml="Real groups are in.<br />Re-pick the <em>knockout</em>."
+			titleHtml="Real groups are in. Re-pick the <em>knockout</em>."
 			lede={`Phase 1 ended. Group stage scored you <b style="color: var(--gold);">${phaseTotal} pts</b>. Your original bracket carries over until you update it — but the real R32 matchups are now set.`}
 			{countdown}
 			progressLabel="Phase 2 bracket — picks set"
@@ -214,14 +213,10 @@
 			progressUnit="set"
 			ctaLabel="Update bracket"
 			ctaHref="/predictions"
-			teasers={[
-				{ label: 'Phase 1 total', value: String(phaseTotal), outOf: 'pts' },
-				{ label: 'Phase 2 multiplier', value: '×0.7' },
-				{ label: 'Bracket in play', value: '—', outOf: 'pts available' }
-			]}
 		/>
 
 		<DwKpiRow
+			compact
 			{rank}
 			{rankOf}
 			{rankDelta}
@@ -255,6 +250,7 @@
 			</div>
 			<div class="col">
 				<DwTop5
+					dense
 					title="Phase 1"
 					titleEm="final"
 					subtitle="where it stands"

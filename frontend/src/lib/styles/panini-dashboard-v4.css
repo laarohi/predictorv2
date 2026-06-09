@@ -147,7 +147,7 @@
 /* Compact variant for the busy phases (KO / between / post) where the
  * 140px cells push the page past one 900px screen. The group-stage
  * dashboard keeps the tall cells — it has the spare vertical space. */
-.pn .pn-kpi-row-v4.compact { margin-bottom: 16px; }
+.pn .pn-kpi-row-v4.compact { margin-bottom: 12px; }
 .pn .pn-kpi-row-v4.compact .pn-kpi-v4 { min-height: 96px; padding: 8px 14px; }
 .pn .pn-kpi-row-v4.compact .pn-kpi-v4 .v { font-size: 40px; }
 .pn .pn-kpi-row-v4.compact .pn-kpi-v4.trajectory .spark-wrap,
@@ -977,6 +977,24 @@
 	color: var(--ink-3);
 	letter-spacing: 0.12em;
 }
+/* Compact hero — used by Between-phases (and any other funnel state that
+ * must share the screen with a KPI row + data columns). Same drama,
+ * roughly 60% of the vertical budget. */
+.pn .pn-hero-v4.compact { padding: 16px 24px 14px; margin-bottom: 14px; }
+.pn .pn-hero-v4.compact h1 { font-size: 30px; }
+.pn .pn-hero-v4.compact .label { margin-bottom: 8px; }
+.pn .pn-hero-v4.compact .lede { margin-top: 6px; max-width: 560px; }
+.pn .pn-hero-v4.compact .clock .digit {
+	font-size: 26px;
+	min-width: 42px;
+	padding: 8px 7px 6px;
+}
+.pn .pn-hero-v4.compact .progress-block { margin-top: 14px; }
+@media (max-width: 700px) {
+	.pn .pn-hero-v4.compact h1 { font-size: 24px; }
+	.pn .pn-hero-v4.compact .lede { font-size: 11px; }
+}
+
 .pn .pn-hero-v4 .progress-block {
 	margin-top: 22px;
 	position: relative;
@@ -991,7 +1009,10 @@
 	justify-content: space-between;
 	align-items: baseline;
 	margin-bottom: 6px;
+	gap: 10px;
 }
+/* Keep "31 / 31 set" on one line — wrapping orphans the unit word. */
+.pn .pn-hero-v4 .bar-h .v { white-space: nowrap; }
 .pn .pn-hero-v4 .bar-h .l {
 	font-family: var(--mono);
 	font-size: 10px;
@@ -1511,6 +1532,48 @@
 	text-transform: uppercase;
 }
 .pn .pn-summary table { width: 100%; border-collapse: collapse; }
+/* Two side-by-side 6-row halves (A–F | G–L); stacked under 700px. The
+ * totals table spans the full card width below them. */
+.pn .pn-summary .halves {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 0 22px;
+}
+.pn .pn-summary .halves table + table { border-left: 2px dashed var(--paper-3); }
+/* Inline totals strip below the halves: adders left, phase total right. */
+.pn .pn-summary .totline {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 14px;
+	flex-wrap: wrap;
+	border-top: 2px solid var(--ink);
+	padding: 8px 16px 7px;
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	color: var(--ink-2);
+}
+.pn .pn-summary .totline .adds { display: flex; gap: 16px; flex-wrap: wrap; }
+.pn .pn-summary .totline b {
+	font-family: var(--display);
+	font-size: 14px;
+	color: var(--ink);
+}
+.pn .pn-summary .totline .grand {
+	text-transform: uppercase;
+	letter-spacing: 0.1em;
+	color: var(--ink);
+}
+.pn .pn-summary .totline .grand b {
+	font-size: 18px;
+	color: var(--red);
+	margin-left: 4px;
+}
+@media (max-width: 700px) {
+	.pn .pn-summary .halves { grid-template-columns: 1fr; }
+	.pn .pn-summary .halves table + table { border-left: none; }
+}
 .pn .pn-summary th {
 	font-family: var(--mono);
 	font-size: 10px;
@@ -1529,7 +1592,7 @@
 }
 .pn .pn-summary th:last-child { padding-right: 16px; }
 .pn .pn-summary td {
-	padding: 6.5px 12px;
+	padding: 5px 12px;
 	border-bottom: 1px dashed var(--paper-3);
 	text-align: right;
 	font-family: var(--mono);
