@@ -210,8 +210,8 @@
 .pn .pn-ov-group .thead,
 .pn .pn-ov-group .trow {
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) 2.4rem 3.6rem;
-	gap: 8px;
+	grid-template-columns: minmax(0, 1fr) repeat(4, 1.45rem) 2.9rem;
+	gap: 5px;
 	align-items: center;
 }
 .pn .pn-ov-group .thead {
@@ -250,7 +250,9 @@
 	font-size: 13px;
 	color: var(--ink);
 }
-.pn .pn-ov-group .tnum.first { color: var(--ink-2); }
+.pn .pn-ov-group .tnum.pos { color: var(--ink-2); font-size: 12px; }
+.pn .pn-ov-group .tnum.pos.lead { color: var(--ink); font-size: 13px; }
+.pn .pn-ov-group .tnum.zero { color: var(--ink-3); opacity: 0.6; }
 .pn .pn-ov-group .tnum .qbar {
 	display: block;
 	height: 3px;
@@ -263,6 +265,77 @@
 	height: 100%;
 	background: var(--red);
 }
+
+/* Clickable counts — keep the typography, add a press affordance. */
+.pn .pn-ov-cnt {
+	background: none;
+	border: 0;
+	padding: 2px 3px;
+	margin: -2px -3px;
+	font: inherit;
+	color: inherit;
+	cursor: pointer;
+	border-radius: 2px;
+	display: inline-block;
+	width: 100%;
+	text-align: right;
+}
+.pn .pn-ov-cnt:hover { background: rgba(14, 29, 64, 0.08); }
+.pn .pn-ov-cnt:active { background: rgba(14, 29, 64, 0.16); }
+
+/* ----------------------- Who-picked-this popover -------------------------- */
+.pn .pn-ov-pop {
+	position: fixed;
+	z-index: 60;
+	background: var(--paper);
+	border: 2px solid var(--ink);
+	box-shadow: 4px 4px 0 var(--ink);
+	padding: 9px 11px 10px;
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--ink);
+}
+.pn .pn-ov-pop .pp-h {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+	font-family: var(--display);
+	font-size: 13px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	border-bottom: 1.5px solid var(--ink);
+	padding-bottom: 4px;
+}
+.pn .pn-ov-pop .pp-x {
+	background: none;
+	border: 0;
+	font-size: 14px;
+	line-height: 1;
+	cursor: pointer;
+	color: var(--ink-3);
+	padding: 0 0 0 6px;
+}
+.pn .pn-ov-pop .pp-x:hover { color: var(--ink); }
+.pn .pn-ov-pop .pp-sub {
+	font-size: 9.5px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	margin: 5px 0 6px;
+}
+.pn .pn-ov-pop ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	max-height: 176px;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+.pn .pn-ov-pop li { letter-spacing: 0.02em; }
+.pn .pn-ov-pop li.you { color: var(--red); font-weight: 600; }
 .pn .pn-ov-group .fixtures {
 	display: flex;
 	flex-direction: column;

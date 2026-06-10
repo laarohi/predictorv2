@@ -1,5 +1,6 @@
 """Predictions API routes."""
 
+import time
 import uuid
 from collections import defaultdict
 from datetime import date
@@ -12,6 +13,7 @@ from sqlmodel import select, delete
 
 from app.dependencies import CurrentUser, DbSession, OptionalUser, RequestCtx
 from app.models._datetime import utc_now
+from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.prediction_history import PredictionAction, PredictionSource
@@ -28,6 +30,7 @@ from app.schemas.prediction import (
     MatchPredictionCreate,
     MatchPredictionRead,
     MatchPredictionUpdate,
+    OverviewCountCell,
     OverviewFixtureRow,
     OverviewGroup,
     OverviewTeamRow,
@@ -668,6 +671,11 @@ async def get_community_predictions(
 # ---------------------------------------------------------------------------
 # Overview — "who predicted what" aggregates. Same blind-pool philosophy as
 # the community endpoint above, but bulk: one call paints a whole page.
+#
+# The prediction-derived aggregates are immutable once their phase locks
+# (and the endpoints 403 before that), so they're cached in-process with a
+# TTL. Only fixture status/scores change after lock — those are re-read
+# fresh on every request and merged over the cached counts.
 # ---------------------------------------------------------------------------
 
 _KO_STAGES = (
@@ -679,6 +687,104 @@ _KO_STAGES = (
     "winner",
 )
 
+# TTL covers the rare post-lock mutation (an admin correcting a prediction);
+# regular users cannot change anything these aggregates read after lock.
+_OVERVIEW_CACHE_TTL_SECONDS = 300.0
+_overview_cache: dict[str, tuple[float, object]] = {}
+
+
+def _overview_cache_get(key: str):
+    hit = _overview_cache.get(key)
+    if hit is not None and (time.monotonic() - hit[0]) < _OVERVIEW_CACHE_TTL_SECONDS:
+        return hit[1]
+    return None
+
+
+def _overview_cache_put(key: str, value: object) -> None:
+    _overview_cache[key] = (time.monotonic(), value)
+
+
+def _count_cell(names: list[str]) -> OverviewCountCell:
+    return OverviewCountCell(count=len(names), users=sorted(names, key=str.casefold))
+
+
+async def _build_groups_aggregates(session: DbSession) -> dict:
+    """The expensive, prediction-derived half of the groups overview.
+
+    Returns {total_predictors, outcome_counts, team_rows_by_group} — all
+    frozen once Phase 1 locks, hence cacheable.
+    """
+    pred_result = await session.execute(
+        select(MatchPrediction, User.name)
+        .join(Fixture, MatchPrediction.fixture_id == Fixture.id)
+        .join(User, MatchPrediction.user_id == User.id)
+        .where(
+            Fixture.stage == "group",
+            MatchPrediction.phase == PredictionPhase.PHASE_1,
+        )
+    )
+    outcome_counts: dict[uuid.UUID, dict[str, int]] = defaultdict(
+        lambda: {"1": 0, "X": 0, "2": 0}
+    )
+    predictor_names: dict[uuid.UUID, str] = {}
+    for pred, user_name in pred_result.all():
+        outcome_counts[pred.fixture_id][pred.predicted_outcome] += 1
+        predictor_names[pred.user_id] = user_name
+
+    # Who carries each team into their R32 (Phase 1 bracket).
+    r32_result = await session.execute(
+        select(TeamPrediction.team, User.name)
+        .join(User, TeamPrediction.user_id == User.id)
+        .where(
+            TeamPrediction.stage == "round_of_32",
+            TeamPrediction.phase == PredictionPhase.PHASE_1,
+        )
+    )
+    advance_users: dict[str, list[str]] = defaultdict(list)
+    for team, user_name in r32_result.all():
+        advance_users[team].append(user_name)
+
+    # Predicted finishing position (1st..4th) per team: each predictor's
+    # implicit standings, derived from their score picks with the same
+    # tiebreaker pipeline the group_position bonus scores against.
+    position_users: dict[str, list[list[str]]] = defaultdict(
+        lambda: [[], [], [], []]
+    )
+    for user_id, user_name in predictor_names.items():
+        predicted, _ = await get_predicted_group_standings(session, user_id)
+        for ranked_teams in predicted.values():
+            for i, ranked in enumerate(ranked_teams[:4]):
+                position_users[ranked["team"]][i].append(user_name)
+
+    # Group membership from the fixtures table.
+    fx_result = await session.execute(
+        select(Fixture.group, Fixture.home_team, Fixture.away_team).where(
+            Fixture.stage == "group"
+        )
+    )
+    group_teams: dict[str, set[str]] = defaultdict(set)
+    for g, home, away in fx_result.all():
+        group_teams[g or "?"].update((home, away))
+
+    team_rows_by_group: dict[str, list[OverviewTeamRow]] = {}
+    for g in sorted(group_teams):
+        rows = [
+            OverviewTeamRow(
+                team=t,
+                positions=[_count_cell(names) for names in position_users[t]],
+                advance=_count_cell(advance_users.get(t, [])),
+            )
+            for t in group_teams[g]
+        ]
+        rows.sort(key=lambda r: (-r.advance.count, -r.positions[0].count, r.team))
+        team_rows_by_group[g] = rows
+
+    return {
+        "total_predictors": len(predictor_names),
+        "outcome_counts": dict(outcome_counts),
+        "team_rows_by_group": team_rows_by_group,
+    }
+
 
 @router.get("/overview/groups", response_model=GroupsOverviewResponse)
 async def get_groups_overview(
@@ -687,10 +793,10 @@ async def get_groups_overview(
 ) -> GroupsOverviewResponse:
     """Aggregate distribution of everyone's Phase 1 group predictions.
 
-    Per group: how many players put each team 1st (derived from their score
-    picks, exactly as the group_position bonus derives it) and how many
-    carried the team into their Round of 32; per fixture: the 1/X/2 split
-    of all score picks.
+    Per group: who put each team 1st/2nd/3rd/4th (derived from their score
+    picks, exactly as the group_position bonus derives it) and who carried
+    the team into their Round of 32; per fixture: the 1/X/2 split of all
+    score picks plus the live status/score.
 
     Blind pool: 403 until the Phase 1 deadline passes. Group predictions
     lock en-masse at that moment, so afterwards the whole distribution is
@@ -702,73 +808,34 @@ async def get_groups_overview(
             detail="The overview unlocks when Phase 1 predictions lock",
         )
 
+    comp_result = await session.execute(
+        select(Competition.id).where(Competition.is_active == True)  # noqa: E712
+    )
+    competition_id = comp_result.scalar_one_or_none()
+
+    cache_key = f"overview:groups:{competition_id}"
+    aggregates = _overview_cache_get(cache_key)
+    if aggregates is None:
+        aggregates = await _build_groups_aggregates(session)
+        _overview_cache_put(cache_key, aggregates)
+
+    # Fixture rows are rebuilt fresh every request: status and actual
+    # scores keep moving during match days even though the picks don't.
     fx_result = await session.execute(
         select(Fixture)
         .options(selectinload(Fixture.score))
         .where(Fixture.stage == "group")
         .order_by(Fixture.kickoff)
     )
-    fixtures = fx_result.scalars().all()
-
-    pred_result = await session.execute(
-        select(MatchPrediction)
-        .join(Fixture, MatchPrediction.fixture_id == Fixture.id)
-        .where(
-            Fixture.stage == "group",
-            MatchPrediction.phase == PredictionPhase.PHASE_1,
-        )
-    )
-    match_preds = pred_result.scalars().all()
-
-    outcome_counts: dict[uuid.UUID, dict[str, int]] = defaultdict(
-        lambda: {"1": 0, "X": 0, "2": 0}
-    )
-    predictor_ids: set[uuid.UUID] = set()
-    for pred in match_preds:
-        outcome_counts[pred.fixture_id][pred.predicted_outcome] += 1
-        predictor_ids.add(pred.user_id)
-
-    r32_result = await session.execute(
-        select(TeamPrediction.team, func.count())
-        .where(
-            TeamPrediction.stage == "round_of_32",
-            TeamPrediction.phase == PredictionPhase.PHASE_1,
-        )
-        .group_by(TeamPrediction.team)
-    )
-    advance_counts: dict[str, int] = dict(r32_result.all())
-
-    # "Picked 1st" per team: each predictor's implicit standings, derived
-    # from their score picks with the same tiebreaker pipeline the
-    # group_position bonus scores against (frontend/backend parity-tested).
-    first_counts: dict[str, int] = defaultdict(int)
-    for user_id in predictor_ids:
-        predicted, _ = await get_predicted_group_standings(session, user_id)
-        for ranked_teams in predicted.values():
-            if ranked_teams:
-                first_counts[ranked_teams[0]["team"]] += 1
-
-    group_teams: dict[str, set[str]] = defaultdict(set)
     fixtures_by_group: dict[str, list[Fixture]] = defaultdict(list)
-    for f in fixtures:
-        g = f.group or "?"
-        group_teams[g].update((f.home_team, f.away_team))
-        fixtures_by_group[g].append(f)
+    for f in fx_result.scalars().all():
+        fixtures_by_group[f.group or "?"].append(f)
 
+    outcome_counts = aggregates["outcome_counts"]
     groups: list[OverviewGroup] = []
-    for g in sorted(group_teams):
-        team_rows = [
-            OverviewTeamRow(
-                team=t,
-                first_count=first_counts.get(t, 0),
-                advance_count=advance_counts.get(t, 0),
-            )
-            for t in group_teams[g]
-        ]
-        team_rows.sort(key=lambda r: (-r.advance_count, -r.first_count, r.team))
-
+    for g, team_rows in aggregates["team_rows_by_group"].items():
         fixture_rows = []
-        for f in fixtures_by_group[g]:
+        for f in fixtures_by_group.get(g, []):
             oc = outcome_counts.get(f.id, {"1": 0, "X": 0, "2": 0})
             fixture_rows.append(
                 OverviewFixtureRow(
@@ -786,7 +853,9 @@ async def get_groups_overview(
             )
         groups.append(OverviewGroup(group=g, teams=team_rows, fixtures=fixture_rows))
 
-    return GroupsOverviewResponse(total_predictors=len(predictor_ids), groups=groups)
+    return GroupsOverviewResponse(
+        total_predictors=aggregates["total_predictors"], groups=groups
+    )
 
 
 @router.get("/overview/bracket", response_model=BracketOverviewResponse)
@@ -795,10 +864,11 @@ async def get_bracket_overview(
     _user: CurrentUser,
     phase: int = Query(default=1, ge=1, le=2),
 ) -> BracketOverviewResponse:
-    """How many players predicted each team to reach each knockout stage.
+    """Who (and how many) predicted each team to reach each knockout stage.
 
     Phase 1 unlocks at the Phase 1 deadline; Phase 2 at the Phase 2
-    bracket deadline (admin-set when activating Phase 2).
+    bracket deadline (admin-set when activating Phase 2). Fully immutable
+    once visible, so the whole response is cached.
     """
     if phase == 1:
         if not await is_phase1_locked(session):
@@ -815,25 +885,31 @@ async def get_bracket_overview(
             )
         pred_phase = PredictionPhase.PHASE_2
 
-    count_result = await session.execute(
-        select(TeamPrediction.team, TeamPrediction.stage, func.count())
+    comp_result = await session.execute(
+        select(Competition.id).where(Competition.is_active == True)  # noqa: E712
+    )
+    competition_id = comp_result.scalar_one_or_none()
+
+    cache_key = f"overview:bracket:{competition_id}:{phase}"
+    cached = _overview_cache_get(cache_key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+
+    rows_result = await session.execute(
+        select(TeamPrediction.team, TeamPrediction.stage, User.name)
+        .join(User, TeamPrediction.user_id == User.id)
         .where(
             TeamPrediction.phase == pred_phase,
             TeamPrediction.stage.in_(_KO_STAGES),  # type: ignore[union-attr]
         )
-        .group_by(TeamPrediction.team, TeamPrediction.stage)
     )
-    counts: dict[str, dict[str, int]] = defaultdict(dict)
-    for team, stage, n in count_result.all():
-        counts[team][stage] = n
-
-    total_result = await session.execute(
-        select(func.count(func.distinct(TeamPrediction.user_id))).where(
-            TeamPrediction.phase == pred_phase,
-            TeamPrediction.stage.in_(_KO_STAGES),  # type: ignore[union-attr]
-        )
+    stage_users: dict[str, dict[str, list[str]]] = defaultdict(
+        lambda: defaultdict(list)
     )
-    total_predictors = total_result.scalar_one()
+    predictor_names: set[str] = set()
+    for team, stage, user_name in rows_result.all():
+        stage_users[team][stage].append(user_name)
+        predictor_names.add(user_name)
 
     # Group letters come from the fixtures table (home/away of group games).
     fx_result = await session.execute(
@@ -847,35 +923,37 @@ async def get_bracket_overview(
             team_group[home] = g
             team_group[away] = g
 
-    all_teams = set(team_group) | set(counts)
+    all_teams = set(team_group) | set(stage_users)
     team_rows = [
         BracketOverviewTeamRow(
             team=t,
             group=team_group.get(t),
-            round_of_32=counts[t].get("round_of_32", 0),
-            round_of_16=counts[t].get("round_of_16", 0),
-            quarter_final=counts[t].get("quarter_final", 0),
-            semi_final=counts[t].get("semi_final", 0),
-            final=counts[t].get("final", 0),
-            winner=counts[t].get("winner", 0),
+            round_of_32=_count_cell(stage_users[t].get("round_of_32", [])),
+            round_of_16=_count_cell(stage_users[t].get("round_of_16", [])),
+            quarter_final=_count_cell(stage_users[t].get("quarter_final", [])),
+            semi_final=_count_cell(stage_users[t].get("semi_final", [])),
+            final=_count_cell(stage_users[t].get("final", [])),
+            winner=_count_cell(stage_users[t].get("winner", [])),
         )
         for t in all_teams
     ]
     team_rows.sort(
         key=lambda r: (
-            -r.winner,
-            -r.final,
-            -r.semi_final,
-            -r.quarter_final,
-            -r.round_of_16,
-            -r.round_of_32,
+            -r.winner.count,
+            -r.final.count,
+            -r.semi_final.count,
+            -r.quarter_final.count,
+            -r.round_of_16.count,
+            -r.round_of_32.count,
             r.team,
         )
     )
 
-    return BracketOverviewResponse(
-        phase=phase, total_predictors=total_predictors, teams=team_rows
+    response = BracketOverviewResponse(
+        phase=phase, total_predictors=len(predictor_names), teams=team_rows
     )
+    _overview_cache_put(cache_key, response)
+    return response
 
 
 @router.get("/bonus/questions", response_model=list[BonusQuestionResponse])

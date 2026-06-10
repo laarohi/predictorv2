@@ -186,9 +186,9 @@
 	<div class="footnote">
 		<span>
 			{#if mode === 'post'}
-				★ exact result · ◯ your pick · bubble area ∝ # of predictions · rarity bonus follows the match outcome
+				★ exact result · YOU = your pick · cell shade ∝ # of picks · rarity bonus follows the match outcome
 			{:else}
-				bubble area ∝ # of predictions · rarity bonus rewards backing the rarer outcome
+				cell shade ∝ # of picks · rarity bonus rewards backing the rarer outcome
 			{/if}
 		</span>
 		<span><b>{total}</b> player predictions</span>

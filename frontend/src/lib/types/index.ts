@@ -375,12 +375,18 @@ export interface CommunityPredictionsResponse {
 }
 
 // Prediction overview (who-picked-what distribution pages)
+export interface OverviewCountCell {
+	count: number;
+	/** Exactly who is behind the count, alphabetical. */
+	users: string[];
+}
+
 export interface OverviewTeamRow {
 	team: string;
-	/** Players whose predicted standings put this team 1st in its group. */
-	first_count: number;
+	/** Index 0..3 — players whose predicted standings put this team 1st..4th. */
+	positions: OverviewCountCell[];
 	/** Players whose Phase 1 bracket carries this team into the R32. */
-	advance_count: number;
+	advance: OverviewCountCell;
 }
 
 export interface OverviewFixtureRow {
@@ -410,12 +416,12 @@ export interface GroupsOverviewResponse {
 export interface BracketOverviewTeamRow {
 	team: string;
 	group: string | null;
-	round_of_32: number;
-	round_of_16: number;
-	quarter_final: number;
-	semi_final: number;
-	final: number;
-	winner: number;
+	round_of_32: OverviewCountCell;
+	round_of_16: OverviewCountCell;
+	quarter_final: OverviewCountCell;
+	semi_final: OverviewCountCell;
+	final: OverviewCountCell;
+	winner: OverviewCountCell;
 }
 
 export interface BracketOverviewResponse {

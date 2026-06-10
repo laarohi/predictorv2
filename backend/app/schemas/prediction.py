@@ -145,15 +145,23 @@ class CommunityPredictionsResponse(BaseModel):
 # deadline) before any of them is served.
 
 
+class OverviewCountCell(BaseModel):
+    """A pick count plus exactly who is behind it (alphabetical names)."""
+
+    count: int
+    users: list[str]
+
+
 class OverviewTeamRow(BaseModel):
     """Per-team prediction counts inside one group panel."""
 
     team: str
-    # Users whose predicted standings (derived from their score picks, same
-    # derivation the group_position bonus scores against) put the team 1st.
-    first_count: int
+    # Index 0..3 — users whose predicted standings (derived from their score
+    # picks, same derivation the group_position bonus scores against) put
+    # the team 1st/2nd/3rd/4th in its group.
+    positions: list[OverviewCountCell]
     # Users whose Phase 1 bracket includes the team in the Round of 32.
-    advance_count: int
+    advance: OverviewCountCell
 
 
 class OverviewFixtureRow(BaseModel):
@@ -185,16 +193,16 @@ class GroupsOverviewResponse(BaseModel):
 
 
 class BracketOverviewTeamRow(BaseModel):
-    """How many players predicted this team to reach each knockout stage."""
+    """Who (and how many) predicted this team to reach each knockout stage."""
 
     team: str
     group: str | None
-    round_of_32: int
-    round_of_16: int
-    quarter_final: int
-    semi_final: int
-    final: int
-    winner: int
+    round_of_32: OverviewCountCell
+    round_of_16: OverviewCountCell
+    quarter_final: OverviewCountCell
+    semi_final: OverviewCountCell
+    final: OverviewCountCell
+    winner: OverviewCountCell
 
 
 class BracketOverviewResponse(BaseModel):

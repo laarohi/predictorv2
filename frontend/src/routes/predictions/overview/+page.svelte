@@ -38,6 +38,7 @@
 	import { displayTeamName } from '$lib/utils/teamName';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import PnFlag from '$components/panini/PnFlag.svelte';
+	import PnPointsBar from '$components/panini/PnPointsBar.svelte';
 	import PnScoreHeatmap from '$components/panini/PnScoreHeatmap.svelte';
 	import type {
 		BracketOverviewResponse,
@@ -46,6 +47,7 @@
 		GroupsOverviewResponse,
 		LeaderboardEntry,
 		LeaderboardResponse,
+		OverviewCountCell,
 		OverviewFixtureRow
 	} from '$types';
 
@@ -168,22 +170,70 @@
 	// equal-count teams randomly.
 	function cmpDefault(a: BracketOverviewTeamRow, b: BracketOverviewTeamRow): number {
 		return (
-			b.winner - a.winner ||
-			b.final - a.final ||
-			b.semi_final - a.semi_final ||
-			b.quarter_final - a.quarter_final ||
-			b.round_of_16 - a.round_of_16 ||
-			b.round_of_32 - a.round_of_32 ||
+			b.winner.count - a.winner.count ||
+			b.final.count - a.final.count ||
+			b.semi_final.count - a.semi_final.count ||
+			b.quarter_final.count - a.quarter_final.count ||
+			b.round_of_16.count - a.round_of_16.count ||
+			b.round_of_32.count - a.round_of_32.count ||
 			a.team.localeCompare(b.team)
 		);
 	}
 	$: tableRows = bracketData
 		? [...bracketData.teams].sort((a, b) => {
 				if (sortKey === 'team') return sortDir * a.team.localeCompare(b.team);
-				const d = (a[sortKey] as number) - (b[sortKey] as number);
+				const d = a[sortKey].count - b[sortKey].count;
 				return d !== 0 ? sortDir * d : cmpDefault(a, b);
 			})
 		: [];
+
+	// ---- Who-is-behind-a-count popover ---------------------------------------
+	// One floating card for every clickable count on the page (group position
+	// cells, advance cells, forecast-table cells). Anchored under the count,
+	// clamped to the viewport; dismissed on outside press / Escape / re-click.
+	interface Pop {
+		title: string;
+		sub: string;
+		users: string[];
+		left: number;
+		top: number;
+		anchor: HTMLElement;
+	}
+	let pop: Pop | null = null;
+	const POP_W = 210;
+
+	function openPop(e: MouseEvent, title: string, sub: string, cell: OverviewCountCell) {
+		const anchor = e.currentTarget as HTMLElement;
+		if (pop?.anchor === anchor) {
+			pop = null; // second click on the same count toggles it off
+			return;
+		}
+		const r = anchor.getBoundingClientRect();
+		pop = {
+			title,
+			sub,
+			users: cell.users,
+			left: Math.min(window.innerWidth - POP_W - 8, Math.max(8, r.left + r.width / 2 - POP_W / 2)),
+			top: r.bottom + 6,
+			anchor
+		};
+	}
+	function onWindowPress(e: MouseEvent) {
+		if (!pop) return;
+		const t = e.target as Node;
+		if (pop.anchor.contains(t)) return; // openPop's toggle handles this
+		const popEl = document.querySelector('.pn-ov-pop');
+		if (popEl && popEl.contains(t)) return;
+		pop = null;
+	}
+	function onWindowKeydown(e: KeyboardEvent) {
+		if (e.key === 'Escape') pop = null;
+	}
+	// Counts inside the scrollable table would drag a fixed-position popover
+	// out of alignment — just dismiss on scroll.
+	function onAnyScroll() {
+		pop = null;
+	}
 
 	// ---- Heatmap modal -------------------------------------------------------
 	let modalDialog: HTMLDialogElement;
@@ -257,6 +307,8 @@
 	$: modalMode = (modalActual ? 'post' : 'pre') as 'pre' | 'post';
 
 	// ---- Small helpers -------------------------------------------------------
+	const POSITION_LABELS = ['1st', '2nd', '3rd', '4th'];
+
 	function pct(n: number, total: number): number {
 		return (100 * n) / Math.max(1, total);
 	}
@@ -277,6 +329,12 @@
 <svelte:head>
 	<title>Overview — Predictor</title>
 </svelte:head>
+
+<svelte:window
+	on:mousedown={onWindowPress}
+	on:keydown={onWindowKeydown}
+	on:scroll|capture={onAnyScroll}
+/>
 
 {#if $isAuthenticated}
 	<PnPageShell>
@@ -353,7 +411,9 @@
 							</div>
 							<div class="thead">
 								<span>Team</span>
-								<span title="Players whose predicted table puts this team 1st">1st</span>
+								{#each POSITION_LABELS as p (p)}
+									<span title="Players whose predicted table puts this team {p}">{p}</span>
+								{/each}
 								<span title="Players who carried this team into their Round of 32">Adv</span>
 							</div>
 							<div class="teams">
@@ -363,13 +423,42 @@
 											<PnFlag code={teamCode(t.team)} w={20} h={14} />
 											<span class="nm">{displayTeamName(t.team)}</span>
 										</span>
-										<span class="tnum first">{t.first_count > 0 ? t.first_count : '·'}</span>
-										<span class="tnum">
-											<b>{t.advance_count > 0 ? t.advance_count : '·'}</b>
-											<span class="qbar">
-												<span style="width:{pct(t.advance_count, groupsData.total_predictors)}%"></span>
-											</span>
-										</span>
+										{#each t.positions as cell, i (i)}
+											{#if cell.count > 0}
+												<button
+													class="tnum pos pn-ov-cnt"
+													class:lead={i === 0}
+													on:click={(e) =>
+														openPop(
+															e,
+															displayTeamName(t.team),
+															`Predicted ${POSITION_LABELS[i]} · ${cell.count} of ${groupsData?.total_predictors}`,
+															cell
+														)}
+												>{cell.count}</button>
+											{:else}
+												<span class="tnum pos zero">·</span>
+											{/if}
+										{/each}
+										{#if t.advance.count > 0}
+											<button
+												class="tnum adv pn-ov-cnt"
+												on:click={(e) =>
+													openPop(
+														e,
+														displayTeamName(t.team),
+														`In the R32 · ${t.advance.count} of ${groupsData?.total_predictors}`,
+														t.advance
+													)}
+											>
+												<b>{t.advance.count}</b>
+												<span class="qbar">
+													<span style="width:{pct(t.advance.count, groupsData.total_predictors)}%"></span>
+												</span>
+											</button>
+										{:else}
+											<span class="tnum adv zero">·</span>
+										{/if}
 									</div>
 								{/each}
 							</div>
@@ -469,14 +558,28 @@
 										</span>
 									</td>
 									{#each COLS as c (c.key)}
-										{@const v = t[c.key]}
+										{@const cell = t[c.key]}
 										<td class="num" class:sorted={sortKey === c.key}>
-											<span class="v" class:zero={v === 0} class:champ={c.key === 'winner' && v > 0}>
-												{v > 0 ? v : '·'}
-											</span>
-											<span class="micro">
-												<span style="width:{pct(v, bracketData.total_predictors)}%"></span>
-											</span>
+											{#if cell.count > 0}
+												<button
+													class="pn-ov-cnt"
+													on:click={(e) =>
+														openPop(
+															e,
+															displayTeamName(t.team),
+															`${c.hint.replace('Picked to ', '')} · ${cell.count} of ${bracketData?.total_predictors}`,
+															cell
+														)}
+												>
+													<span class="v" class:champ={c.key === 'winner'}>{cell.count}</span>
+													<span class="micro">
+														<span style="width:{pct(cell.count, bracketData.total_predictors)}%"></span>
+													</span>
+												</button>
+											{:else}
+												<span class="v zero">·</span>
+												<span class="micro"></span>
+											{/if}
 										</td>
 									{/each}
 								</tr>
@@ -533,18 +636,18 @@
 								pointsExact={scoringConfig.exact_points}
 								pointsOutcome={scoringConfig.outcome_points}
 							/>
+							<!-- Same W/D/L distribution + rarity underbraces as the
+							     match detail page — one canonical component. -->
+							<PnPointsBar
+								mode={modalMode}
+								homeCode={teamCode(modalRow.home_team)}
+								awayCode={teamCode(modalRow.away_team)}
+								actual={modalActual}
+								players={modalPlayers}
+								pointsExact={scoringConfig.exact_points}
+								pointsOutcome={scoringConfig.outcome_points}
+							/>
 							<div class="mf">
-								<span class="mf-key">
-									{#if modalMode === 'pre'}
-										<i class="sw home"></i> {teamCode(modalRow.home_team)} win
-										<i class="sw draw"></i> draw
-										<i class="sw away"></i> {teamCode(modalRow.away_team)} win
-									{:else}
-										<i class="sw exact"></i> exact
-										<i class="sw outcome"></i> outcome
-										<i class="sw miss"></i> no pts
-									{/if}
-								</span>
 								<a class="mf-link" href="/results/{modalRow.fixture_id}">Full match page →</a>
 							</div>
 						{/if}
@@ -552,5 +655,21 @@
 				</div>
 			{/if}
 		</dialog>
+
+		<!-- ─────────────── Who-is-behind-a-count popover ─────────────── -->
+		{#if pop}
+			<div class="pn-ov-pop" style="left: {pop.left}px; top: {pop.top}px; width: {POP_W}px;">
+				<div class="pp-h">
+					<span class="pp-t">{pop.title}</span>
+					<button class="pp-x" on:click={() => (pop = null)} aria-label="Close">×</button>
+				</div>
+				<div class="pp-sub">{pop.sub}</div>
+				<ul>
+					{#each pop.users as name (name)}
+						<li class:you={name === ($user?.name ?? null)}>{name}</li>
+					{/each}
+				</ul>
+			</div>
+		{/if}
 	</PnPageShell>
 {/if}

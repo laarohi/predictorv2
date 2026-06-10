@@ -18,10 +18,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from sqlmodel import SQLModel
 
-from app.api.predictions import get_bracket_overview, get_groups_overview
+from app.api.predictions import (
+    _overview_cache,
+    get_bracket_overview,
+    get_groups_overview,
+)
 from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
+from app.models.score import Score
 from app.models.user import User
 
 KICKOFF = datetime(2026, 6, 11, 19, 0, tzinfo=timezone.utc)
@@ -36,6 +41,13 @@ PAIRS = [
     ("Mexico", "Japan"),
     ("Canada", "Germany"),
 ]
+
+
+@pytest.fixture(autouse=True)
+def _clear_overview_cache():
+    _overview_cache.clear()
+    yield
+    _overview_cache.clear()
 
 
 @pytest_asyncio.fixture
@@ -148,15 +160,22 @@ async def test_groups_overview_counts(session, seeded):
 
     teams = {t.team: t for t in group.teams}
     assert set(teams) == set(TEAMS)
-    # Predicted 1st: Alice → Mexico, Bob → Canada.
-    assert teams["Mexico"].first_count == 1
-    assert teams["Canada"].first_count == 1
-    assert teams["Germany"].first_count == 0
-    # R32 advance counts (Phase 1 rows only).
-    assert teams["Mexico"].advance_count == 2
-    assert teams["Canada"].advance_count == 1
-    assert teams["Japan"].advance_count == 0
-    # Sorted by advance desc, then first desc.
+    # Predicted positions. Alice's table: MEX, CAN, GER, JPN. Bob's: CAN
+    # first, then a full three-way tie (2 pts, identical GD/GF, drawn H2H,
+    # empty FIFA table) resolved alphabetically → GER, JPN, MEX.
+    assert teams["Mexico"].positions[0].users == ["Alice"]
+    assert teams["Mexico"].positions[3].users == ["Bob"]
+    assert teams["Canada"].positions[0].users == ["Bob"]
+    assert teams["Canada"].positions[1].users == ["Alice"]
+    # Every team has exactly one position per predictor.
+    for t in TEAMS:
+        assert sum(c.count for c in teams[t].positions) == 2
+    # R32 advance cells (Phase 1 rows only), names alphabetical.
+    assert teams["Mexico"].advance.count == 2
+    assert teams["Mexico"].advance.users == ["Alice", "Bob"]
+    assert teams["Canada"].advance.users == ["Alice"]
+    assert teams["Japan"].advance.count == 0
+    # Sorted by advance desc, then 1st-place desc.
     assert group.teams[0].team == "Mexico"
     assert group.teams[1].team == "Canada"
 
@@ -172,6 +191,30 @@ async def test_groups_overview_counts(session, seeded):
         f for f in group.fixtures if (f.home_team, f.away_team) == ("Germany", "Japan")
     )
     assert (ger_jpn.home_count, ger_jpn.draw_count, ger_jpn.away_count) == (1, 1, 0)
+
+
+@pytest.mark.asyncio
+async def test_groups_overview_cache_keeps_fixture_state_fresh(session, seeded):
+    """Counts are cached, but status/score must reflect the live fixture."""
+    with patch("app.api.predictions.is_phase1_locked", new=AsyncMock(return_value=True)):
+        first = await get_groups_overview(session, _viewer())
+
+        fx = seeded["fixtures"][0]
+        session.add(Score(fixture_id=fx.id, home_score=2, away_score=1))
+        fx.status = MatchStatus.FINISHED
+        await session.commit()
+        # Each real request runs in a fresh session; expire the identity map
+        # so the second call re-reads the fixture's score relationship.
+        session.expire_all()
+
+        second = await get_groups_overview(session, _viewer())
+
+    row = next(f for f in second.groups[0].fixtures if f.fixture_id == fx.id)
+    assert row.status == MatchStatus.FINISHED
+    assert (row.actual_home, row.actual_away) == (2, 1)
+    # The prediction-derived half came from the cache and is unchanged.
+    assert second.total_predictors == first.total_predictors
+    assert second.groups[0].teams == first.groups[0].teams
 
 
 # ---- /overview/bracket -----------------------------------------------------
@@ -201,12 +244,13 @@ async def test_bracket_overview_counts_and_phase_separation(session, seeded):
     teams = {t.team: t for t in resp.teams}
     # All group-stage teams present even with zero picks.
     assert set(TEAMS) <= set(teams)
-    assert teams["Mexico"].round_of_32 == 2
-    assert teams["Mexico"].winner == 1
-    assert teams["Germany"].winner == 1
-    assert teams["Canada"].round_of_32 == 1
+    assert teams["Mexico"].round_of_32.count == 2
+    assert teams["Mexico"].round_of_32.users == ["Alice", "Bob"]
+    assert teams["Mexico"].winner.users == ["Alice"]
+    assert teams["Germany"].winner.count == 1
+    assert teams["Canada"].round_of_32.users == ["Alice"]
     # Bob's PHASE_2 Japan-winner row must not appear in Phase 1.
-    assert teams["Japan"].winner == 0
+    assert teams["Japan"].winner.count == 0
     assert teams["Mexico"].group == "A"
     # Sorted champion-first; Mexico ahead of Germany on the R32 tiebreak
     # (equal winner counts, more Round-of-32 picks).
@@ -222,7 +266,7 @@ async def test_bracket_overview_phase2_counts(session, seeded):
 
     assert resp.phase == 2
     teams = {t.team: t for t in resp.teams}
-    assert teams["Japan"].winner == 1
-    assert teams["Mexico"].winner == 0
+    assert teams["Japan"].winner.users == ["Bob"]
+    assert teams["Mexico"].winner.count == 0
     # Only Bob has Phase 2 rows.
     assert resp.total_predictors == 1
