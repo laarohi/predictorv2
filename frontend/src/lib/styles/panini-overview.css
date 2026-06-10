@@ -330,6 +330,9 @@
 	padding: 0;
 	max-height: 176px;
 	overflow-y: auto;
+	/* Reaching the end of the list must not hand the scroll to the page —
+	 * the page-scroll handler dismisses the popover. */
+	overscroll-behavior: contain;
 	display: flex;
 	flex-direction: column;
 	gap: 3px;
@@ -593,6 +596,16 @@
 	white-space: nowrap;
 }
 .pn-ov-modal .mf-link:hover { text-decoration: underline; }
+
+/* The modal is narrower than the match-page plate, so the rarity chips
+ * under narrow segments overlap their neighbours. Same remedy as the
+ * mobile match plate (panini-match.css): bonus value only, label hidden.
+ * Ditto the per-segment "N picks · %" sublines, which wrap at sliver
+ * widths — the counts are already inside the bar segments. */
+.pn-ov-modal .pn-md-bar .rar-chip { padding: 3px 6px 4px; }
+.pn-ov-modal .pn-md-bar .rar-chip .bonus { font-size: 12px; }
+.pn-ov-modal .pn-md-bar .rar-chip .lab { display: none; }
+.pn-ov-modal .pn-md-bar .seg-lbl span { display: none; }
 
 /* -------------------------------- Mobile --------------------------------- */
 @media (max-width: 699px) {

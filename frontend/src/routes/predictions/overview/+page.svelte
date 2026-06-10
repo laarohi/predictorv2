@@ -229,9 +229,16 @@
 	function onWindowKeydown(e: KeyboardEvent) {
 		if (e.key === 'Escape') pop = null;
 	}
-	// Counts inside the scrollable table would drag a fixed-position popover
-	// out of alignment — just dismiss on scroll.
-	function onAnyScroll() {
+	// Page scroll would drag a fixed-position popover away from its anchor —
+	// dismiss. But the popover's own name list is scrollable, and scroll
+	// events are observed in the capture phase, so scrolls that originate
+	// INSIDE the popover must be ignored or the list closes itself the
+	// moment the user scrolls it.
+	function onAnyScroll(e: Event) {
+		if (!pop) return;
+		const t = e.target as Node | null;
+		const popEl = document.querySelector('.pn-ov-pop');
+		if (t && popEl && popEl.contains(t)) return;
 		pop = null;
 	}
 
