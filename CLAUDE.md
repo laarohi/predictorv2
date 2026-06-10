@@ -82,7 +82,6 @@ Current focus: **World Cup 2026**
 - **Phase 2**: Knockout stage predictions (activated by admin after groups complete)
   - Knockout match scores
   - Updated bracket predictions based on actual group results
-  - Points reduced to 70% (configurable multiplier)
 
 ### Scoring System
 
@@ -287,4 +286,4 @@ The site uses the **Panini** design system — a sticker-album-inspired theme on
 
 **Flags** are real `flag-icons` vector SVGs (`PnFlag.svelte` / `PnAxisFlag.svelte`), lazily code-split (`utils/flagSvgs.ts`) and rendered with a subtle Panini saturate/contrast filter. A neutral grey box shows only while a flag's chunk is loading or for an unknown country code.
 
-**Backend-dependent widgets** (sparklines, social signals, hot pick, bracket exposure, underdog hits, steepest climb) use deterministic stubs in `frontend/src/lib/stubs/panini.ts` until the backend supports them. Each stub logs `[panini:stub] <name>` in dev so they're greppable.
+**Dashboard widgets all run on real backend data** — the deterministic stubs that once backed sparklines / social signals / hot pick etc. have been replaced by real endpoints (rank trajectory, bracket exposure, agreements, roster, highlights). `frontend/src/lib/stubs/panini.ts` now only holds the sparkline path-generator helpers and their tests; nothing logs `[panini:stub]` anymore.
