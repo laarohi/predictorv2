@@ -5,6 +5,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.models.fixture import MatchStatus
 from app.models.score import ScoreSource
 
 
@@ -39,6 +40,10 @@ class ScoreUpdate(BaseModel):
     home_penalties: int | None = Field(default=None, ge=0)
     away_penalties: int | None = Field(default=None, ge=0)
     verified: bool = False
+    # Resulting fixture status. None keeps the legacy behaviour (FINISHED);
+    # the admin UI sends LIVE/HALFTIME to correct an in-play score without
+    # ending the match (e.g. when the external feed lags or drops).
+    status: MatchStatus | None = None
 
 
 class LiveMatchScore(BaseModel):

@@ -22,12 +22,16 @@
 		getPaidLocal,
 		syncScores,
 		sendPhase1TestReceipt,
+		updateScore,
 		type AdminStats,
 		type CompetitionAdminView,
 		type UserAdminView,
 		type SyncScoresResponse,
-		type TestReceiptResponse
+		type TestReceiptResponse,
+		type ScoreUpdatePayload
 	} from '$lib/api/admin';
+	import { getAllFixtures } from '$api/fixtures';
+	import type { Fixture } from '$types';
 	import {
 		listBonusAnswers,
 		setBonusAnswer,
@@ -89,6 +93,127 @@
 	let userSearch = '';
 	let togglingUserId: string | null = null;
 	let userActionError: string | null = null;
+
+	// Match results — manual score entry
+	let fixtures: Fixture[] = [];
+	let fxSearch = '';
+	let fxFilter: 'today' | 'live' | 'needs_result' | 'all' = 'today';
+	let editingFxId: string | null = null;
+	let savingScore = false;
+	let fxError: string | null = null;
+	let fxSuccess: string | null = null;
+
+	// Editor drafts. FT scores are required numbers; ET/pens start as '' so
+	// an empty input round-trips to null (KO matches decided in 90' have no
+	// ET legs — sending 0 would fabricate one). Number inputs hand back
+	// number | '' through bind:value, hence the union type.
+	let dHome = 0;
+	let dAway = 0;
+	let dHomeEt: string | number = '';
+	let dAwayEt: string | number = '';
+	let dHomePen: string | number = '';
+	let dAwayPen: string | number = '';
+	let dStatus: 'finished' | 'live' | 'halftime' | 'scheduled' = 'finished';
+
+	function setFxFilter(key: string) {
+		fxFilter = key as typeof fxFilter;
+	}
+
+	function fxKickoffLabel(f: Fixture): string {
+		return new Date(f.kickoff).toLocaleString('en-GB', {
+			day: 'numeric',
+			month: 'short',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
+	function fxStageLabel(f: Fixture): string {
+		if (f.stage === 'group') return `Group ${f.group ?? '?'}`;
+		return f.stage.replace(/_/g, ' ').replace('round of', 'R');
+	}
+
+	$: filteredFixtures = (() => {
+		const q = fxSearch.trim().toLowerCase();
+		// A search scans the whole tournament — applying the day/status filter
+		// on top would silently hide the match being looked for.
+		if (q) {
+			return fixtures.filter(
+				(f) =>
+					f.home_team.toLowerCase().includes(q) || f.away_team.toLowerCase().includes(q)
+			);
+		}
+		const now = new Date();
+		switch (fxFilter) {
+			case 'today':
+				return fixtures.filter(
+					(f) => new Date(f.kickoff).toDateString() === now.toDateString()
+				);
+			case 'live':
+				return fixtures.filter((f) => f.status === 'live' || f.status === 'halftime');
+			case 'needs_result':
+				return fixtures.filter(
+					(f) => new Date(f.kickoff) < now && f.status !== 'finished' && f.status !== 'cancelled'
+				);
+			default:
+				return fixtures;
+		}
+	})();
+
+	function startScoreEdit(f: Fixture) {
+		editingFxId = f.id;
+		fxError = null;
+		fxSuccess = null;
+		dHome = f.score?.home_score ?? 0;
+		dAway = f.score?.away_score ?? 0;
+		dHomeEt = f.score?.home_score_et != null ? String(f.score.home_score_et) : '';
+		dAwayEt = f.score?.away_score_et != null ? String(f.score.away_score_et) : '';
+		dHomePen = f.score?.home_penalties != null ? String(f.score.home_penalties) : '';
+		dAwayPen = f.score?.away_penalties != null ? String(f.score.away_penalties) : '';
+		dStatus = f.status === 'live' || f.status === 'halftime' ? f.status : 'finished';
+	}
+
+	/** '' → null, otherwise a clamped non-negative int. */
+	function optInt(raw: string | number): number | null {
+		const t = String(raw ?? '').trim();
+		if (t === '') return null;
+		const n = Math.max(0, Math.floor(Number(t)));
+		return Number.isFinite(n) ? n : null;
+	}
+
+	async function handleSaveScore(f: Fixture) {
+		const homeEt = optInt(dHomeEt);
+		const awayEt = optInt(dAwayEt);
+		const homePen = optInt(dHomePen);
+		const awayPen = optInt(dAwayPen);
+		if ((homeEt == null) !== (awayEt == null) || (homePen == null) !== (awayPen == null)) {
+			fxError = 'Extra time and penalties need BOTH sides filled (or both empty).';
+			return;
+		}
+		savingScore = true;
+		fxError = null;
+		fxSuccess = null;
+		try {
+			const payload: ScoreUpdatePayload = {
+				home_score: Math.max(0, Math.floor(dHome)),
+				away_score: Math.max(0, Math.floor(dAway)),
+				home_score_et: homeEt,
+				away_score_et: awayEt,
+				home_penalties: homePen,
+				away_penalties: awayPen,
+				verified: true,
+				status: dStatus
+			};
+			await updateScore(f.id, payload);
+			fxSuccess = `Saved: ${f.home_team} ${payload.home_score}–${payload.away_score} ${f.away_team}${dStatus !== 'finished' ? ` (kept ${dStatus.toUpperCase()})` : ''}`;
+			editingFxId = null;
+			await loadData();
+		} catch (e) {
+			fxError = e instanceof Error ? e.message : 'Failed to save score';
+		} finally {
+			savingScore = false;
+		}
+	}
 
 	// Bonus question answers admin state
 	let bonusAnswerViews: BonusAnswerView[] = [];
@@ -231,10 +356,11 @@
 		loading = true;
 		error = null;
 		try {
-			[stats, competitions, users] = await Promise.all([
+			[stats, competitions, users, fixtures] = await Promise.all([
 				getAdminStats(),
 				getCompetitions(),
-				getAllUsers()
+				getAllUsers(),
+				getAllFixtures()
 			]);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load admin data';
@@ -451,6 +577,129 @@
 					<button class="pn-btn gold" type="button" on:click={handleSyncScores} disabled={syncing}>
 						{syncing ? 'Syncing…' : 'Sync scores now'}
 					</button>
+				</div>
+			</section>
+
+			<!-- Match results — manual entry / correction -->
+			<section class="pn-pf-section">
+				<div class="h">
+					<span>Match Results</span>
+					<span class="right">{filteredFixtures.length} of {fixtures.length} fixtures</span>
+				</div>
+				<div class="body">
+					{#if fxError}<div class="pn-pf-alert error" style="margin-bottom: 12px;">{fxError}</div>{/if}
+					{#if fxSuccess}<div class="pn-pf-alert success" style="margin-bottom: 12px;">{fxSuccess}</div>{/if}
+
+					<div class="pn-ad-fxbar">
+						<input
+							class="pn-ad-search"
+							style="margin-bottom: 0;"
+							placeholder="Search by team…"
+							bind:value={fxSearch}
+							type="search"
+						/>
+						<div class="pn-ad-pills" class:muted={fxSearch.trim().length > 0}>
+							{#each [['today', 'Today'], ['live', 'Live'], ['needs_result', 'Needs result'], ['all', 'All']] as [key, label]}
+								<button
+									type="button"
+									class="pill"
+									class:on={fxFilter === key}
+									on:click={() => setFxFilter(key)}
+								>{label}</button>
+							{/each}
+						</div>
+					</div>
+
+					<div class="pn-ad-users">
+						{#each filteredFixtures as f (f.id)}
+							<div class="pn-ad-fx" class:editing={editingFxId === f.id} class:live={f.status === 'live' || f.status === 'halftime'}>
+								<div class="meta">
+									<div class="ko">{fxKickoffLabel(f)}</div>
+									<div class="st">{fxStageLabel(f)}</div>
+								</div>
+								<div class="match">
+									<span class="team">{f.home_team}</span>
+									<span class="score" class:unset={!f.score}>
+										{f.score ? `${f.score.home_score}–${f.score.away_score}` : 'v'}
+									</span>
+									<span class="team">{f.away_team}</span>
+									{#if f.score?.home_penalties != null}
+										<span class="pens">({f.score.home_penalties}–{f.score.away_penalties} pens)</span>
+									{/if}
+								</div>
+								<div class="badges">
+									<span class="pn-tag {f.status === 'finished' ? 'got' : f.status === 'live' || f.status === 'halftime' ? 'red' : ''}">
+										{f.status}{f.status === 'live' && f.minute != null ? ` ${f.minute}'` : ''}
+									</span>
+								</div>
+								<div class="actions">
+									{#if editingFxId === f.id}
+										<button class="pn-btn navy" type="button" on:click={() => (editingFxId = null)}>Cancel</button>
+									{:else}
+										<button class="pn-btn ghost" type="button" on:click={() => startScoreEdit(f)}>
+											{f.score ? 'Edit result' : 'Enter result'}
+										</button>
+									{/if}
+								</div>
+
+								{#if editingFxId === f.id}
+									<div class="pn-ad-fxedit">
+										<div class="grp">
+											<span class="lbl">Full time (90')</span>
+											<div class="pair">
+												<input type="number" min="0" max="99" bind:value={dHome} aria-label="{f.home_team} goals" />
+												<span class="dash">–</span>
+												<input type="number" min="0" max="99" bind:value={dAway} aria-label="{f.away_team} goals" />
+											</div>
+										</div>
+										{#if f.stage !== 'group'}
+											<div class="grp">
+												<span class="lbl">After ET (120')</span>
+												<div class="pair">
+													<input type="number" min="0" max="99" bind:value={dHomeEt} placeholder="—" aria-label="{f.home_team} goals after extra time" />
+													<span class="dash">–</span>
+													<input type="number" min="0" max="99" bind:value={dAwayEt} placeholder="—" aria-label="{f.away_team} goals after extra time" />
+												</div>
+											</div>
+											<div class="grp">
+												<span class="lbl">Penalties</span>
+												<div class="pair">
+													<input type="number" min="0" max="99" bind:value={dHomePen} placeholder="—" aria-label="{f.home_team} penalties" />
+													<span class="dash">–</span>
+													<input type="number" min="0" max="99" bind:value={dAwayPen} placeholder="—" aria-label="{f.away_team} penalties" />
+												</div>
+											</div>
+										{/if}
+										<div class="grp">
+											<span class="lbl">Sets match to</span>
+											<select bind:value={dStatus}>
+												<option value="finished">Finished</option>
+												<option value="live">Live (keep playing)</option>
+												<option value="halftime">Halftime</option>
+												<option value="scheduled">Scheduled (revert)</option>
+											</select>
+										</div>
+										<div class="grp save">
+											<button class="pn-btn gold" type="button" disabled={savingScore} on:click={() => handleSaveScore(f)}>
+												{savingScore ? 'Saving…' : 'Save result'}
+											</button>
+										</div>
+									</div>
+								{/if}
+							</div>
+						{:else}
+							<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">
+								{fxSearch.trim() ? 'No fixtures match search' : 'No fixtures in this view — try another filter'}
+							</p>
+						{/each}
+					</div>
+
+					<p style="font-family: var(--mono); font-size: 10.5px; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; margin-top: 14px;">
+						★ Manual results override the API feed and recalculate the leaderboard immediately.
+						Full time is the 90-minute score; for knockout matches that went long, fill the
+						120' score and penalties too — outcome resolves pens → ET → FT. Saving a LIVE
+						status is a stopgap while the feed is down: the next API sync overwrites it.
+					</p>
 				</div>
 			</section>
 

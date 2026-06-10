@@ -160,3 +160,43 @@ export interface TestReceiptResponse {
 export async function sendPhase1TestReceipt(): Promise<TestReceiptResponse> {
 	return api.post<TestReceiptResponse>('/admin/receipts/test/phase1');
 }
+
+// ---- Manual match results -------------------------------------------------
+
+export interface ScoreUpdatePayload {
+	home_score: number;
+	away_score: number;
+	home_score_et?: number | null;
+	away_score_et?: number | null;
+	home_penalties?: number | null;
+	away_penalties?: number | null;
+	verified?: boolean;
+	/** Resulting fixture status; omit for FINISHED (final result entry).
+	 *  Send 'live'/'halftime' to correct an in-play score without ending
+	 *  the match (e.g. when the external feed lags). */
+	status?: 'scheduled' | 'live' | 'halftime' | 'finished';
+}
+
+export interface ScoreReadView {
+	id: string;
+	fixture_id: string;
+	home_score: number;
+	away_score: number;
+	home_score_et: number | null;
+	away_score_et: number | null;
+	home_penalties: number | null;
+	away_penalties: number | null;
+	source: 'api' | 'manual';
+	verified: boolean;
+	outcome: string;
+}
+
+/** Create or overwrite a fixture's result (admin). Marks the score as
+ *  MANUAL — the next API sync of a live match would overwrite it, so for
+ *  finished matches this is authoritative, for live ones it's a stopgap. */
+export async function updateScore(
+	fixtureId: string,
+	payload: ScoreUpdatePayload
+): Promise<ScoreReadView> {
+	return api.put<ScoreReadView>(`/scores/${fixtureId}`, payload);
+}

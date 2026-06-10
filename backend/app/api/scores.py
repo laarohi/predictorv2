@@ -137,8 +137,9 @@ async def update_score(
         )
         session.add(score)
 
-    # Update fixture status
-    fixture.status = MatchStatus.FINISHED
+    # Update fixture status — FINISHED unless the admin explicitly kept the
+    # match in play (mid-match correction while the external feed is down).
+    fixture.status = score_data.status or MatchStatus.FINISHED
     fixture.updated_at = utc_now()
 
     await session.commit()
