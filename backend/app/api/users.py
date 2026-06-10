@@ -253,6 +253,10 @@ async def get_user_predictions(
     )
     rows = result.all()
     phase1_locked = await is_phase1_locked(session)
+    # Owner bypass: a user always sees their own predictions (they typed
+    # them) — the blind pool only protects picks from OTHER users until
+    # the relevant lock. Mirrors the bracket-visibility rule below.
+    is_owner = _user is not None and _user.id == user_id
 
     match_predictions: list[UserMatchPredictionView] = []
     for pred, fixture in rows:
@@ -261,7 +265,7 @@ async def get_user_predictions(
         locked, _ = await get_fixture_lock_view(
             session, fixture, phase1_locked=phase1_locked
         )
-        if not locked and fixture.status != MatchStatus.FINISHED:
+        if not is_owner and not locked and fixture.status != MatchStatus.FINISHED:
             continue
 
         view = UserMatchPredictionView(
@@ -303,7 +307,6 @@ async def get_user_predictions(
     # other (or anonymous) caller only sees a phase's bracket once that
     # phase's deadline has locked. Without this gate, GET this endpoint for
     # any user_id would leak their entire bracket before Phase 1 locks.
-    is_owner = _user is not None and _user.id == user_id
     phase1_bracket_visible = is_owner or phase1_locked
     phase2_bracket_visible = is_owner or await is_phase2_bracket_locked(session)
 

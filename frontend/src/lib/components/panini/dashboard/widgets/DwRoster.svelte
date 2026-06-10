@@ -8,6 +8,8 @@
 		isCurrentUser?: boolean;
 		/** Undefined while data is loading; explicit false means show UNPAID. */
 		paid?: boolean;
+		/** When set, the player name links to /profile/{userId}. */
+		userId?: string;
 	};
 </script>
 
@@ -50,7 +52,7 @@
 					<tr>
 						<td class="pos">{r.position}</td>
 						<td class="nm" class:you={r.isCurrentUser}>
-							{r.name}{#if r.paid === false}<span class="paid-pill unpaid">UNPAID</span>{/if}<span class="h">{r.handle}</span>
+							{#if r.userId}<a href="/profile/{r.userId}" style="color: inherit; text-decoration: none;">{r.name}</a>{:else}{r.name}{/if}{#if r.paid === false}<span class="paid-pill unpaid">UNPAID</span>{/if}<span class="h">{r.handle}</span>
 						</td>
 						<td class="r prog">
 							<span class="pip" class:empty={!isFull(r)}></span>

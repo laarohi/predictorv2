@@ -326,3 +326,80 @@
 	.pn .pn-pf-hero .rank-block .v { font-size: 36px; }
 	.pn .pn-pf-hero .rank-block .of { display: inline; }
 }
+
+/* ── Per-group / per-round prediction tables (public profile) ────────── */
+
+.pn .pn-pf-predgrid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+	gap: 14px;
+}
+.pn .pn-pf-predblock {
+	border: 2px solid var(--ink);
+	background: var(--paper);
+	box-shadow: 3px 3px 0 var(--ink);
+}
+.pn .pn-pf-predblock .hd {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	background: var(--ink);
+	color: var(--paper);
+	font-family: var(--mono);
+	font-size: 10.5px;
+	font-weight: 700;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	padding: 7px 10px 6px;
+}
+.pn .pn-pf-predblock .hd .n {
+	font-weight: 400;
+	font-size: 9px;
+	opacity: 0.65;
+}
+.pn .pn-pf-predblock .row {
+	display: grid;
+	/* team | pick | team | ft | mark — teams flex, numbers stay put */
+	grid-template-columns: 1fr 44px 1fr 40px 18px;
+	align-items: center;
+	gap: 4px;
+	padding: 6px 10px;
+	border-top: 1.5px dashed var(--paper-3);
+}
+.pn .pn-pf-predblock .row:first-of-type { border-top: 0; }
+.pn .pn-pf-predblock .row .t {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	font-family: var(--mono);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+}
+.pn .pn-pf-predblock .row .t.r { justify-content: flex-end; }
+.pn .pn-pf-predblock .row .pick {
+	font-family: var(--display);
+	font-size: 13px;
+	text-align: center;
+	color: var(--ink);
+}
+.pn .pn-pf-predblock .row .ft {
+	font-family: var(--mono);
+	font-size: 10.5px;
+	text-align: right;
+	color: var(--ink-3);
+}
+.pn .pn-pf-predblock .row .mk {
+	font-size: 11px;
+	text-align: center;
+	color: var(--ink-3);
+}
+.pn .pn-pf-predblock .row .mk.exact { color: var(--gold); font-weight: 700; }
+.pn .pn-pf-predblock .row .mk.outcome { color: var(--green); font-weight: 700; }
+.pn .pn-pf-predblock .row .mk.wrong { color: var(--red); }
+.pn .pn-pf-predblock .row.exact { background: rgba(212, 154, 46, 0.1); }
+.pn .pn-pf-predblock .row.outcome { background: rgba(27, 108, 62, 0.08); }
+
+@media (max-width: 700px) {
+	.pn .pn-pf-predgrid { grid-template-columns: 1fr; }
+}

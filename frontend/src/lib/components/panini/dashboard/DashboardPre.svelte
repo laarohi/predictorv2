@@ -131,6 +131,7 @@
 		if (rosterResp) {
 			return rosterResp.entries.map((e, i) => ({
 				position: String(i + 1).padStart(2, '0'),
+				userId: e.user_id,
 				name: e.name,
 				handle: e.is_current_user
 					? 'YOU'
