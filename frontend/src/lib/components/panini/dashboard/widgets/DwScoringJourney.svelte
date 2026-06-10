@@ -54,12 +54,14 @@
 	$: p2Totals = totals(p2);
 </script>
 
+<!-- Section header lives OUTSIDE the card (pn-sec-h) so the widget reads
+     like every other dashboard section: header line above, sticker card
+     below. The breakdown link rides in the header's meta slot. -->
+<div class="pn-sec-h">
+	<span class="ttl"><span class="pip"></span> Your scoring <em>journey</em></span>
+	<span class="meta"><a href={footHref}>See full breakdown →</a></span>
+</div>
 <div class="pn-sj3">
-	<div class="sj3-h">
-		<div class="ttl">Your scoring <em>journey</em></div>
-		<a class="breakdown" href={footHref}>See full breakdown →</a>
-	</div>
-
 	<div class="sj3-phases">
 	{#each [{ phase: p1, label: 'PHASE 1', kind: 'ORIGINAL', t: p1Totals }, { phase: p2, label: 'PHASE 2', kind: 'RE-PICK', t: p2Totals }] as block}
 		<div class="sj3-phase">

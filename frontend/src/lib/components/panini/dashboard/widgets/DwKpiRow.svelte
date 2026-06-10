@@ -59,10 +59,11 @@
 	export let footHref: string | null = null;
 	export let footLabel: string = 'See full breakdown →';
 
-	/** Compact cells (106px instead of 140px) for the dashboards that
-	 *  carry more sections than the group stage and must still fit one
-	 *  900px desktop screen. */
-	export let compact: boolean = false;
+	/** Grid shape: 6 = single row of six (default, full-width dashboards);
+	 *  3 = two rows of three (Between-phases, where the KPI grid shares a
+	 *  row with the half-width hero). Cell chrome is identical in both —
+	 *  one canonical KPI size across every phase dashboard. */
+	export let columns: 6 | 3 = 6;
 
 	$: outcomeRate = outcomesOf > 0 ? Math.round((outcomes / outcomesOf) * 100) : 0;
 	$: exactRate = exactOf > 0 ? Math.round((exact / exactOf) * 100) : 0;
@@ -83,7 +84,7 @@
 	$: trajPlaces = trajectory.length >= 2 ? trajectory[0] - trajectory[trajectory.length - 1] : 0;
 </script>
 
-<section class="pn-kpi-row-v4" class:compact>
+<section class="pn-kpi-row-v4" class:grid3={columns === 3}>
 	<!-- Row 1 -->
 	<div class="pn-kpi-v4">
 		<div class="l"><span class="pip red"></span>Rank</div>

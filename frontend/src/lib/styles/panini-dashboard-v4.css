@@ -56,6 +56,13 @@
 .pn .pn-sec-h .meta b {
 	color: var(--ink);
 }
+.pn .pn-sec-h .meta a {
+	color: var(--ink);
+	border-bottom: 1px solid var(--ink);
+	text-decoration: none;
+	padding-bottom: 1px;
+	cursor: pointer;
+}
 
 .pn .pn-dash-cols {
 	display: grid;
@@ -67,6 +74,28 @@
 .pn .pn-dash-cols.two { grid-template-columns: 1fr 1fr; }
 .pn .pn-dash-cols.two-thirds { grid-template-columns: 2fr 1fr; }
 .pn .pn-dash-cols.between { grid-template-columns: 1.4fr 1fr; }
+/* Between-phases top band: half-width hero on the left, 2×3 KPI grid on
+ * the right. `stretch` makes the hero and the KPI cells agree on one band
+ * height — the hero's progress/CTA block pins to its bottom edge and the
+ * KPI cells grow evenly past their min-height. */
+.pn .pn-between-top {
+	display: grid;
+	grid-template-columns: 1.08fr 1fr;
+	gap: 18px;
+	align-items: stretch;
+	margin-bottom: 20px;
+}
+/* Bottom band: both columns stretch so the summary card and the Top-5
+ * card share top AND bottom edges; the Top-5 rows flex to soak up any
+ * height difference and its foot bar pins to the card bottom. */
+.pn .pn-dash-cols.between { align-items: stretch; }
+.pn .pn-dash-cols.between .col > .pn-summary,
+.pn .pn-dash-cols.between .col > .pn-top5 { flex: 1; }
+.pn .pn-dash-cols.between .pn-top5 .row { flex: 1; }
+/* Tighter vertical padding here only — rows snap to their 48px floor so
+ * the standings card's natural height tracks the summary table's, instead
+ * of stretching the summary ~50px past its content. */
+.pn .pn-dash-cols.between .pn-top5 .row { padding: 7px 16px; }
 /* Spectator dashboards (Group + KO): two equal match-tables on the left
  * (37.5% each) + a narrower 25% leaderboard column on the right.
  * Replaces the previous equal 1:1:1 split so the data-heavy tables get
@@ -144,14 +173,14 @@
 	min-height: 140px;
 	min-width: 0;
 }
-/* Compact variant for the busy phases (KO / between / post) where the
- * 140px cells push the page past one 900px screen. The group-stage
- * dashboard keeps the tall cells — it has the spare vertical space. */
-.pn .pn-kpi-row-v4.compact { margin-bottom: 12px; }
-.pn .pn-kpi-row-v4.compact .pn-kpi-v4 { min-height: 96px; padding: 8px 14px; }
-.pn .pn-kpi-row-v4.compact .pn-kpi-v4 .v { font-size: 40px; }
-.pn .pn-kpi-row-v4.compact .pn-kpi-v4.trajectory .spark-wrap,
-.pn .pn-kpi-row-v4.compact .pn-kpi-v4.trajectory .spark-wrap svg { height: 40px; }
+/* 2×3 grid shape (Between-phases): the KPI grid shares the top band with
+ * the half-width hero. Cell chrome is untouched — ONE canonical KPI size
+ * across every dashboard; only the grid tracks change. Cells stretch to
+ * fill the band height the hero establishes. */
+.pn .pn-kpi-row-v4.grid3 {
+	grid-template-columns: repeat(3, 1fr);
+	margin-bottom: 0;
+}
 .pn .pn-kpi-v4 .l {
 	/* Stat label ("Rank", "Total", "Exact", …). Scaled to 11px to track
 	 * the overall size reduction, but the weight 600 + --ink-2 contrast
@@ -801,6 +830,35 @@
 	font-size: 18px;
 	line-height: 1;
 }
+/* Inside-foot variant — mirrors .pn-summary .foot so a Top-5 card sitting
+ * beside the group summary closes with an identical bottom bar. The card
+ * is a flex column, so margin-top:auto pins the bar to the bottom edge
+ * when the card is stretched taller than its rows. */
+.pn .pn-top5 {
+	display: flex;
+	flex-direction: column;
+}
+.pn .pn-top5 .foot {
+	margin-top: auto;
+	background: var(--paper-2);
+	padding: 10px 16px;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	border-top: 2px solid var(--ink);
+}
+.pn .pn-top5 .foot a {
+	color: var(--ink);
+	border-bottom: 1px solid var(--ink);
+	text-decoration: none;
+	padding-bottom: 1px;
+	cursor: pointer;
+}
 .pn .pn-top5-foot {
 	margin-top: 10px;
 	text-align: right;
@@ -899,7 +957,7 @@
 	color: var(--paper);
 	border: 3px solid var(--ink);
 	box-shadow: 8px 8px 0 var(--red);
-	padding: 28px 32px 26px;
+	padding: 24px 32px 22px;
 	margin-bottom: 22px;
 	position: relative;
 	overflow: hidden;
@@ -987,25 +1045,41 @@
 	color: var(--ink-3);
 	letter-spacing: 0.12em;
 }
-/* Compact hero — used by Between-phases (and any other funnel state that
- * must share the screen with a KPI row + data columns). Same drama,
- * roughly 60% of the vertical budget. */
-.pn .pn-hero-v4.compact { padding: 16px 24px 12px; margin-bottom: 14px; }
-.pn .pn-hero-v4.compact h1 { font-size: 30px; }
-.pn .pn-hero-v4.compact .label { margin-bottom: 8px; }
-.pn .pn-hero-v4.compact .lede { margin-top: 6px; max-width: 560px; }
-.pn .pn-hero-v4.compact .clock .digit {
-	font-size: 26px;
-	min-width: 42px;
-	padding: 8px 7px 6px;
+/* Side hero — Between-phases. The hero fills the LEFT HALF of the top
+ * band beside the 2×3 KPI grid: the clock drops below the title (no room
+ * beside it at half width), and the progress + CTA block pins to the card
+ * bottom so the hero always closes flush with the KPI grid's last row.
+ * Type stays at full-hero scale minus one step for the narrower measure —
+ * this is a different shape, not a shrunken one. */
+.pn .pn-hero-v4.side {
+	margin-bottom: 0;
+	padding: 20px 26px 18px;
+	display: flex;
+	flex-direction: column;
 }
-.pn .pn-hero-v4.compact .progress-block { margin-top: 14px; }
-.pn .pn-hero-v4.compact .teaser-row { margin-top: 8px; }
-.pn .pn-hero-v4.compact .teaser { padding: 6px 12px 5px; }
-.pn .pn-hero-v4.compact .teaser .v { font-size: 18px; margin-top: 2px; }
+.pn .pn-hero-v4.side h1 { font-size: 34px; }
+.pn .pn-hero-v4.side .hero-row {
+	grid-template-columns: 1fr;
+	gap: 14px;
+	align-items: start;
+}
+.pn .pn-hero-v4.side .lede { max-width: none; }
+.pn .pn-hero-v4.side .clock {
+	display: grid;
+	grid-template-columns: repeat(4, 1fr);
+	gap: 8px;
+}
+.pn .pn-hero-v4.side .clock .digit {
+	font-size: 32px;
+	min-width: 0;
+	padding: 8px 8px 6px;
+}
+.pn .pn-hero-v4.side .progress-block {
+	margin-top: auto;
+	padding-top: 16px;
+}
 @media (max-width: 700px) {
-	.pn .pn-hero-v4.compact h1 { font-size: 24px; }
-	.pn .pn-hero-v4.compact .lede { font-size: 11px; }
+	.pn .pn-hero-v4.side h1 { font-size: 26px; }
 }
 
 .pn .pn-hero-v4 .progress-block {
@@ -1082,7 +1156,7 @@
 	display: grid;
 	grid-template-columns: 1fr 1fr 1fr;
 	gap: 16px;
-	margin-top: 16px;
+	margin-top: 12px;
 	position: relative;
 	z-index: 1;
 }
@@ -1525,41 +1599,27 @@
 	display: flex;
 	flex-direction: column;
 }
-.pn .pn-summary .hd {
-	background: var(--ink);
-	color: var(--paper);
-	padding: 10px 16px;
-	display: flex;
-	justify-content: space-between;
-	align-items: baseline;
-	font-family: var(--display);
-	font-size: 16px;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-}
-.pn .pn-summary .hd em {
-	color: var(--gold);
-	font-style: normal;
-}
-.pn .pn-summary .hd .right {
-	font-family: var(--mono);
-	font-size: 11px;
-	letter-spacing: 0.1em;
-	color: var(--paper-3);
-	font-weight: 400;
-	text-transform: uppercase;
-}
 .pn .pn-summary table { width: 100%; border-collapse: collapse; }
-/* Two side-by-side 6-row halves (A–F | G–L); stacked under 700px. The
- * totals table spans the full card width below them. */
+/* Two side-by-side 6-row halves (A–F | G–L); stacked under 700px. NO grid
+ * gap — a gap would cut a paper-coloured channel through the header band
+ * and the row backgrounds. The halves touch and the dashed border on the
+ * second table is the only divider, so the navy header band runs
+ * continuously across the full card width. */
 .pn .pn-summary .halves {
 	display: grid;
 	grid-template-columns: 1fr 1fr;
-	gap: 0 22px;
+	gap: 0;
 }
-.pn .pn-summary .halves table + table { border-left: 2px dashed var(--paper-3); }
-/* Inline totals strip below the halves: adders left, phase total right. */
+/* Divider drawn on the second half's BODY cells only, so it doesn't
+ * slice through the navy header band or the card edges. */
+.pn .pn-summary .halves table + table tbody td:first-child {
+	border-left: 2px dashed var(--paper-3);
+}
+/* Inline totals strip below the halves: adders left, phase total right.
+ * margin-top:auto pins it (plus the foot) to the card bottom when the
+ * card is stretched to match the column next to it. */
 .pn .pn-summary .totline {
+	margin-top: auto;
 	display: flex;
 	justify-content: space-between;
 	align-items: baseline;
@@ -1590,21 +1650,23 @@
 }
 @media (max-width: 700px) {
 	.pn .pn-summary .halves { grid-template-columns: 1fr; }
-	.pn .pn-summary .halves table + table { border-left: none; }
+	.pn .pn-summary .halves table + table tbody td:first-child { border-left: none; }
 	/* Stacked halves read as one continuous list — repeating the column
 	 * header mid-list looks like a rendering glitch. */
 	.pn .pn-summary .halves table + table thead { display: none; }
 }
+/* Column-label band — NAVY, mirroring .mtab-head and .pn-top5 .head so
+ * every data card on the dashboard opens with the same ink bar. */
 .pn .pn-summary th {
 	font-family: var(--mono);
-	font-size: 10px;
-	letter-spacing: 0.12em;
+	font-size: 11px;
+	letter-spacing: 0.14em;
 	text-transform: uppercase;
-	color: var(--ink-3);
+	color: var(--paper);
 	font-weight: 500;
-	padding: 7px 12px;
-	background: var(--paper-2);
-	border-bottom: 2px solid var(--ink);
+	padding: 8px 12px 7px;
+	background: var(--ink);
+	border-bottom: 0;
 	text-align: right;
 }
 .pn .pn-summary th:first-child {
@@ -1694,36 +1756,14 @@
  * alive picks + banked points. No tooltips (they broke 375px), no
  * fixed widths — the 5 cells share the row via an equal grid.
  * ============================================================ */
+/* Section wrapper on the KO dashboard — gives the journey strip the same
+ * inter-section rhythm as the .pn-dash-cols rows around it. */
+.pn .pn-journey-sec { margin-bottom: 20px; }
 .pn .pn-sj3 {
 	background: var(--paper);
 	border: 2.5px solid var(--ink);
-	box-shadow: 6px 6px 0 var(--ink);
-	padding: 10px 16px 6px;
-}
-.pn .pn-sj3 .sj3-h {
-	display: flex;
-	justify-content: space-between;
-	align-items: baseline;
-	margin-bottom: 9px;
-}
-.pn .pn-sj3 .sj3-h .ttl {
-	font-family: var(--display);
-	font-size: 17px;
-	text-transform: uppercase;
-	letter-spacing: 0.01em;
-}
-.pn .pn-sj3 .sj3-h .ttl em {
-	color: var(--red);
-	font-style: normal;
-}
-.pn .pn-sj3 .sj3-h .breakdown {
-	font-family: var(--mono);
-	font-size: 10px;
-	letter-spacing: 0.1em;
-	text-transform: uppercase;
-	color: var(--ink-2);
-	text-decoration: underline;
-	text-underline-offset: 3px;
+	box-shadow: 5px 5px 0 var(--ink);
+	padding: 12px 16px 10px;
 }
 /* Phases sit side-by-side on wide screens (the widget renders as a slim
  * full-width strip under the 3-col row), stacked below 1100px. */
@@ -1846,9 +1886,9 @@
 	color: var(--paper);
 	border: 3px solid var(--ink);
 	box-shadow: 10px 10px 0 var(--ink);
-	padding: 14px 26px 10px;
+	padding: 24px 32px 20px;
 	position: relative;
-	margin-bottom: 12px;
+	margin-bottom: 24px;
 	overflow: hidden;
 }
 .pn .pn-podium::before {
@@ -1865,9 +1905,13 @@
 	gap: 24px;
 	position: relative;
 	z-index: 1;
-	padding-bottom: 8px;
+	padding-bottom: 12px;
 	border-bottom: 2px solid var(--gold);
-	margin-bottom: 14px;
+	/* The champion's trophy chip rises 38px above its step and the rank
+	 * badges 14px — this margin is their headroom. Reducing it below
+	 * ~42px makes the trophy collide with the header rule (it did once;
+	 * don't). */
+	margin-bottom: 44px;
 }
 .pn .pn-podium .pod-h .label {
 	font-family: var(--mono);
@@ -1887,7 +1931,7 @@
 }
 .pn .pn-podium .pod-h h1 {
 	font-family: var(--display);
-	font-size: 30px;
+	font-size: 36px;
 	line-height: 0.95;
 	letter-spacing: -0.015em;
 	text-transform: uppercase;
@@ -1916,22 +1960,26 @@
 .pn .pn-podium .pod-row {
 	display: grid;
 	grid-template-columns: 1fr 1.25fr 1fr;
-	gap: 16px;
+	gap: 20px;
 	align-items: end;
 	position: relative;
 	z-index: 1;
 }
+/* Step top padding clears the absolutely-positioned rank badge: the badge
+ * hangs at top:-14px and is ~26px tall (first: ~33px), so it intrudes
+ * ~12px (first: ~19px) INTO the card. The name line must start below
+ * that intrusion or the badge sits on top of it. */
 .pn .pn-podium .pod-step {
 	background: var(--paper);
 	color: var(--ink);
 	border: 2.5px solid var(--ink);
-	padding: 12px 16px 10px;
+	padding: 22px 16px 12px;
 	position: relative;
 	box-shadow: 5px 5px 0 var(--ink);
 }
 .pn .pn-podium .pod-step.first {
 	background: var(--gold);
-	padding: 16px 18px 12px;
+	padding: 32px 18px 14px;
 	box-shadow: 6px 6px 0 var(--red);
 }
 .pn .pn-podium .pod-step.second {
@@ -2017,9 +2065,12 @@
 	text-transform: uppercase;
 	color: var(--ink-3);
 }
+/* Bottom-right corner — the top-right belongs to the trophy chip (which
+ * overhangs the card's top edge), so the tag anchoring top-right would
+ * collide with it. */
 .pn .pn-podium .pod-step .crown-tag {
 	position: absolute;
-	top: 14px;
+	bottom: 14px;
 	right: 16px;
 	font-family: var(--mono);
 	font-size: 9px;
@@ -2028,8 +2079,8 @@
 	color: var(--ink-2);
 }
 .pn .pn-podium .winner-line {
-	margin-top: 10px;
-	padding-top: 8px;
+	margin-top: 16px;
+	padding-top: 12px;
 	border-top: 2px solid var(--gold);
 	display: flex;
 	justify-content: space-between;
@@ -2089,6 +2140,10 @@
 	display: flex;
 	flex-direction: column;
 }
+/* Post-competition bottom row: both cards stretch to the same height so
+ * the pair closes on one shared bottom edge. */
+.pn .pn-dash-cols .col > .pn-source,
+.pn .pn-dash-cols .col > .pn-hlights { flex: 1; }
 .pn .pn-source .src-row + .src-row { margin-top: 8px; }
 .pn .pn-source .src-row .lbl {
 	display: flex;
@@ -2225,6 +2280,9 @@
 	letter-spacing: 0.16em;
 	text-transform: uppercase;
 	color: var(--ink-3);
+	/* Clearance for the corner tag (absolute, top-right) — without it the
+	 * label runs underneath the tag on narrow cards. */
+	padding-right: 72px;
 }
 .pn .pn-hlights .h-card .h-v {
 	font-family: var(--display);
@@ -2308,11 +2366,13 @@
  * v4 dashboard body padding
  * ============================================================ */
 .pn .pn-dash-v4 {
-	/* Top padding reduced ×0.7 (22→15px→8px) to tighten the cream gap between
-	 * the red lock strip and the hero; bottom gutter trimmed 22→12 so the busy
-	 * phases (KO / between / post) clear one 900px screen. */
-	padding: 8px 28px 12px;
+	/* No bottom padding: PnPageShell's main.pn-body already carries a 28px
+	 * desktop bottom gutter — doubling it up was costing every phase 22px
+	 * of one-screen budget. Same logic for the last section's
+	 * margin-bottom. */
+	padding: 14px 28px 0;
 }
+.pn .pn-dash-v4 > :last-child { margin-bottom: 0 !important; }
 @media (max-width: 900px) {
 	/* Podium header: the meta block (players · matches · final score ·
 	 * sign-off) follows the title at mono size instead of looming above
@@ -2447,6 +2507,20 @@
 	}
 	.pn .pn-podium .pod-row {
 		grid-template-columns: 1fr;
+		/* Stacked steps: each card's overhanging chrome (badge -14px,
+		 * champion trophy -38px → shrunk to -20px below) rises into the
+		 * gap ABOVE it, so the gap must clear the tallest overhang. */
+		gap: 30px;
+	}
+	.pn .pn-podium .pod-step .trophy {
+		top: -20px;
+		width: 40px;
+		height: 40px;
+		font-size: 22px;
+	}
+	.pn .pn-between-top {
+		grid-template-columns: 1fr;
+		gap: 14px;
 	}
 	.pn .pn-dash-v4 {
 		/* Mobile horizontal padding pulled in to 3px — about the floor

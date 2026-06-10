@@ -38,6 +38,13 @@
 	/** Single-line rows (hint inline after the name, ellipsized) for
 	 *  dashboards that need the column ~80px shorter to fit one screen. */
 	export let dense: boolean = false;
+	/** Render the standings link as a foot BAR inside the card (mirrors
+	 *  .pn-summary .foot) instead of a bare link below it. Used when the
+	 *  card sits beside another footed card and the bottom edges must
+	 *  align (Between-phases summary + final standings). */
+	export let footInside: boolean = false;
+	/** Left-hand caption of the inside foot bar. */
+	export let footLeft: string = '';
 </script>
 
 <!--
@@ -92,6 +99,15 @@
 			<div class="pts">{you.points}</div>
 		</div>
 	{/if}
+
+	{#if footInside}
+		<div class="foot">
+			<span>{footLeft}</span>
+			<a href={footHref}>{footLabel}</a>
+		</div>
+	{/if}
 </div>
 
-<div class="pn-top5-foot"><a href={footHref}>{footLabel}</a></div>
+{#if !footInside}
+	<div class="pn-top5-foot"><a href={footHref}>{footLabel}</a></div>
+{/if}

@@ -198,44 +198,51 @@
 			/>
 		{/if}
 
-		<!-- Compact hero, no teaser row: "Phase 1 total" is the KPI Total
-		     cell directly below, the ×0.7 multiplier is a static fact for
-		     the rules page, and "bracket in play" had no backend value. -->
-		<DwFunnelHero
-			compact
-			label="Phase 2 — Re-pick bracket"
-			titleHtml="Real groups are in. Re-pick the <em>knockout</em>."
-			lede={`Phase 1 ended. Group stage scored you <b style="color: var(--gold);">${phaseTotal} pts</b>. Your original bracket carries over until you update it — but the real R32 matchups are now set.`}
-			{countdown}
-			progressLabel="Phase 2 bracket"
-			progressValue={bracketFilled}
-			progressTotal={BRACKET_TOTAL_SLOTS_PHASE2}
-			progressUnit="set"
-			ctaLabel="Update bracket"
-			ctaHref="/predictions"
-		/>
+		<!-- Top band: half-width hero beside a 2×3 KPI grid. The hero keeps
+		     its drama at half width (clock under the title, progress + CTA
+		     pinned to the card bottom) and the KPI cells stay the SAME size
+		     as every other dashboard — the grid shape changes, not the
+		     sticker. Both stretch to the same band height. -->
+		<section class="pn-between-top">
+			<DwFunnelHero
+				side
+				label="Phase 2 — Re-pick bracket"
+				titleHtml="Real groups are in. Re-pick the <em>knockout</em>."
+				lede={`Phase 1 ended. Group stage scored you <b style="color: var(--gold);">${phaseTotal} pts</b>. Your original bracket carries over until you update it — but the real R32 matchups are now set.`}
+				{countdown}
+				progressLabel="Phase 2 bracket"
+				progressValue={bracketFilled}
+				progressTotal={BRACKET_TOTAL_SLOTS_PHASE2}
+				progressUnit="set"
+				ctaLabel="Update bracket"
+				ctaHref="/predictions"
+			/>
 
-		<DwKpiRow
-			compact
-			{rank}
-			{rankOf}
-			{rankDelta}
-			{total}
-			totalDelta={0}
-			totalSub={'<b>pts</b> · phase 1 final'}
-			exact={exactCount}
-			{exactOf}
-			exactDelta={0}
-			outcomes={correctOutcomes}
-			outcomesOf={exactOf}
-			outcomesDelta={0}
-			rarity={rarityPts}
-			rarityShareOf={total}
-			trajectory={trajectoryRanks}
-			trajectoryMaxRank={rankOf || 30}
-			trajectoryTodayPts={0}
-		/>
+			<DwKpiRow
+				columns={3}
+				{rank}
+				{rankOf}
+				{rankDelta}
+				{total}
+				totalDelta={0}
+				totalSub={'<b>pts</b> · phase 1 final'}
+				exact={exactCount}
+				{exactOf}
+				exactDelta={0}
+				outcomes={correctOutcomes}
+				outcomesOf={exactOf}
+				outcomesDelta={0}
+				rarity={rarityPts}
+				rarityShareOf={total}
+				trajectory={trajectoryRanks}
+				trajectoryMaxRank={rankOf || 30}
+				trajectoryTodayPts={0}
+			/>
+		</section>
 
+		<!-- Bottom band: both columns share the pn-sec-h header treatment
+		     and close with the same internal foot bar, so the two cards
+		     align top edge to bottom edge. -->
 		<section class="pn-dash-cols between">
 			<div class="col">
 				<DwGroupSummaryTable
@@ -250,7 +257,8 @@
 			</div>
 			<div class="col">
 				<DwTop5
-					dense
+					footInside
+					footLeft="phase 1 standings carry into phase 2"
 					title="Phase 1"
 					titleEm="final"
 					subtitle="where it stands"

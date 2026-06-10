@@ -38,12 +38,14 @@
 
 <!-- The 12 group rows split into two side-by-side 6-row tables on desktop
      (stacked on mobile) so the card stays inside one screen; the
-     qualification / bonus / total summary rows span the full width. -->
+     qualification / bonus / total summary rows span the full width.
+     Section header is OUTSIDE the card (pn-sec-h) so it matches the
+     sibling leaderboard column's header treatment exactly. -->
+<div class="pn-sec-h">
+	<span class="ttl"><span class="pip"></span> {title} <em>{titleEm}</em></span>
+	<span class="meta">{meta}</span>
+</div>
 <div class="pn-summary">
-	<div class="hd">
-		<span>{title} <em>{titleEm}</em></span>
-		<span class="right">{meta}</span>
-	</div>
 	<div class="halves">
 		{#each [rows.slice(0, 6), rows.slice(6)] as half, hi (hi)}
 			<table>

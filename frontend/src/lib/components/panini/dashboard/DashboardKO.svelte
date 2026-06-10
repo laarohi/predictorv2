@@ -343,7 +343,6 @@
 		{/if}
 
 		<DwKpiRow
-			compact
 			{rank}
 			{rankOf}
 			{rankDelta}
@@ -363,10 +362,15 @@
 			trajectoryNowLabel={`Last ${PAST_SHOW}`}
 		/>
 
-		<!-- Same 3-col rhythm as the group-stage dashboard — the layout that
-		     actually fits 1440×900. The journey rides below as a slim
-		     full-width strip (phases side-by-side on wide screens). -->
-		<section class="pn-dash-cols spectator" style="margin-bottom: 16px;">
+		<!-- The journey strip rides ABOVE the match tables: it's the KO
+		     stage's signature widget (what's still alive in your bracket)
+		     and it bridges naturally from the KPI numbers above it. -->
+		<section class="pn-journey-sec">
+			<DwScoringJourney p1={journeyP1} p2={journeyP2} footHref="/leaderboard" />
+		</section>
+
+		<!-- Same 3-col rhythm as the group-stage dashboard. -->
+		<section class="pn-dash-cols spectator">
 			<div class="col">
 				<div class="pn-sec-h">
 					<span class="ttl"><span class="pip"></span> Past <em>{PAST_SHOW}</em> matches</span>
@@ -407,7 +411,5 @@
 				/>
 			</div>
 		</section>
-
-		<DwScoringJourney p1={journeyP1} p2={journeyP2} footHref="/leaderboard" />
 	</div>
 </PnPageShell>

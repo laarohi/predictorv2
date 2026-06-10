@@ -4,9 +4,12 @@
 	 *
 	 * Layout:
 	 *   1. Champion podium (Groups winner · Overall champion · Bracket winner)
-	 *   2. KPI row — frozen at final values
-	 *   3. 2-col: Points by source · Highlights (2x2 retrospective cards)
-	 *   4. Memorial strip footer
+	 *   2. 2-col: Points by source · Highlights (retrospective cards)
+	 *
+	 * No KPI row here: the competition is over, so live deltas/hit-rates are
+	 * noise. The user's final rank/points/peak ride the masthead strip, and
+	 * Points-by-source carries the total — the podium gets the vertical
+	 * room instead.
 	 *
 	 * Data:
 	 *   - leaderboard (overall + phase_1 + phase_2 winners)
@@ -18,7 +21,6 @@
 	import { onMount } from 'svelte';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import DwChampionPodium from './widgets/DwChampionPodium.svelte';
-	import DwKpiRow from './widgets/DwKpiRow.svelte';
 	import DwPointsBySource, { type Source } from './widgets/DwPointsBySource.svelte';
 	import DwHighlights from './widgets/DwHighlights.svelte';
 
@@ -74,7 +76,7 @@
 	$: champion = $leaderboard[0]
 		? {
 				name: $leaderboard[0].user_name,
-				hint: `${$leaderboard[0].exact_scores} exact · ${$leaderboard[0].correct_outcomes} outc · final`,
+				hint: `${$leaderboard[0].exact_scores} exact · ${$leaderboard[0].correct_outcomes} outcomes`,
 				points: $leaderboard[0].total_points,
 				unit: 'pts'
 			}
@@ -121,17 +123,12 @@
 
 	$: pickedCorrectly = winners?.phase1_picker_count ?? null;
 
-	// ---- KPI values (frozen final) ----------------------------------------
+	// ---- Final figures (masthead strip + meta lines) ------------------------
 	$: rank = $currentUserPosition?.position ?? null;
 	$: rankOf = $totalParticipants || $leaderboard.length || 0;
 	$: total = $currentUserPosition?.total_points ?? 0;
-	$: exactCount = $currentUserPosition?.exact_scores ?? 0;
-	$: exactOf = $currentUserPosition?.breakdown?.total_predictions ?? 0;
-	$: correctOutcomes = $currentUserPosition?.correct_outcomes ?? 0;
-	$: rarityPts = $currentUserPosition?.breakdown?.hybrid_bonus_points ?? 0;
 	$: trajectoryRanks = trajectoryData?.points.map((p) => p.position) ?? [];
 	$: peakRank = trajectoryRanks.length ? Math.min(...trajectoryRanks) : rank ?? 0;
-	$: championGap = champion ? total - champion.points : 0;
 
 	// ---- Points by source --------------------------------------------------
 	$: pointsSources = ((): Source[] => {
@@ -162,7 +159,7 @@
 		return [
 			{ key: 'match', name: 'Match scores', points: matchTotal },
 			{ key: 'p1', name: 'P1 bracket', points: p1Bracket },
-			{ key: 'p2', name: 'P2 bracket', points: p2Bracket, suffix: ' ×0.7' },
+			{ key: 'p2', name: 'P2 bracket', points: p2Bracket },
 			{ key: 'bonus', name: 'Bonus questions', points: bonus }
 		];
 	})();
@@ -220,14 +217,19 @@
 
 	// ---- Sign-off (podium header meta) -------------------------------------
 	// Was a standalone DwMemorialStrip below the fold; folded into the
-	// podium's top-right meta so the page fits one 900px screen.
+	// podium's top-right meta. null (no finished final yet) just drops the
+	// segment — falling back to "Vol. I closed" would duplicate metaLine2.
 	$: signoffLine = (() => {
 		const final = $fixtures.find((f) => f.stage === 'final' && f.status === 'finished');
-		if (!final || !final.score) return 'Vol. I closed';
+		if (!final || !final.score) return null;
 		const ko = new Date(final.kickoff);
 		const dateStr = ko.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 		return `Final · ${teamCode(final.home_team)} ${final.score.home_score}–${final.score.away_score} ${teamCode(final.away_team)} · ${dateStr}`;
 	})();
+
+	$: podiumMetaLine1 = [`${rankOf} players`, `${$fixtures.length} matches`, signoffLine]
+		.filter(Boolean)
+		.join(' · ');
 
 	$: stripYou = rank
 		? `<b>You</b> · ${rank} of ${rankOf} · ${total} pts · peak ${peakRank}`
@@ -244,7 +246,7 @@
 			title="It's a wrap."
 			titleEm="wrap"
 			label="Vol. I · CxF Predictaa"
-			metaLine1={`${rankOf} players · ${$fixtures.length} matches · ${signoffLine}`}
+			metaLine1={podiumMetaLine1}
 			metaLine2="Vol. I closed · next edition 2030"
 			{champion}
 			{groupsWinner}
@@ -254,28 +256,7 @@
 			totalPlayers={rankOf}
 		/>
 
-		<DwKpiRow
-			compact
-			rank={rank}
-			rankOf={rankOf}
-			rankDelta={0}
-			total={total}
-			totalDelta={championGap}
-			totalSub={championGap < 0 ? `<b>${championGap}</b> pts behind champion` : '<b>final</b>'}
-			exact={exactCount}
-			exactOf={exactOf}
-			exactDelta={0}
-			outcomes={correctOutcomes}
-			outcomesOf={exactOf}
-			outcomesDelta={0}
-			rarity={rarityPts}
-			rarityShareOf={total}
-			trajectory={trajectoryRanks}
-			trajectoryMaxRank={rankOf || 30}
-			trajectoryTodayPts={0}
-		/>
-
-		<section class="pn-dash-cols two" style="margin-bottom: 0;">
+		<section class="pn-dash-cols two">
 			<div class="col">
 				{#if pointsSources.length > 0}
 					<DwPointsBySource sources={pointsSources} total={total} meta="final" />

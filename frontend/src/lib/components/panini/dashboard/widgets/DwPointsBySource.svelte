@@ -3,7 +3,7 @@
 		key: 'match' | 'p1' | 'p2' | 'bonus';
 		name: string;
 		points: number;
-		/** P2 prefers an inline "×0.7" hint after the name. */
+		/** Optional inline hint rendered after the name. */
 		suffix?: string;
 	};
 </script>
@@ -12,7 +12,7 @@
 	/**
 	 * Post-competition / KO summary card splitting the user's total points by
 	 * source:
-	 *   match scores · P1 bracket · P2 bracket (×0.7) · bonus questions
+	 *   match scores · P1 bracket · P2 bracket · bonus questions
 	 *
 	 * Each row gets a coloured horizontal bar where the fill width is
 	 * proportional to the source's points relative to the largest source —

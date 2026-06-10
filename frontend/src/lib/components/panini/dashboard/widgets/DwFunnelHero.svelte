@@ -30,9 +30,10 @@
 	export let ctaLabel: string = '';
 	export let ctaHref: string = '#';
 	export let teasers: Teaser[] = [];
-	/** Tighter type + clock scale for dashboards that carry more sections
-	 *  below the hero and must still fit one 900px desktop screen. */
-	export let compact: boolean = false;
+	/** Half-width column variant (Between-phases): the hero shares a row
+	 *  with the KPI grid, so the clock drops below the title and the
+	 *  progress + CTA stack vertically and pin to the card's bottom. */
+	export let side: boolean = false;
 
 	$: pct = progressReady && progressTotal > 0 ? Math.min(100, (progressValue / progressTotal) * 100) : 0;
 
@@ -41,7 +42,7 @@
 	}
 </script>
 
-<div class="pn-hero-v4" class:compact>
+<div class="pn-hero-v4" class:side>
 	<div class="hero-row">
 		<div>
 			{#if label}

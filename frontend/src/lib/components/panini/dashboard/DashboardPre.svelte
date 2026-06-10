@@ -214,7 +214,6 @@
 		{/if}
 
 		<DwFunnelHero
-			compact
 			label="Phase 1 — Predictions due"
 			titleHtml={heroTitleHtml}
 			lede={heroLede}
@@ -274,11 +273,11 @@
 							desc: 'Each team reaching its predicted round — R32 (10) to Winner (150).'
 						},
 						{
-							pts: '×0.7',
-							ptsUnit: '',
+							pts: '5–100',
+							ptsUnit: 'pts',
 							ptsTone: 'red',
 							name: 'Phase II — re-pick after groups',
-							desc: 'After groups: re-pick the bracket with the real R32 + KO scores.'
+							desc: 'Re-pick the bracket with the real R32, plus KO match scores.'
 						}
 					]}
 					footLabel="Read full rules →"
