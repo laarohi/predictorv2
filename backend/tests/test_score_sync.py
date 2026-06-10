@@ -213,6 +213,41 @@ async def test_resolution_does_not_fabricate_score_for_unstarted_match(
 
 
 @pytest.mark.asyncio
+async def test_espn_style_score_without_external_id_matches_by_name(
+    session, competition, monkeypatch
+) -> None:
+    # The ESPN provider carries no Football-Data external_id — the fixture
+    # must match via team names, and once touched it must NOT be re-fetched
+    # by the resolution pass (which would let a laggier source overwrite
+    # the fresh live score on the same tick).
+    fx = _fixture(competition.id, kickoff=NOW - timedelta(minutes=30), status=MatchStatus.LIVE, ext="104")
+    session.add(fx)
+    await session.commit()
+    await session.refresh(fx)
+
+    live = ExternalScore(
+        external_id="",
+        home_team="Mexico",
+        away_team="South Africa",
+        home_score=2,
+        away_score=1,
+        status=MatchStatus.LIVE,
+        minute=67,
+    )
+    provider = FakeProvider(live=[live])
+    monkeypatch.setattr("app.services.score_sync.get_score_provider", lambda: provider)
+
+    result = await sync_scores_once(session)
+
+    assert provider.fixture_fetches == []  # touched by name-match → no resolve call
+    assert result.synced == 1
+    await session.refresh(fx)
+    assert fx.status == MatchStatus.LIVE and fx.minute == 67
+    score = await _get_score(session, fx.id)
+    assert score is not None and (score.home_score, score.away_score) == (2, 1)
+
+
+@pytest.mark.asyncio
 async def test_fixture_present_in_live_response_is_not_fetched_individually(
     session, competition, monkeypatch
 ) -> None:
