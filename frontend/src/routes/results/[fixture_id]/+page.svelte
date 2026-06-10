@@ -54,7 +54,7 @@
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import PnFlag from '$components/panini/PnFlag.svelte';
 	import PnGroupStandingsMini from '$components/panini/PnGroupStandingsMini.svelte';
-	import PnBubbleGrid from '$components/panini/PnBubbleGrid.svelte';
+	import PnScoreHeatmap from '$components/panini/PnScoreHeatmap.svelte';
 	import PnPointsBar from '$components/panini/PnPointsBar.svelte';
 	import PnMatchLeaderboard from '$components/panini/PnMatchLeaderboard.svelte';
 	import PnMatchLeaderboardMobile from '$components/panini/PnMatchLeaderboardMobile.svelte';
@@ -440,7 +440,7 @@
 								</div>
 							</div>
 							<div class="pb">
-								<PnBubbleGrid
+								<PnScoreHeatmap
 									mode={phase}
 									homeCode={homeCode}
 									awayCode={awayCode}
@@ -628,7 +628,7 @@
 							</div>
 						</div>
 						<div class="pb">
-							<PnBubbleGrid
+							<PnScoreHeatmap
 								mode={phase}
 								homeCode={homeCode}
 								awayCode={awayCode}

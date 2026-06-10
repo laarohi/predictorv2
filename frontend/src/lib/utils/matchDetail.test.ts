@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	buildCells,
 	classifyPick,
+	heatColor,
 	outcomeOf,
 	pickStr,
 	rarityLabel,
@@ -124,5 +125,31 @@ describe('toGridPlayer', () => {
 		};
 		const gp = toGridPlayer(cp, false, null, null, null);
 		expect(gp.initial).toBe('?');
+	});
+});
+
+describe('heatColor', () => {
+	it('scales intensity with count — max count is the full kind colour', () => {
+		// --green token, mixed at t=1.0
+		expect(heatColor('exact', 10, 10).bg).toBe('rgb(27, 108, 62)');
+	});
+	it('keeps a visible tint floor for a single pick in a big pool', () => {
+		const lone = heatColor('pre-home', 1, 30);
+		// t = 0.22 + 0.78/30 ≈ 0.246 of the way from paper to navy — never paper.
+		expect(lone.bg).not.toBe('rgb(241, 235, 222)');
+	});
+	it('picks readable text colour per background luminance', () => {
+		expect(heatColor('pre-home', 10, 10).fg).toBe('#f6f1e6'); // full navy → light text
+		expect(heatColor('outcome', 1, 30).fg).toBe('#0e1d40'); // pale gold → ink text
+	});
+	it('monotonic: more picks never gets lighter', () => {
+		const mid = heatColor('pre-away', 5, 10).bg;
+		const top = heatColor('pre-away', 10, 10).bg;
+		const red = (s: string) => Number(s.slice(4).split(',')[0]);
+		// red channel ramps from paper(241) down toward --red(200)
+		expect(red(top)).toBeLessThanOrEqual(red(mid));
+	});
+	it('falls back to the miss ramp for unknown kinds', () => {
+		expect(heatColor('unknown', 3, 10).bg).toBe(heatColor('miss', 3, 10).bg);
 	});
 });

@@ -6,10 +6,10 @@
  * `import()` factories, so Vite code-splits each flag into its own chunk and
  * only the flags actually rendered are fetched (perf-frontend:PERF-1/PERF-4).
  *
- * Loading is async, but both consumers degrade gracefully while a flag is in
- * flight: `PnFlag` shows its neutral placeholder box and `PnAxisFlag` renders
- * nothing, so there is never a broken state — the flag just pops in when ready.
- * Components subscribe to `flagCache` so they re-render on arrival.
+ * Loading is async, but the consumer degrades gracefully while a flag is in
+ * flight: `PnFlag` shows its neutral placeholder box, so there is never a
+ * broken state — the flag just pops in when ready. Components subscribe to
+ * `flagCache` so they re-render on arrival.
  */
 
 import { get, writable } from 'svelte/store';

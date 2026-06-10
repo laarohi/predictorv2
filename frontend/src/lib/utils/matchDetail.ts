@@ -2,7 +2,7 @@
  * Per-match detail helpers. Pure — no I/O, no Svelte.
  *
  * Backs the /results/[fixture_id] page and its supporting components
- * (PnBubbleGrid, PnPointsBar, PnMatchLeaderboard). Mirrors the logic of
+ * (PnScoreHeatmap, PnPointsBar, PnMatchLeaderboard). Mirrors the logic of
  * panini-match.jsx in the design handoff, but expressed against our
  * existing Fixture / FixtureScore / CommunityPrediction types so the
  * components plug straight into the API.
@@ -89,6 +89,59 @@ export function buildCells(players: GridPlayer[], gridMax: number = 4): Record<s
 		cells[k].players.push(p);
 	}
 	return cells;
+}
+
+// ---------------------------------------------------------------------------
+// Heatmap colour ramp — paper → kind colour, intensity scaled by pick count.
+// RGB constants mirror the Panini tokens in panini-base.css (CSS variables
+// aren't reachable from JS colour math) — keep in sync if tokens change.
+// ---------------------------------------------------------------------------
+
+type RGB = [number, number, number];
+
+const PAPER_RGB: RGB = [241, 235, 222]; // --paper
+
+const KIND_RGB: Record<string, RGB> = {
+	'pre-home': [26, 49, 104], // --navy
+	'pre-draw': [81, 74, 61], // --ink-2 (draws ramp into dark sand)
+	'pre-away': [200, 40, 31], // --red
+	exact: [27, 108, 62], // --green
+	outcome: [212, 154, 46], // --gold
+	miss: [90, 84, 70] // warm grey, matches the .sw.miss legend swatch
+};
+
+export interface HeatCellColor {
+	bg: string;
+	fg: string;
+}
+
+function mixRgb(a: RGB, b: RGB, t: number): RGB {
+	return [
+		Math.round(a[0] + (b[0] - a[0]) * t),
+		Math.round(a[1] + (b[1] - a[1]) * t),
+		Math.round(a[2] + (b[2] - a[2]) * t)
+	];
+}
+
+function luminance([r, g, b]: RGB): number {
+	return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+
+/**
+ * Background + readable text colour for a heatmap cell.
+ *
+ * `t` has a floor so a single pick in a 30-player pool still reads as a
+ * clearly tinted cell rather than near-paper; it tops out at the full kind
+ * colour for the modal pick.
+ */
+export function heatColor(kind: string, count: number, max: number): HeatCellColor {
+	const base = KIND_RGB[kind] ?? KIND_RGB.miss;
+	const t = 0.22 + 0.78 * Math.min(1, count / Math.max(1, max));
+	const bg = mixRgb(PAPER_RGB, base, t);
+	return {
+		bg: `rgb(${bg[0]}, ${bg[1]}, ${bg[2]})`,
+		fg: luminance(bg) > 0.55 ? '#0e1d40' : '#f6f1e6'
+	};
 }
 
 /** Rarity bucket for a pick percentage — matches the design's tier labels. */
