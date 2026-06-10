@@ -3,8 +3,9 @@
 	import { page } from '$app/stores';
 	import { isAuthenticated, user } from '$stores/auth';
 	import { getUserProfile, getUserPredictions } from '$api/users';
+	import { getAllFixtures } from '$api/fixtures';
 	import { teamCode } from '$lib/utils/teamCodes';
-	import type { PublicProfile, UserPredictionsResponse, UserMatchPredictionView } from '$types';
+	import type { Fixture, PublicProfile, UserPredictionsResponse, UserMatchPredictionView } from '$types';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import PnFlag from '$components/panini/PnFlag.svelte';
 
@@ -14,6 +15,7 @@
 
 	let profile: PublicProfile | null = null;
 	let predictions: UserPredictionsResponse | null = null;
+	let allFixtures: Fixture[] = [];
 	let loading = true;
 	let error: string | null = null;
 
@@ -23,9 +25,17 @@
 		loading = true;
 		error = null;
 		try {
-			const [p, preds] = await Promise.all([getUserProfile(id), getUserPredictions(id)]);
+			// Fixtures feed the bracket-tag fate colouring (which teams actually
+			// reached each round); a failure there only loses the colours, so it
+			// degrades to an empty list instead of failing the whole page.
+			const [p, preds, fx] = await Promise.all([
+				getUserProfile(id),
+				getUserPredictions(id),
+				getAllFixtures().catch(() => [] as Fixture[])
+			]);
 			profile = p;
 			predictions = preds;
+			allFixtures = fx;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load profile';
 		} finally {
@@ -46,18 +56,88 @@
 		}
 	}
 
-	const STAGE_LABELS: Record<string, string> = {
-		group: 'Group winners',
-		round_of_32: 'R32',
-		round_of_16: 'R16',
-		quarter_finals: 'QF',
-		quarter_final: 'QF',
-		semi_finals: 'SF',
-		semi_final: 'SF',
-		third_place: '3rd place',
-		final: 'Final',
-		winner: 'Tournament Winner'
+	// Bracket-pick rows in funnel order. One full-width row per stage —
+	// R32's 32 tags wrap over two lines while Winner gets one tag; stacking
+	// rows uses the space the old equal-width columns wasted.
+	const BRACKET_ROWS: Array<[string, string]> = [
+		['group', 'Group winners'],
+		['round_of_32', 'Round of 32'],
+		['round_of_16', 'Round of 16'],
+		['quarter_final', 'Quarter-finals'],
+		['semi_final', 'Semi-finals'],
+		['final', 'Final'],
+		['winner', 'Champion']
+	];
+
+	// Stage progression index, used to decide whether a team's elimination
+	// happened BEFORE the stage a tag predicts (→ pick is dead).
+	const STAGE_IDX: Record<string, number> = {
+		round_of_32: 1,
+		round_of_16: 2,
+		quarter_final: 3,
+		semi_final: 4,
+		final: 5,
+		winner: 6
 	};
+
+	/**
+	 * Actual tournament fate per team, derived from real fixtures:
+	 *  - reached: stage → set of teams that actually appear in that round
+	 *    (slot placeholders excluded; 'winner' filled from the finished final)
+	 *  - outAt: team → index of the last stage their run reached (0 = didn't
+	 *    qualify from the group; only set once that fact is certain)
+	 */
+	$: teamFate = (() => {
+		const reached = new Map<string, Set<string>>();
+		const outAt = new Map<string, number>();
+		const isReal = (t: string) => !!t && !t.toLowerCase().startsWith('slot:');
+
+		for (const f of allFixtures) {
+			const idx = STAGE_IDX[f.stage];
+			if (!idx) continue; // group + third_place don't drive fate
+			for (const t of [f.home_team, f.away_team]) {
+				if (!isReal(t)) continue;
+				if (!reached.has(f.stage)) reached.set(f.stage, new Set());
+				reached.get(f.stage)!.add(t);
+			}
+			if (f.status === 'finished' && f.score && isReal(f.home_team) && isReal(f.away_team)) {
+				// outcome already resolves pens → ET → FT, so KO losers are exact
+				const loser =
+					f.score.outcome === '1' ? f.away_team : f.score.outcome === '2' ? f.home_team : null;
+				if (loser) outAt.set(loser, idx);
+				if (f.stage === 'final') {
+					const winner =
+						f.score.outcome === '1' ? f.home_team : f.score.outcome === '2' ? f.away_team : null;
+					if (winner) reached.set('winner', new Set([winner]));
+				}
+			}
+		}
+
+		// Group-stage elimination is only certain once the real R32 is fully
+		// drawn (all 32 slots resolved to teams) — then anyone absent is out.
+		const r32 = reached.get('round_of_32');
+		if (r32 && r32.size >= 32) {
+			for (const f of allFixtures) {
+				if (f.stage !== 'group') continue;
+				for (const t of [f.home_team, f.away_team]) {
+					if (!r32.has(t)) outAt.set(t, 0);
+				}
+			}
+		}
+		return { reached, outAt };
+	})();
+
+	/** Fate of one bracket tag: did this team actually reach this stage? */
+	function tagFate(team: string, stage: string): 'in' | 'out' | 'tbd' {
+		// "Group winners" picks succeed exactly when the team makes the KO.
+		const idx = stage === 'group' ? STAGE_IDX.round_of_32 : STAGE_IDX[stage];
+		if (!idx) return 'tbd';
+		const key = stage === 'group' ? 'round_of_32' : stage;
+		if (teamFate.reached.get(key)?.has(team)) return 'in';
+		const out = teamFate.outAt.get(team);
+		if (out !== undefined && out < idx) return 'out';
+		return 'tbd';
+	}
 
 	// Knockout rounds in play order — drives both the KO predictions tables
 	// and the per-phase bracket tag sections.
@@ -198,16 +278,20 @@
 			<!-- Bracket picks, one section per visible phase -->
 			{#each bracketPhases as bp (bp.label)}
 				<section class="pn-pf-section">
-					<div class="h"><span>{bp.label}</span><span class="right">{bp.sub}</span></div>
+					<div class="h">
+						<span>{bp.label}</span>
+						<span class="right">{bp.sub} · border: in green · out red</span>
+					</div>
 					<div class="body">
-						<div style="display: flex; flex-wrap: wrap; gap: 18px;">
-							{#each Object.entries(STAGE_LABELS) as [stageKey, label]}
+						<div class="pn-pf-bracket">
+							{#each BRACKET_ROWS as [stageKey, label] (stageKey)}
 								{#if bp.stages[stageKey] && bp.stages[stageKey].length > 0}
-									<div style="display: flex; flex-direction: column; gap: 6px;">
-										<div style="font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3);">{label}</div>
-										<div style="display: flex; flex-wrap: wrap; gap: 4px; max-width: 220px;">
+									<div class="strow">
+										<div class="lbl">{label}<span class="n">{bp.stages[stageKey].length}</span></div>
+										<div class="tags">
 											{#each bp.stages[stageKey] as team}
-												<span class="pn-tag {stageKey === 'winner' ? 'gold' : ''}" style="padding: 3px 8px; font-size: 10px; display: inline-flex; align-items: center; gap: 4px;">
+												{@const fate = tagFate(team, stageKey)}
+												<span class="pn-tag pick-tag {stageKey === 'winner' ? 'gold' : ''} fate-{fate}">
 													<PnFlag code={teamCode(team)} w={12} h={9} />{teamCode(team)}
 												</span>
 											{/each}
@@ -231,16 +315,13 @@
 						<div class="pn-pf-predgrid">
 							{#each groupBlocks as [group, preds] (group)}
 								<div class="pn-pf-predblock">
-									<div class="hd"><span>Group {group}</span><span class="n">pick · ft</span></div>
+									<div class="hd"><span class="gname">Group {group}</span><span class="cl">pick</span><span></span><span></span></div>
 									{#each preds as p (p.fixture_id)}
 										{@const result = predictionResult(p)}
 										<div class="row {result}">
 											<span class="t"><PnFlag code={teamCode(p.home_team)} w={14} h={10} />{teamCode(p.home_team)}</span>
 											<span class="pick">{p.predicted_home}–{p.predicted_away}</span>
 											<span class="t r">{teamCode(p.away_team)}<PnFlag code={teamCode(p.away_team)} w={14} h={10} /></span>
-											<span class="ft">
-												{#if p.actual_home !== null && p.actual_away !== null}{p.actual_home}–{p.actual_away}{:else}·{/if}
-											</span>
 											<span class="mk {result}">{RESULT_MARK[result]}</span>
 										</div>
 									{/each}
@@ -262,16 +343,13 @@
 						<div class="pn-pf-predgrid">
 							{#each koBlocks as block (block.key)}
 								<div class="pn-pf-predblock">
-									<div class="hd"><span>{block.label}</span><span class="n">pick · ft</span></div>
+									<div class="hd"><span class="gname">{block.label}</span><span class="cl">pick</span><span></span><span></span></div>
 									{#each block.preds as p (p.fixture_id)}
 										{@const result = predictionResult(p)}
 										<div class="row {result}">
 											<span class="t"><PnFlag code={teamCode(p.home_team)} w={14} h={10} />{teamCode(p.home_team)}</span>
 											<span class="pick">{p.predicted_home}–{p.predicted_away}</span>
 											<span class="t r">{teamCode(p.away_team)}<PnFlag code={teamCode(p.away_team)} w={14} h={10} /></span>
-											<span class="ft">
-												{#if p.actual_home !== null && p.actual_away !== null}{p.actual_home}–{p.actual_away}{:else}·{/if}
-											</span>
 											<span class="mk {result}">{RESULT_MARK[result]}</span>
 										</div>
 									{/each}

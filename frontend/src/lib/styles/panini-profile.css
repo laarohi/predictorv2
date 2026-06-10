@@ -339,9 +339,12 @@
 	background: var(--paper);
 	box-shadow: 3px 3px 0 var(--ink);
 }
+/* Header shares the row's grid + horizontal padding so the "pick" label
+   sits exactly over the pick column. */
 .pn .pn-pf-predblock .hd {
-	display: flex;
-	justify-content: space-between;
+	display: grid;
+	grid-template-columns: 1fr 44px 1fr 18px;
+	gap: 4px;
 	align-items: baseline;
 	background: var(--ink);
 	color: var(--paper);
@@ -352,15 +355,16 @@
 	text-transform: uppercase;
 	padding: 7px 10px 6px;
 }
-.pn .pn-pf-predblock .hd .n {
+.pn .pn-pf-predblock .hd .cl {
 	font-weight: 400;
 	font-size: 9px;
 	opacity: 0.65;
+	text-align: center;
 }
 .pn .pn-pf-predblock .row {
 	display: grid;
-	/* team | pick | team | ft | mark — teams flex, numbers stay put */
-	grid-template-columns: 1fr 44px 1fr 40px 18px;
+	/* team | pick | team | mark — result reads from the row colour */
+	grid-template-columns: 1fr 44px 1fr 18px;
 	align-items: center;
 	gap: 4px;
 	padding: 6px 10px;
@@ -383,23 +387,66 @@
 	text-align: center;
 	color: var(--ink);
 }
-.pn .pn-pf-predblock .row .ft {
-	font-family: var(--mono);
-	font-size: 10.5px;
-	text-align: right;
-	color: var(--ink-3);
-}
 .pn .pn-pf-predblock .row .mk {
 	font-size: 11px;
 	text-align: center;
 	color: var(--ink-3);
 }
-.pn .pn-pf-predblock .row .mk.exact { color: var(--gold); font-weight: 700; }
-.pn .pn-pf-predblock .row .mk.outcome { color: var(--green); font-weight: 700; }
+/* Result colours: GREEN = exact score, YELLOW/GOLD = right outcome only. */
+.pn .pn-pf-predblock .row .mk.exact { color: var(--green); font-weight: 700; }
+.pn .pn-pf-predblock .row .mk.outcome { color: var(--gold); font-weight: 700; }
 .pn .pn-pf-predblock .row .mk.wrong { color: var(--red); }
-.pn .pn-pf-predblock .row.exact { background: rgba(212, 154, 46, 0.1); }
-.pn .pn-pf-predblock .row.outcome { background: rgba(27, 108, 62, 0.08); }
+.pn .pn-pf-predblock .row.exact { background: rgba(27, 108, 62, 0.16); }
+.pn .pn-pf-predblock .row.outcome { background: rgba(212, 154, 46, 0.18); }
+
+/* ── Bracket picks: one full-width row per stage (funnel order) ──────── */
+
+.pn .pn-pf-bracket { display: flex; flex-direction: column; }
+.pn .pn-pf-bracket .strow {
+	display: grid;
+	grid-template-columns: 118px 1fr;
+	gap: 12px;
+	align-items: start;
+	padding: 9px 0;
+	border-top: 1.5px dashed var(--paper-3);
+}
+.pn .pn-pf-bracket .strow:first-child { border-top: 0; padding-top: 0; }
+.pn .pn-pf-bracket .strow:last-child { padding-bottom: 0; }
+.pn .pn-pf-bracket .lbl {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	padding-top: 5px;
+}
+.pn .pn-pf-bracket .lbl .n {
+	margin-left: 6px;
+	opacity: 0.6;
+}
+.pn .pn-pf-bracket .tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+}
+.pn .pn-pf-bracket .pick-tag {
+	padding: 3px 8px;
+	font-size: 10px;
+	gap: 4px;
+}
+/* Fate borders: green = team really reached this round, red = eliminated
+   before it, default ink = still undecided. */
+.pn .pn-pf-bracket .pick-tag.fate-in { border-color: var(--green); }
+.pn .pn-pf-bracket .pick-tag.fate-out {
+	border-color: var(--red);
+	opacity: 0.6;
+}
 
 @media (max-width: 700px) {
 	.pn .pn-pf-predgrid { grid-template-columns: 1fr; }
+	.pn .pn-pf-bracket .strow {
+		grid-template-columns: 1fr;
+		gap: 5px;
+	}
+	.pn .pn-pf-bracket .lbl { padding-top: 0; }
 }
