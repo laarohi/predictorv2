@@ -214,3 +214,160 @@
 .pn .pn-ad-computed:hover .apply {
 	color: var(--ink);
 }
+
+/* ── Match results (manual score entry) ──────────────────────────────── */
+
+.pn .pn-ad-fxbar {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	flex-wrap: wrap;
+	margin-bottom: 12px;
+}
+.pn .pn-ad-pills {
+	display: flex;
+	gap: 6px;
+	flex-wrap: wrap;
+}
+/* While a search is active the day/status filter is bypassed — fade the
+   pills so the UI says so instead of looking ignored. */
+.pn .pn-ad-pills.muted { opacity: 0.35; pointer-events: none; }
+.pn .pn-ad-pills .pill {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	padding: 5px 10px;
+	background: var(--paper-2);
+	border: 2px solid var(--ink);
+	color: var(--ink-2);
+	cursor: pointer;
+	box-shadow: 2px 2px 0 var(--ink);
+}
+.pn .pn-ad-pills .pill.on {
+	background: var(--ink);
+	color: var(--paper);
+	font-weight: 700;
+}
+
+.pn .pn-ad-fx {
+	display: grid;
+	grid-template-columns: auto 1fr auto auto;
+	gap: 12px;
+	align-items: center;
+	background: var(--paper);
+	border: 1.5px solid var(--ink);
+	padding: 10px 12px;
+}
+.pn .pn-ad-fx.live { border-left: 6px solid var(--red); }
+.pn .pn-ad-fx.editing { background: rgba(212, 154, 46, 0.1); }
+.pn .pn-ad-fx .meta .ko {
+	font-family: var(--mono);
+	font-size: 10.5px;
+	color: var(--ink-2);
+	letter-spacing: 0.04em;
+}
+.pn .pn-ad-fx .meta .st {
+	font-family: var(--mono);
+	font-size: 9.5px;
+	color: var(--ink-3);
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	margin-top: 2px;
+}
+.pn .pn-ad-fx .match {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	flex-wrap: wrap;
+	min-width: 0;
+}
+.pn .pn-ad-fx .match .team {
+	font-family: var(--display);
+	font-size: 14px;
+	text-transform: uppercase;
+	letter-spacing: 0.01em;
+}
+.pn .pn-ad-fx .match .score {
+	font-family: var(--display);
+	font-size: 15px;
+	color: var(--red-deep);
+	min-width: 34px;
+	text-align: center;
+}
+.pn .pn-ad-fx .match .score.unset {
+	color: var(--ink-3);
+	font-size: 12px;
+}
+.pn .pn-ad-fx .match .pens {
+	font-family: var(--mono);
+	font-size: 10px;
+	color: var(--ink-3);
+}
+.pn .pn-ad-fx .actions .pn-btn {
+	padding: 4px 10px;
+	font-size: 10px;
+	box-shadow: 2px 2px 0 var(--ink);
+}
+
+/* Expanded editor row — spans the full card width under the summary line. */
+.pn .pn-ad-fxedit {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: flex-end;
+	gap: 18px;
+	flex-wrap: wrap;
+	border-top: 2px dashed var(--paper-3);
+	padding-top: 12px;
+}
+.pn .pn-ad-fxedit .grp .lbl {
+	display: block;
+	font-family: var(--mono);
+	font-size: 9.5px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	margin-bottom: 5px;
+}
+.pn .pn-ad-fxedit .pair {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.pn .pn-ad-fxedit .pair input {
+	width: 56px;
+	padding: 7px 8px;
+	font-family: var(--display);
+	font-size: 15px;
+	text-align: center;
+	background: var(--paper-2);
+	border: 2px solid var(--ink);
+	color: var(--ink);
+}
+.pn .pn-ad-fxedit .pair .dash {
+	font-family: var(--display);
+	color: var(--ink-3);
+}
+.pn .pn-ad-fxedit select {
+	padding: 8px 10px;
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.04em;
+	background: var(--paper-2);
+	border: 2px solid var(--ink);
+	color: var(--ink);
+}
+.pn .pn-ad-fxedit .grp.save { margin-left: auto; }
+
+@media (max-width: 700px) {
+	.pn .pn-ad-fx {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 10px;
+	}
+	.pn .pn-ad-fx .actions .pn-btn { width: 100%; text-align: center; }
+	.pn .pn-ad-fxedit { gap: 12px; }
+	.pn .pn-ad-fxedit .grp.save { margin-left: 0; width: 100%; }
+	.pn .pn-ad-fxedit .grp.save .pn-btn { width: 100%; }
+}
