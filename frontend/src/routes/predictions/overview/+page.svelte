@@ -284,7 +284,10 @@
 		<section class="pn-ov-hero">
 			<div class="lead">
 				<nav class="pn-ovswitch" aria-label="Predictions view">
-					<a href="/predictions">Your picks</a>
+					<!-- ?view=picks marks an explicit choice — the wizard would
+					     otherwise bounce straight back here once Phase 1 locks
+					     and nothing is left to fill in. -->
+					<a href="/predictions?view=picks">Your picks</a>
 					<a href="/predictions/overview" class="on" aria-current="page">Overview</a>
 				</nav>
 				<p class="sub">
@@ -323,7 +326,7 @@
 					No peeking — the full pool of predictions opens up the moment the deadline passes
 					{#if $phase1Countdown}(in <b>{$phase1Countdown}</b>){/if}. Until then, get your own picks in.
 				</p>
-				<a class="pn-btn" href="/predictions">Back to your picks</a>
+				<a class="pn-btn" href="/predictions?view=picks">Back to your picks</a>
 			</section>
 		{:else if section === 'groups'}
 			<!-- ─────────────────────── Group stage ─────────────────────── -->

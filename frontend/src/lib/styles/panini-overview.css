@@ -8,17 +8,22 @@
  * in both heroes (anchor tabs navigate between the wizard and overview;
  * button tabs switch sections within the overview). */
 .pn .pn-ovswitch {
-	display: inline-flex;
+	display: flex;
 	border: 2px solid var(--ink);
 	background: var(--paper);
 }
 .pn .pn-ovswitch a,
 .pn .pn-ovswitch button {
+	/* Equal segments that always fill the strip — a stretched container
+	 * must never leave dead (unclickable) bordered space after the last
+	 * tab, and no tab may outgrow its siblings. */
+	flex: 1 1 0;
+	min-width: 0;
 	background: var(--paper);
 	color: var(--ink);
 	border: 0;
 	border-right: 2px solid var(--ink);
-	padding: 10px 18px;
+	padding: 10px 14px;
 	font-family: var(--display);
 	font-size: 13px;
 	text-transform: uppercase;
@@ -524,9 +529,7 @@
 		flex-direction: column;
 	}
 	.pn .pn-ov-hero .controls { justify-content: stretch; }
-	.pn .pn-ov-hero .controls .pn-ovswitch { flex: 1; display: flex; }
-	.pn .pn-ov-hero .controls .pn-ovswitch a,
-	.pn .pn-ov-hero .controls .pn-ovswitch button { flex: 1; }
+	.pn .pn-ov-hero .controls .pn-ovswitch { flex: 1; }
 	.pn .pn-ovswitch a,
 	.pn .pn-ovswitch button { padding: 9px 12px; font-size: 12px; }
 	.pn .pn-ov-groups { grid-template-columns: 1fr; gap: 14px; }

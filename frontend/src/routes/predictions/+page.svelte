@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { fade } from 'svelte/transition';
+	import { browser } from '$app/environment';
+	import { page } from '$app/stores';
 	import { goto, beforeNavigate } from '$app/navigation';
 	import { isAuthenticated, user } from '$stores/auth';
 	import {
@@ -42,14 +44,15 @@
 		isPhase2BracketLocked,
 		isPhase1Locked,
 		phase1Countdown,
-		phase2Countdown
+		phase2Countdown,
+		phaseStatus
 	} from '$stores/phase';
 	import {
 		applyFifaTiebreakers,
 		computeGroupStandingsMapWithWarnings,
 		filterQualificationRelevantWarnings
 	} from '$lib/utils/standings';
-	import { countBracketSlotsFilled } from '$lib/utils/bracketProgress';
+	import { BRACKET_TOTAL_SLOTS_PHASE2, countBracketSlotsFilled } from '$lib/utils/bracketProgress';
 	import {
 		initPersistence,
 		hydrateFromStorage,
@@ -246,6 +249,55 @@
 			window.removeEventListener('beforeunload', handleBeforeUnload);
 		}
 	});
+
+	// ---- Smart default view (Your picks vs Overview) -----------------------
+	// Once Phase 1 locks, the Predict tab's default destination becomes the
+	// pool overview — there's nothing left to fill in, so show everyone's
+	// picks instead of a frozen wizard. The default flips back to the wizard
+	// whenever the user has PENDING picks: an open, teams-known Phase 2
+	// knockout match without a score pick, or an incomplete Phase 2 bracket
+	// before its deadline. An explicit ?view=picks (the Overview page's
+	// "Your picks" tab and lock-card CTA) always shows the wizard.
+	const isRealTeam = (t: string) => !!t && t !== 'TBD' && !t.toLowerCase().startsWith('slot:');
+
+	$: pendingPickCount = (() => {
+		if (!$isPhase2Active) return 0;
+		let pending = 0;
+		for (const f of $actualKnockoutFixtures) {
+			if (!isRealTeam(f.home_team) || !isRealTeam(f.away_team)) continue;
+			if ((predictionStateMap.get(f.id) ?? 'empty') === 'empty') pending++;
+		}
+		if (!$isPhase2BracketLocked) {
+			const b = $unsavedPhase2BracketPrediction || $phase2BracketPrediction;
+			// R16 onward only — the 32 R32 entrants are known facts in Phase 2.
+			let filled = 0;
+			if (b) {
+				for (const arr of [b.round_of_16, b.quarter_finals, b.semi_finals, b.final]) {
+					for (const t of arr || []) if (t) filled++;
+				}
+				if (b.winner) filled++;
+			}
+			pending += Math.max(0, BRACKET_TOTAL_SLOTS_PHASE2 - filled);
+		}
+		return pending;
+	})();
+
+	// Decide once per visit, and only when the inputs it depends on have
+	// actually arrived (phaseStatus hydrates async; the Phase 2 branch also
+	// needs the fixture + prediction fetches). replaceState keeps the bare
+	// /predictions entry out of history so Back doesn't bounce.
+	let viewRouteDecided = false;
+	$: if (browser && !viewRouteDecided && $phaseStatus) {
+		if ($page.url.searchParams.get('view') === 'picks' || !$isPhase1Locked) {
+			viewRouteDecided = true; // explicit choice, or Phase 1 still open
+		} else if (!$isPhase2Active) {
+			viewRouteDecided = true;
+			void goto('/predictions/overview', { replaceState: true });
+		} else if (fetchesDone) {
+			viewRouteDecided = true;
+			if (pendingPickCount === 0) void goto('/predictions/overview', { replaceState: true });
+		}
+	}
 
 	// Default the active group pill to the first group once fixtures load
 	$: if (!activeGroupPill && $groupFixtures.length > 0) {
@@ -870,7 +922,7 @@
 				<!-- Your picks ↔ Overview — sibling-page switcher (the overview
 				     shows the whole pool's predictions once they lock). -->
 				<nav class="pn-ovswitch" aria-label="Predictions view">
-					<a href="/predictions" class="on" aria-current="page">Your picks</a>
+					<a href="/predictions?view=picks" class="on" aria-current="page">Your picks</a>
 					<a href="/predictions/overview">Overview</a>
 				</nav>
 				<!-- Section tabs (Groups / Knockout / Bonus) — navigation within

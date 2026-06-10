@@ -319,11 +319,15 @@
 	border: 2px solid var(--ink);
 }
 .pn .pn-wiz-hero .phase-toggle button {
-	flex: 1; /* equal-width buttons regardless of label length */
+	/* Fill the strip edge-to-edge (no dead, unclickable bordered space)
+	 * while still respecting each label's width — strict equal thirds
+	 * would clip "Knockout" at narrow title-block widths. */
+	flex: 1 1 auto;
+	min-width: 0;
 	background: var(--paper);
 	border: 0;
 	border-right: 2px solid var(--ink);
-	padding: 10px 18px;
+	padding: 10px 12px;
 	font-family: var(--display);
 	font-size: 13px;
 	text-transform: uppercase;
@@ -1621,16 +1625,22 @@
 	background: var(--gold);
 }
 
-/* Small lock indicator on the section toggle button when gated */
+/* Small lock indicator on the section toggle button when gated. The dot is
+ * a corner accent taken out of flow so it can't widen the button beyond
+ * its equal flex share. */
 .pn .pn-wiz-hero .phase-toggle button.gated {
 	color: var(--ink-3);
 	cursor: pointer;
+	position: relative;
 }
 .pn .pn-wiz-hero .phase-toggle button.gated::after {
-	content: ' ●';
+	content: '●';
+	position: absolute;
+	top: 3px;
+	right: 4px;
 	color: var(--gold);
-	margin-left: 2px;
-	font-size: 12px;
+	font-size: 9px;
+	line-height: 1;
 }
 .pn .pn-wiz-hero .phase-toggle button.gated.on {
 	background: var(--ink);
