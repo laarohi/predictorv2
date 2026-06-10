@@ -2499,6 +2499,12 @@
 		font-size: 10px;
 		letter-spacing: 0.1em;
 	}
+	/* Long section titles ("Your scoring journey") + a meta link don't fit
+	 * one 375px line — let the header wrap with the meta keeping its
+	 * right alignment on its own line. */
+	.pn .pn-sec-h { flex-wrap: wrap; row-gap: 4px; }
+	.pn .pn-sec-h .ttl { font-size: 16px; }
+	.pn .pn-sec-h .meta { margin-left: auto; }
 	.pn .pn-hero-v4 .hero-row {
 		grid-template-columns: 1fr;
 	}
