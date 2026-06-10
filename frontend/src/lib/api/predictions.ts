@@ -8,6 +8,8 @@ import type {
 	MatchPredictionCreate,
 	MatchPredictionUpdate,
 	BracketPrediction,
+	BracketOverviewResponse,
+	GroupsOverviewResponse,
 	TeamAdvancementPrediction,
 	CommunityPredictionsResponse
 } from '$types';
@@ -101,4 +103,14 @@ export async function getCommunityPredictions(
 	fixtureId: string
 ): Promise<CommunityPredictionsResponse> {
 	return api.get<CommunityPredictionsResponse>(`/predictions/matches/${fixtureId}/community`);
+}
+
+// ---- Overview (who-picked-what distributions; blind-pool gated server-side) ----
+
+export async function getGroupsOverview(): Promise<GroupsOverviewResponse> {
+	return api.get<GroupsOverviewResponse>('/predictions/overview/groups');
+}
+
+export async function getBracketOverview(phase: 1 | 2 = 1): Promise<BracketOverviewResponse> {
+	return api.get<BracketOverviewResponse>(`/predictions/overview/bracket?phase=${phase}`);
 }

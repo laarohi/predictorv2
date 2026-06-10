@@ -12,6 +12,7 @@
 @import './lib/styles/panini-profile.css';
 @import './lib/styles/panini-admin.css';
 @import './lib/styles/panini-rules.css';
+@import './lib/styles/panini-overview.css';
 
 @tailwind base;
 @tailwind components;

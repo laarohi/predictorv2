@@ -137,3 +137,67 @@ class CommunityPredictionsResponse(BaseModel):
     away_team: str
     predictions: list[CommunityPrediction]
     actual: FixtureScore | None = None
+
+
+# Overview schemas — the "who predicted what" distribution pages. All of
+# these are aggregates across the whole pool, so the same blind-pool gates
+# as the community endpoint apply (Phase 1 deadline / Phase 2 bracket
+# deadline) before any of them is served.
+
+
+class OverviewTeamRow(BaseModel):
+    """Per-team prediction counts inside one group panel."""
+
+    team: str
+    # Users whose predicted standings (derived from their score picks, same
+    # derivation the group_position bonus scores against) put the team 1st.
+    first_count: int
+    # Users whose Phase 1 bracket includes the team in the Round of 32.
+    advance_count: int
+
+
+class OverviewFixtureRow(BaseModel):
+    """Outcome split (1/X/2) of every player's score pick for one fixture."""
+
+    fixture_id: uuid.UUID
+    home_team: str
+    away_team: str
+    kickoff: datetime
+    status: str
+    home_count: int
+    draw_count: int
+    away_count: int
+    # Actual result, present once the fixture has a score row (live or final)
+    # so the overview can paint finished/in-play matches without a second call.
+    actual_home: int | None = None
+    actual_away: int | None = None
+
+
+class OverviewGroup(BaseModel):
+    group: str
+    teams: list[OverviewTeamRow]
+    fixtures: list[OverviewFixtureRow]
+
+
+class GroupsOverviewResponse(BaseModel):
+    total_predictors: int
+    groups: list[OverviewGroup]
+
+
+class BracketOverviewTeamRow(BaseModel):
+    """How many players predicted this team to reach each knockout stage."""
+
+    team: str
+    group: str | None
+    round_of_32: int
+    round_of_16: int
+    quarter_final: int
+    semi_final: int
+    final: int
+    winner: int
+
+
+class BracketOverviewResponse(BaseModel):
+    phase: int
+    total_predictors: int
+    teams: list[BracketOverviewTeamRow]

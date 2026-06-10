@@ -374,6 +374,56 @@ export interface CommunityPredictionsResponse {
 	actual: FixtureScore | null;
 }
 
+// Prediction overview (who-picked-what distribution pages)
+export interface OverviewTeamRow {
+	team: string;
+	/** Players whose predicted standings put this team 1st in its group. */
+	first_count: number;
+	/** Players whose Phase 1 bracket carries this team into the R32. */
+	advance_count: number;
+}
+
+export interface OverviewFixtureRow {
+	fixture_id: string;
+	home_team: string;
+	away_team: string;
+	kickoff: string;
+	status: string;
+	home_count: number;
+	draw_count: number;
+	away_count: number;
+	actual_home: number | null;
+	actual_away: number | null;
+}
+
+export interface OverviewGroup {
+	group: string;
+	teams: OverviewTeamRow[];
+	fixtures: OverviewFixtureRow[];
+}
+
+export interface GroupsOverviewResponse {
+	total_predictors: number;
+	groups: OverviewGroup[];
+}
+
+export interface BracketOverviewTeamRow {
+	team: string;
+	group: string | null;
+	round_of_32: number;
+	round_of_16: number;
+	quarter_final: number;
+	semi_final: number;
+	final: number;
+	winner: number;
+}
+
+export interface BracketOverviewResponse {
+	phase: number;
+	total_predictors: number;
+	teams: BracketOverviewTeamRow[];
+}
+
 // Public user profile types
 export interface PublicProfile {
 	id: string;

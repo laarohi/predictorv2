@@ -867,6 +867,12 @@
 		<div class="pn-ws-only">
 		<section class="pn-wiz-hero">
 			<div class="title-block">
+				<!-- Your picks ↔ Overview — sibling-page switcher (the overview
+				     shows the whole pool's predictions once they lock). -->
+				<nav class="pn-ovswitch" aria-label="Predictions view">
+					<a href="/predictions" class="on" aria-current="page">Your picks</a>
+					<a href="/predictions/overview">Overview</a>
+				</nav>
 				<!-- Section tabs (Groups / Knockout / Bonus) — navigation within
 				     content, lives on the LEFT where users expect navigation. -->
 				<div class="phase-toggle">
@@ -956,6 +962,7 @@
 			<section class="pn-wm-hero">
 				<div class="top-row">
 					<div class="ttl">Predict</div>
+					<a class="pn-ov-minilink" href="/predictions/overview">Overview →</a>
 					{#if $isPhase2Active}
 						<div class="phase-pill">
 							<button class:on={activePhase === 'phase1'} on:click={() => (activePhase = 'phase1')}>Phase I</button>
