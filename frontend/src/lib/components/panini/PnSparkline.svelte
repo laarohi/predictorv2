@@ -14,12 +14,18 @@
 	export let strokeColor: string = 'var(--red)';
 	export let fillColor: string = 'rgba(200,40,31,0.10)';
 	export let markerColor: string = 'var(--gold)';
+	/** Print the rank value above each marker. Needs extra head-room
+	 *  (padTop) and side-room (padX), so geometry shifts when enabled. */
+	export let showLabels: boolean = false;
 
+	// padX keeps the end markers (and labels) inside the viewBox — without
+	// it the first/last circles render as half-moons at the edges.
 	$: ({ linePath, fillPath, points } = sparklinePath(ranks, maxRank, {
 		width,
 		height,
-		padTop: 0.05,
-		padBottom: 0.05
+		padTop: showLabels ? 0.28 : 0.08,
+		padBottom: 0.08,
+		padX: showLabels ? 13 : 6
 	}));
 </script>
 
@@ -46,6 +52,15 @@
 			stroke="var(--ink)"
 			stroke-width="1.5"
 		/>
+		{#if showLabels}
+			<text
+				class="lab"
+				class:now={i === points.length - 1}
+				x={x}
+				y={y - 8}
+				text-anchor="middle"
+			>{ranks[i]}</text>
+		{/if}
 	{/each}
 </svg>
 
@@ -53,5 +68,15 @@
 	.pn-spark {
 		width: 100%;
 		display: block;
+	}
+	.pn-spark .lab {
+		font-family: var(--mono);
+		font-size: 9.5px;
+		font-weight: 600;
+		fill: var(--ink-2);
+	}
+	.pn-spark .lab.now {
+		font-weight: 700;
+		fill: var(--ink);
 	}
 </style>

@@ -111,7 +111,7 @@
 		<div class="l"><span class="pip"></span>Trajectory · {trajectory.length}d</div>
 		<div class="spark-wrap">
 			{#if trajectory.length >= 2}
-				<PnSparkline ranks={trajectory} maxRank={trajectoryMaxRank} width={240} height={56} />
+				<PnSparkline ranks={trajectory} maxRank={trajectoryMaxRank} width={240} height={56} showLabels={true} />
 			{:else}
 				<div style="display: grid; place-items: center; height: 56px; font-family: var(--mono); font-size: 10px; color: var(--ink-3);">
 					awaiting history
