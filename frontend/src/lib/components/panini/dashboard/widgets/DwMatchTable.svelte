@@ -45,7 +45,7 @@
 		cta?: CtaVariant;
 		/** Target for the CTA link (default /predictions). */
 		ctaHref?: string;
-		/** Row click handler (typically navigate to /match/[id]). */
+		/** Row click handler (typically navigate to /results/[id]). */
 		onClick?: () => void;
 	};
 </script>

@@ -39,6 +39,7 @@
 	import { getMyRankTrajectory, type RankTrajectoryResponse } from '$api/leaderboard';
 	import { getBracketExposure, type BracketExposureResponse } from '$api/predictions';
 	import { teamCode } from '$lib/utils/teamCodes';
+	import { goto } from '$app/navigation';
 	import { koChipLabel } from '$lib/utils/matchBreakdown';
 	import type { Fixture } from '$types';
 
@@ -148,7 +149,7 @@
 		const home = teamCode(f.home_team);
 		const away = teamCode(f.away_team);
 		const grpLabel = shortRoundLabel(f);
-		const navigate = () => (window.location.href = `/match/${id}`);
+		const navigate = () => void goto(`/results/${id}`);
 
 		if (f.status === 'finished') {
 			const result = classifyPick(score, pick);
