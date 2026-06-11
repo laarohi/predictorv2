@@ -21,6 +21,7 @@ def _event(
     home_score: str = "2",
     away_score: str = "1",
     shootout: tuple | None = None,
+    completed: bool | None = None,
 ) -> dict:
     home_c = {
         "homeAway": "home",
@@ -34,10 +35,14 @@ def _event(
     }
     if shootout:
         home_c["shootoutScore"], away_c["shootoutScore"] = shootout
+    status_type: dict = {"name": name, "state": state}
+    if completed is None:
+        completed = state == "post" and name in ("STATUS_FULL_TIME", "STATUS_FINAL")
+    status_type["completed"] = completed
     return {
         "competitions": [
             {
-                "status": {"displayClock": clock, "type": {"name": name, "state": state}},
+                "status": {"displayClock": clock, "type": status_type},
                 "competitors": [home_c, away_c],
             }
         ]
@@ -51,9 +56,17 @@ def test_status_mapping():
     assert map_event_status({"name": "STATUS_SCHEDULED", "state": "pre"}) == MatchStatus.SCHEDULED
     assert map_event_status({"name": "STATUS_IN_PROGRESS", "state": "in"}) == MatchStatus.LIVE
     assert map_event_status({"name": "STATUS_HALFTIME", "state": "in"}) == MatchStatus.HALFTIME
-    # All terminal states are None — finals belong to Football-Data.
+    # Completed post states are finals; non-completed terminal states
+    # (abandoned/postponed/cancelled) are still skipped entirely.
+    assert (
+        map_event_status({"name": "STATUS_FULL_TIME", "state": "post", "completed": True})
+        == MatchStatus.FINISHED
+    )
     assert map_event_status({"name": "STATUS_FULL_TIME", "state": "post"}) is None
-    assert map_event_status({"name": "STATUS_POSTPONED", "state": "post"}) is None
+    assert (
+        map_event_status({"name": "STATUS_POSTPONED", "state": "post", "completed": False})
+        is None
+    )
 
 
 def test_parse_minute():
@@ -84,8 +97,17 @@ def test_live_event_maps_to_external_score():
     assert ext.minute == 67
 
 
-def test_finished_event_is_skipped():
-    ev = _event(state="post", name="STATUS_FULL_TIME")
+def test_completed_event_maps_to_non_authoritative_final():
+    ev = _event(state="post", name="STATUS_FULL_TIME", completed=True)
+    ext = EspnScoreProvider._to_external_score(ev)
+    assert ext is not None
+    assert ext.status == MatchStatus.FINISHED
+    assert ext.final_authoritative is False  # ET split unknown — FD's job
+    assert (ext.home_score, ext.away_score) == (2, 1)
+
+
+def test_abandoned_event_is_skipped():
+    ev = _event(state="post", name="STATUS_ABANDONED", completed=False)
     assert EspnScoreProvider._to_external_score(ev) is None
 
 
@@ -107,18 +129,26 @@ def test_malformed_event_returns_none():
 
 
 @pytest.mark.asyncio
-async def test_fetch_live_scores_filters_post_events():
+async def test_fetch_live_scores_emits_completed_and_filters_abandoned():
     class FakeClient:
         async def get_scoreboard(self, slug, dates):
             return [
                 _event(),
-                _event(state="post", name="STATUS_FULL_TIME", home="Canada", away="Qatar"),
+                _event(
+                    state="post", name="STATUS_FULL_TIME", completed=True,
+                    home="Canada", away="Qatar",
+                ),
+                _event(
+                    state="post", name="STATUS_ABANDONED", completed=False,
+                    home="Spain", away="Norway",
+                ),
             ]
 
     provider = EspnScoreProvider(client=FakeClient())
     scores = await provider.fetch_live_scores("WC")
-    assert len(scores) == 1
-    assert scores[0].home_team == "Mexico"
+    assert [s.home_team for s in scores] == ["Mexico", "Canada"]
+    assert scores[1].status == MatchStatus.FINISHED
+    assert scores[1].final_authoritative is False
 
 
 # ---- fallback chain --------------------------------------------------------

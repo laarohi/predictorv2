@@ -1,11 +1,15 @@
 """External score fetching service.
 
-Two providers with one job each:
+Two providers, ESPN-first:
   - ESPN (unofficial public JSON) paints LIVE in-play scores — near
-    real-time, no auth, but never emits finished matches.
-  - Football-Data.org is the authoritative finisher (proper FT/ET/pens
-    split via the per-fixture resolution pass) and the bulk fallback if
-    ESPN errors on a tick.
+    real-time, no auth — and emits finished matches as non-authoritative
+    finals (good enough to finish a group match instantly; knockout
+    finals wait for the FT/ET/pens split).
+  - Football-Data.org is the authoritative finisher for knockout matches
+    (proper FT/ET/pens split via the per-fixture resolution pass) and the
+    bulk fallback if ESPN errors on a tick. Its free tier omits in-play
+    scores (fullTime stays null until their delayed feed finishes the
+    match), so scores are kept None when absent — never coerced to 0.
 """
 
 import logging
@@ -30,19 +34,30 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ExternalScore:
-    """Score data from external API."""
+    """Score data from external API.
+
+    home_score/away_score are None when the provider reported a match
+    without score data (Football-Data's free tier does this for in-play
+    matches). Consumers must never coerce None to 0 — that fabricates a
+    0-0 result.
+    """
 
     external_id: str
     home_team: str
     away_team: str
-    home_score: int
-    away_score: int
+    home_score: int | None
+    away_score: int | None
     status: MatchStatus
     minute: int | None = None
     home_score_et: int | None = None
     away_score_et: int | None = None
     home_penalties: int | None = None
     away_penalties: int | None = None
+    # True when a FINISHED status carries the full result our scoring needs
+    # (Football-Data: FT/ET/pens split). ESPN's finished events fold ET
+    # goals into one total, so it reports finals as non-authoritative —
+    # accepted as final for group-stage fixtures only.
+    final_authoritative: bool = True
 
 
 class ScoreProviderBase(ABC):
@@ -89,8 +104,10 @@ class FootballDataScoreProvider(ScoreProviderBase):
             external_id=str(match.get("id", "")),
             home_team=home_team.get("name") or "",
             away_team=away_team.get("name") or "",
-            home_score=full_time.get("home") or 0,
-            away_score=full_time.get("away") or 0,
+            # None stays None: the free tier reports null fullTime for
+            # in-play matches, and `or 0` here once fabricated a 0-0 final.
+            home_score=full_time.get("home"),
+            away_score=full_time.get("away"),
             status=map_status(match.get("status", "")),
             minute=match.get("minute"),
             home_score_et=extra_time.get("home"),
@@ -103,9 +120,11 @@ class FootballDataScoreProvider(ScoreProviderBase):
 class EspnScoreProvider(ScoreProviderBase):
     """Live in-play scores from ESPN's public scoreboard JSON.
 
-    Emits only pre/in-play matches: a finished match is deliberately
-    dropped, which leaves its fixture untouched on that sync tick so the
-    Football-Data resolution pass fetches the authoritative final result.
+    Emits pre/in-play matches plus completed ones as NON-authoritative
+    finals (`final_authoritative=False`): the apply layer accepts those as
+    final for group-stage fixtures (no ET/pens to split) and treats them
+    as live paints for knockout fixtures, where the Football-Data
+    resolution pass still lands the authoritative FT/ET/pens result.
 
     ExternalScore.external_id is left blank — ESPN event ids don't match
     the Football-Data ids stored on fixtures, so matching goes through the
@@ -143,7 +162,7 @@ class EspnScoreProvider(ScoreProviderBase):
             comp = event["competitions"][0]
             status = map_event_status(comp.get("status", {}).get("type", {}))
             if status is None:
-                return None  # finished/abandoned — Football-Data's job
+                return None  # abandoned/postponed — nothing to paint
             sides = {c.get("homeAway"): c for c in comp.get("competitors", [])}
             home, away = sides.get("home"), sides.get("away")
             if not home or not away:
@@ -160,6 +179,9 @@ class EspnScoreProvider(ScoreProviderBase):
                 minute=parse_minute(comp.get("status", {}).get("displayClock")),
                 home_penalties=int(shootout_home) if shootout_home is not None else None,
                 away_penalties=int(shootout_away) if shootout_away is not None else None,
+                # ESPN's score is one running total (ET goals folded in) —
+                # fine to finish a group match, not a knockout one.
+                final_authoritative=False,
             )
         except (KeyError, IndexError, TypeError, ValueError):
             return None  # one malformed event shouldn't poison the tick
@@ -197,9 +219,11 @@ class FallbackScoreProvider(ScoreProviderBase):
 
 
 def get_score_provider() -> ScoreProviderBase:
-    """ESPN paints live scores (Football-Data bulk as same-tick fallback);
-    Football-Data resolves finals. No configuration on purpose — nothing
-    to wire into prod env, and the fallback engages by itself per tick.
+    """ESPN paints live scores and finishes group-stage matches
+    (Football-Data bulk as same-tick fallback); Football-Data resolves
+    knockout finals (FT/ET/pens split). No configuration on purpose —
+    nothing to wire into prod env, and the fallback engages by itself
+    per tick.
     """
     football_data = FootballDataScoreProvider()
     return FallbackScoreProvider(

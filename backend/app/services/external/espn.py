@@ -6,9 +6,10 @@ The endpoint is the same one every espn.com browser tab polls, so our one
 request per minute during match windows is negligible traffic.
 
 Role split (see external_scores.get_score_provider): ESPN paints live
-scores only — finished matches are deliberately NOT emitted here, so the
-final result always lands via Football-Data's per-fixture resolution pass,
-which carries the authoritative FT/ET/penalties split our scoring expects.
+scores and emits completed matches as non-authoritative finals — enough to
+finish a group-stage fixture instantly. Knockout finals still land via
+Football-Data's per-fixture resolution pass, which carries the
+authoritative FT/ET/penalties split our scoring expects.
 """
 
 from __future__ import annotations
@@ -41,8 +42,7 @@ TEAM_NAME_ALIASES = {
 }
 
 # status.type.name overrides; anything else is decided by status.type.state
-# (pre → SCHEDULED, in → LIVE). 'post' states are handled by the caller —
-# finished matches are skipped entirely so Football-Data lands the final.
+# (pre → SCHEDULED, in → LIVE, post+completed → FINISHED).
 _STATUS_NAME_MAP = {
     "STATUS_HALFTIME": MatchStatus.HALFTIME,
 }
@@ -51,13 +51,14 @@ _STATUS_NAME_MAP = {
 def map_event_status(status_type: dict[str, Any]) -> MatchStatus | None:
     """Map ESPN's status.type to our MatchStatus.
 
-    Returns None for 'post' states (final/abandoned/postponed): this provider
-    only paints pre/in-play state, never terminal results.
+    'post' states map to FINISHED only when ESPN flags the event as
+    completed (a played-out match); abandoned/postponed/cancelled events
+    carry completed=False and return None so they never touch a fixture.
     """
     name = status_type.get("name", "")
     state = status_type.get("state", "")
     if state == "post":
-        return None
+        return MatchStatus.FINISHED if status_type.get("completed") else None
     if name in _STATUS_NAME_MAP:
         return _STATUS_NAME_MAP[name]
     if state == "in":

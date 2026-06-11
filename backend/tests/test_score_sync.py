@@ -36,15 +36,22 @@ async def competition(session: AsyncSession) -> Competition:
     return comp
 
 
-def _fixture(competition_id, *, kickoff: datetime, status: MatchStatus, ext: str) -> Fixture:
+def _fixture(
+    competition_id,
+    *,
+    kickoff: datetime,
+    status: MatchStatus,
+    ext: str,
+    stage: str = "group",
+) -> Fixture:
     return Fixture(
         competition_id=competition_id,
         external_id=ext,
         home_team="Mexico",
         away_team="South Africa",
         kickoff=kickoff,
-        stage="group",
-        group="A",
+        stage=stage,
+        group="A" if stage == "group" else None,
         status=status,
     )
 
@@ -269,3 +276,215 @@ async def test_fixture_present_in_live_response_is_not_fetched_individually(
     assert fx.status == MatchStatus.LIVE
     score = await _get_score(session, fx.id)
     assert score is not None and (score.home_score, score.away_score) == (1, 0)
+
+
+# ---------------------------------------------------------------------------
+# Null-score guard + ESPN finals (regression: opening match MEX-RSA went 0-0
+# at full time because Football-Data's delayed feed reported the match with
+# null fullTime scores, which were coerced to 0 and overwrote ESPN's 2-0)
+# ---------------------------------------------------------------------------
+
+
+def _ext_null_scores(ext_id: str, status: MatchStatus) -> ExternalScore:
+    """Football-Data free-tier shape: score-bearing status, null scores."""
+    return ExternalScore(
+        external_id=ext_id,
+        home_team="Mexico",
+        away_team="South Africa",
+        home_score=None,
+        away_score=None,
+        status=status,
+    )
+
+
+@pytest.mark.asyncio
+async def test_null_scores_do_not_overwrite_live_score(
+    session, competition, monkeypatch
+) -> None:
+    # ESPN painted 2-0; the match ends and vanishes from ESPN's live set, so
+    # the resolution pass asks Football-Data — whose delayed feed still says
+    # IN_PLAY with null fullTime. The stored 2-0 must survive untouched.
+    fx = _fixture(competition.id, kickoff=NOW - timedelta(hours=2), status=MatchStatus.LIVE, ext="200")
+    session.add(fx)
+    await session.flush()
+    session.add(Score(fixture_id=fx.id, home_score=2, away_score=0))
+    await session.commit()
+    await session.refresh(fx)
+
+    provider = FakeProvider(live=[], by_id={"200": _ext_null_scores("200", MatchStatus.LIVE)})
+    monkeypatch.setattr("app.services.score_sync.get_score_provider", lambda: provider)
+
+    result = await sync_scores_once(session)
+
+    assert result.synced == 0 and result.updated == 0 and not result.errors
+    score = await _get_score(session, fx.id)
+    assert score is not None and (score.home_score, score.away_score) == (2, 0)
+    await session.refresh(fx)
+    assert fx.status == MatchStatus.LIVE  # still eligible for resolution
+
+
+@pytest.mark.asyncio
+async def test_finished_without_scores_does_not_finish_fixture(
+    session, competition, monkeypatch
+) -> None:
+    # A FINISHED payload with null scores must not transition the fixture:
+    # marking it FINISHED would freeze the stored score forever (the
+    # resolution pass only re-fetches LIVE/HALFTIME/recent-SCHEDULED).
+    fx = _fixture(competition.id, kickoff=NOW - timedelta(hours=2), status=MatchStatus.LIVE, ext="201")
+    session.add(fx)
+    await session.flush()
+    session.add(Score(fixture_id=fx.id, home_score=2, away_score=0))
+    await session.commit()
+    await session.refresh(fx)
+
+    provider = FakeProvider(live=[], by_id={"201": _ext_null_scores("201", MatchStatus.FINISHED)})
+    monkeypatch.setattr("app.services.score_sync.get_score_provider", lambda: provider)
+
+    result = await sync_scores_once(session)
+
+    assert result.synced == 0 and result.updated == 0
+    await session.refresh(fx)
+    assert fx.status == MatchStatus.LIVE
+    score = await _get_score(session, fx.id)
+    assert score is not None and (score.home_score, score.away_score) == (2, 0)
+
+
+@pytest.mark.asyncio
+async def test_espn_final_finishes_group_fixture(
+    session, competition, monkeypatch
+) -> None:
+    # ESPN now emits completed matches (final_authoritative=False). For a
+    # group fixture that IS the final result — no ET/pens to wait for — so
+    # the fixture finishes immediately without a Football-Data round-trip.
+    fx = _fixture(competition.id, kickoff=NOW - timedelta(hours=2), status=MatchStatus.LIVE, ext="202")
+    session.add(fx)
+    await session.commit()
+    await session.refresh(fx)
+
+    espn_final = ExternalScore(
+        external_id="",
+        home_team="Mexico",
+        away_team="South Africa",
+        home_score=2,
+        away_score=0,
+        status=MatchStatus.FINISHED,
+        final_authoritative=False,
+    )
+    provider = FakeProvider(live=[espn_final])
+    monkeypatch.setattr("app.services.score_sync.get_score_provider", lambda: provider)
+
+    result = await sync_scores_once(session)
+
+    assert provider.fixture_fetches == []  # no resolution needed
+    assert result.synced == 1
+    await session.refresh(fx)
+    assert fx.status == MatchStatus.FINISHED
+    score = await _get_score(session, fx.id)
+    assert score is not None and (score.home_score, score.away_score) == (2, 0)
+
+
+@pytest.mark.asyncio
+async def test_espn_final_on_knockout_waits_for_football_data_split(
+    session, competition, monkeypatch
+) -> None:
+    # Knockout fixture: ESPN's completed event carries one running total
+    # (ET goals folded in), so it must paint as a live update — and the
+    # resolution pass must still fetch Football-Data's authoritative
+    # FT/ET/pens split on the same tick. The defer-to-FD window compares
+    # against the real clock, so the kickoff must be relative to utc_now().
+    fx = _fixture(
+        competition.id,
+        kickoff=utc_now() - timedelta(hours=3),
+        status=MatchStatus.LIVE,
+        ext="203",
+        stage="round_of_32",
+    )
+    session.add(fx)
+    await session.commit()
+    await session.refresh(fx)
+
+    espn_final = ExternalScore(
+        external_id="",
+        home_team="Mexico",
+        away_team="South Africa",
+        home_score=2,  # running total incl. ET
+        away_score=2,
+        status=MatchStatus.FINISHED,
+        home_penalties=4,
+        away_penalties=2,
+        final_authoritative=False,
+    )
+    fd_final = ExternalScore(
+        external_id="203",
+        home_team="Mexico",
+        away_team="South Africa",
+        home_score=1,  # FT
+        away_score=1,
+        status=MatchStatus.FINISHED,
+        home_score_et=2,
+        away_score_et=2,
+        home_penalties=4,
+        away_penalties=2,
+    )
+    provider = FakeProvider(live=[espn_final], by_id={"203": fd_final})
+    monkeypatch.setattr("app.services.score_sync.get_score_provider", lambda: provider)
+
+    result = await sync_scores_once(session)
+
+    assert provider.fixture_fetches == ["203"]  # resolution ran same tick
+    assert not result.errors
+    await session.refresh(fx)
+    assert fx.status == MatchStatus.FINISHED
+    score = await _get_score(session, fx.id)
+    assert score is not None
+    assert (score.home_score, score.away_score) == (1, 1)
+    assert (score.home_score_et, score.away_score_et) == (2, 2)
+    assert (score.home_penalties, score.away_penalties) == (4, 2)
+
+
+@pytest.mark.asyncio
+async def test_espn_final_accepted_on_knockout_when_football_data_never_delivers(
+    session, competition, monkeypatch
+) -> None:
+    # Observed in prod (opening match): Football-Data's free tier flips a
+    # match to FINISHED but keeps fullTime null indefinitely. Outside the
+    # live-match window the ESPN final (total + shootout) must be accepted
+    # — otherwise the knockout fixture stays LIVE forever and scoring
+    # never runs.
+    fx = _fixture(
+        competition.id,
+        kickoff=utc_now() - timedelta(hours=5),
+        status=MatchStatus.LIVE,
+        ext="204",
+        stage="round_of_32",
+    )
+    session.add(fx)
+    await session.commit()
+    await session.refresh(fx)
+
+    espn_final = ExternalScore(
+        external_id="",
+        home_team="Mexico",
+        away_team="South Africa",
+        home_score=2,
+        away_score=2,
+        status=MatchStatus.FINISHED,
+        home_penalties=4,
+        away_penalties=2,
+        final_authoritative=False,
+    )
+    provider = FakeProvider(
+        live=[espn_final],
+        by_id={"204": _ext_null_scores("204", MatchStatus.FINISHED)},
+    )
+    monkeypatch.setattr("app.services.score_sync.get_score_provider", lambda: provider)
+
+    result = await sync_scores_once(session)
+
+    assert result.synced == 1 and not result.errors
+    await session.refresh(fx)
+    assert fx.status == MatchStatus.FINISHED
+    score = await _get_score(session, fx.id)
+    assert score is not None
+    assert (score.home_score, score.away_score) == (2, 2)
+    assert (score.home_penalties, score.away_penalties) == (4, 2)

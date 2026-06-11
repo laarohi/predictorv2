@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.models._datetime import utc_now
+from app.models._datetime import aware_utc, utc_now
 from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
 from app.models.score import Score, ScoreSource
@@ -194,9 +194,9 @@ async def _find_unresolved_fixtures(
 
 
 # Statuses for which the provider's score payload is meaningful. For a
-# match that hasn't started (or won't be played) Football-Data reports
-# nulls, which _to_external_score coerces to 0 — writing that would
-# fabricate a 0-0 result, so we only touch the Score row in these states.
+# match that hasn't started (or won't be played) the score is meaningless
+# even if present, so the Score row is only touched in these states (and
+# only when the payload actually carries scores — see _apply_external_score).
 _SCORE_BEARING_STATUSES = frozenset(
     {MatchStatus.LIVE, MatchStatus.HALFTIME, MatchStatus.FINISHED}
 )
@@ -211,17 +211,52 @@ async def _apply_external_score(
     """Match an ExternalScore to a Fixture by external_id (or team-name fallback)
     and create/update the corresponding Score row.
 
-    Returns the touched fixture's id (or None if no fixture matched) so the
-    caller can exclude it from the resolution pass this tick."""
+    Returns the touched fixture's id (or None if no fixture matched, or if
+    the fixture still needs the resolution pass this tick) so the caller
+    can exclude resolved fixtures from that pass."""
     fixture = await _find_fixture(session, competition_id, ext)
     if fixture is None:
         return None
 
-    fixture.status = ext.status
+    has_scores = ext.home_score is not None and ext.away_score is not None
+
+    status = ext.status
+    needs_resolution = False
+    if status == MatchStatus.FINISHED:
+        if not has_scores:
+            # The provider says finished but sent no score (Football-Data's
+            # delayed free feed does this transiently). Marking FINISHED now
+            # would freeze the fixture on whatever score is stored and stop
+            # the resolution pass — leave everything untouched and retry.
+            return None
+        if (
+            not ext.final_authoritative
+            and fixture.stage != "group"
+            and utc_now() < aware_utc(fixture.kickoff) + _LIVE_MATCH_WINDOW
+        ):
+            # ESPN final on a knockout fixture: the score is one running
+            # total without the FT/ET/pens split scoring prefers. Paint it
+            # as a live update and keep the fixture eligible for
+            # Football-Data resolution (returning None keeps it in this
+            # tick's pass). But only within the live-match window — the
+            # free FD tier has been observed returning FINISHED with null
+            # scores indefinitely (opening match, 2026-06-11), so past the
+            # window ESPN's final (total + shootout) is accepted rather
+            # than holding the fixture LIVE forever.
+            status = MatchStatus.LIVE
+            needs_resolution = True
+
+    fixture.status = status
     fixture.minute = ext.minute
     fixture.updated_at = utc_now()
 
-    if ext.status not in _SCORE_BEARING_STATUSES:
+    if status not in _SCORE_BEARING_STATUSES:
+        return fixture.id
+
+    if not has_scores:
+        # Score-bearing status with no score payload (Football-Data's free
+        # tier omits in-play scores). Writing the nulls coerced to 0 would
+        # fabricate a 0-0 — keep the stored score (e.g. ESPN's live paint).
         return fixture.id
 
     score_q = await session.execute(select(Score).where(Score.fixture_id == fixture.id))
@@ -241,7 +276,7 @@ async def _apply_external_score(
             )
         )
         result.synced += 1
-        return fixture.id
+        return None if needs_resolution else fixture.id
 
     score.home_score = ext.home_score
     score.away_score = ext.away_score
@@ -252,7 +287,7 @@ async def _apply_external_score(
     score.source = ScoreSource.API
     score.updated_at = utc_now()
     result.updated += 1
-    return fixture.id
+    return None if needs_resolution else fixture.id
 
 
 async def _find_fixture(
