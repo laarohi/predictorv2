@@ -404,8 +404,10 @@
 					</div>
 				{/if}
 				<div class="pn-ovswitch" role="group" aria-label="Overview section">
+					<!-- One-word label: three equal-width segments share the strip
+					     and "Group stage" clips at mobile widths. -->
 					<button class:on={section === 'groups'} on:click={() => setSection('groups')}>
-						Group stage
+						Groups
 					</button>
 					<button class:on={section === 'knockout'} on:click={() => setSection('knockout')}>
 						Knockout
