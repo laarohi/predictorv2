@@ -448,6 +448,8 @@
 									awayCode={awayCode}
 									actual={actualScore}
 									cells={cells}
+									homeMax={gridMax.homeMax}
+									awayMax={gridMax.awayMax}
 									youPlayer={youPlayer}
 									pointsExact={scoringConfig.exact_points}
 									pointsOutcome={scoringConfig.outcome_points}
@@ -615,7 +617,7 @@
 										? 'Predicted scoreline distribution'
 										: 'Match result · distribution'}
 								</span>
-								<span class="right">5×5</span>
+								<span class="right">{gridMax.homeMax + 1}×{gridMax.awayMax + 1}</span>
 							</div>
 							<div class="legend">
 								{#if phase === 'pre'}
@@ -638,6 +640,8 @@
 								awayCode={awayCode}
 								actual={actualScore}
 								cells={cells}
+								homeMax={gridMax.homeMax}
+								awayMax={gridMax.awayMax}
 								youPlayer={youPlayer}
 								compact={true}
 								pointsExact={scoringConfig.exact_points}

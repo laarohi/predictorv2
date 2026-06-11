@@ -737,6 +737,8 @@
 								awayCode={teamCode(modalRow.away_team)}
 								actual={modalActual}
 								cells={modalCells}
+								homeMax={modalGridMax.homeMax}
+								awayMax={modalGridMax.awayMax}
 								youPlayer={modalYou}
 								pointsExact={scoringConfig.exact_points}
 								pointsOutcome={scoringConfig.outcome_points}
