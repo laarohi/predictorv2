@@ -33,6 +33,7 @@
 	} from '$api/predictions';
 	import { getLeaderboard, type PhaseFilter } from '$api/leaderboard';
 	import { getScoringConfig, type ScoringConfig } from '$api/competition';
+	import { getBonusOverview, type BonusOverviewResponse } from '$api/bonus';
 	import { buildCells, pickActualScore, toGridPlayer, type GridPlayer } from '$lib/utils/matchDetail';
 	import { teamCode } from '$lib/utils/teamCodes';
 	import { displayTeamName } from '$lib/utils/teamName';
@@ -53,12 +54,13 @@
 
 	$: if (browser && !$isAuthenticated) goto('/login');
 
-	// ---- Section state (groups | knockout), shareable via ?tab= ------------
-	type Section = 'groups' | 'knockout';
+	// ---- Section state (groups | knockout | bonus), shareable via ?tab= -----
+	type Section = 'groups' | 'knockout' | 'bonus';
 	let section: Section = 'groups';
 	let sectionInitialised = false;
 	$: if (browser && !sectionInitialised && $page.url) {
-		section = $page.url.searchParams.get('tab') === 'knockout' ? 'knockout' : 'groups';
+		const tab = $page.url.searchParams.get('tab');
+		section = tab === 'knockout' || tab === 'bonus' ? tab : 'groups';
 		sectionInitialised = true;
 	}
 
@@ -66,11 +68,12 @@
 		section = s;
 		if (browser) {
 			const url = new URL(window.location.href);
-			if (s === 'knockout') url.searchParams.set('tab', s);
+			if (s !== 'groups') url.searchParams.set('tab', s);
 			else url.searchParams.delete('tab');
 			history.replaceState(history.state, '', url);
 		}
 		if (s === 'knockout') void loadBracket();
+		if (s === 'bonus') void loadBonus();
 	}
 
 	// ---- Data ---------------------------------------------------------------
@@ -128,15 +131,35 @@
 		void loadBracket();
 	}
 
+	// Bonus-question answer distribution.
+	let bonusData: BonusOverviewResponse | null = null;
+	let bonusError: string | null = null;
+	let bonusLoading = false;
+
+	async function loadBonus() {
+		if (!$isPhase1Locked || bonusData || bonusLoading) return;
+		bonusLoading = true;
+		bonusError = null;
+		try {
+			bonusData = await getBonusOverview();
+		} catch (e) {
+			bonusError = e instanceof Error ? e.message : 'Failed to load the overview.';
+		} finally {
+			bonusLoading = false;
+		}
+	}
+
 	onMount(() => {
 		if (!$isAuthenticated) return;
 		void loadGroups();
 		if (section === 'knockout') void loadBracket();
+		if (section === 'bonus') void loadBonus();
 	});
 	// Re-attempt once the phase status arrives (stores hydrate async); the
 	// in-flight/already-loaded guards inside the loaders make these cheap.
 	$: if (browser && $isPhase1Locked) void loadGroups();
 	$: if (browser && $isPhase1Locked && section === 'knockout') void loadBracket();
+	$: if (browser && $isPhase1Locked && section === 'bonus') void loadBonus();
 
 	// ---- Forecast table sorting --------------------------------------------
 	type SortKey = keyof Pick<
@@ -323,6 +346,15 @@
 	function segLabel(n: number, total: number): string {
 		return n > 0 && pct(n, total) >= 15 ? String(n) : '';
 	}
+	/** Bonus labels are "Nickname — long description"; split for display. */
+	function bonusNick(label: string): string {
+		return label.split('—')[0].trim();
+	}
+	function bonusDesc(label: string): string {
+		const i = label.indexOf('—');
+		return i >= 0 ? label.slice(i + 1).trim() : '';
+	}
+
 	function statusChip(row: OverviewFixtureRow): { label: string; cls: string } | null {
 		if (row.actual_home === null || row.actual_away === null) return null;
 		const live = row.status === 'live' || row.status === 'halftime';
@@ -377,6 +409,9 @@
 					</button>
 					<button class:on={section === 'knockout'} on:click={() => setSection('knockout')}>
 						Knockout
+					</button>
+					<button class:on={section === 'bonus'} on:click={() => setSection('bonus')}>
+						Bonus
 					</button>
 				</div>
 			</div>
@@ -507,6 +542,66 @@
 									</button>
 								{/each}
 							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		{:else if section === 'bonus'}
+			<!-- ──────────────────────── Bonus questions ──────────────────────── -->
+			{#if bonusLoading}
+				<p class="pn-ov-note">Loading the pool's bonus picks…</p>
+			{:else if bonusError}
+				<p class="pn-ov-note error">{bonusError}</p>
+			{:else if bonusData}
+				<div class="pn-ov-legend">
+					<span class="cap">
+						Every bonus question's answer split across <b>{bonusData.total_predictors}</b> players
+					</span>
+					<span class="key dim">tap a row to see who picked it · ✓ marks a resolved answer</span>
+				</div>
+				<div class="pn-ov-bonus">
+					{#each bonusData.questions as q (q.id)}
+						<div class="pn-ov-bq">
+							<div class="bqh">
+								<span class="bqtitle">{bonusNick(q.label)}</span>
+								<span class="bqpts">+{q.points}</span>
+							</div>
+							<div class="bqsub">{bonusDesc(q.label)}</div>
+							<div class="bqrows">
+								{#each q.answers as a (a.answer)}
+									<button
+										class="bqrow pn-ov-cnt"
+										class:hit={a.is_correct === true}
+										class:miss={a.is_correct === false}
+										on:click={(e) =>
+											openPop(
+												e,
+												a.answer,
+												`${bonusNick(q.label)} · ${a.count} of ${bonusData?.total_predictors}`,
+												{ count: a.count, users: a.users }
+											)}
+									>
+										<span class="bqname">
+											{#if q.input_type === 'team'}
+												<PnFlag code={teamCode(a.answer)} w={16} h={11} />
+											{/if}
+											<span class="nm">{a.answer}</span>
+											{#if a.is_correct === true}<i class="mk hit">✓</i>{:else if a.is_correct === false}<i class="mk miss">×</i>{/if}
+										</span>
+										<span class="bqbar">
+											<span style="width:{pct(a.count, bonusData.total_predictors)}%"></span>
+										</span>
+										<span class="bqct">{a.count}</span>
+									</button>
+								{:else}
+									<p class="pn-ov-note">No picks for this question.</p>
+								{/each}
+							</div>
+							{#if q.correct_answers.length > 0}
+								<div class="bqans">
+									Answer: <b>{q.correct_answers.join(' / ')}</b>
+								</div>
+							{/if}
 						</div>
 					{/each}
 				</div>
@@ -653,6 +748,7 @@
 								players={modalPlayers}
 								pointsExact={scoringConfig.exact_points}
 								pointsOutcome={scoringConfig.outcome_points}
+								rarityCap={scoringConfig.rarity_cap}
 							/>
 							<div class="mf">
 								<a class="mf-link" href="/results/{modalRow.fixture_id}">Full match page →</a>

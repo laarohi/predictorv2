@@ -61,10 +61,41 @@ export interface BonusAnswerView {
 	resolved_at: string | null;
 }
 
+/** One distinct answer to a bonus question and who picked it. */
+export interface BonusOverviewAnswerRow {
+	answer: string;
+	count: number;
+	users: string[];
+	/** Null until the admin records a correct answer for the question. */
+	is_correct: boolean | null;
+}
+
+/** A bonus question with the pool-wide answer distribution (post-lock). */
+export interface BonusOverviewQuestion {
+	id: string;
+	category: BonusCategory;
+	label: string;
+	input_type: BonusInputType;
+	points: number;
+	correct_answers: string[];
+	/** Most popular first, ties alphabetical. */
+	answers: BonusOverviewAnswerRow[];
+}
+
+export interface BonusOverviewResponse {
+	total_predictors: number;
+	questions: BonusOverviewQuestion[];
+}
+
 // User-side ----------------------------------------------------------------
 
 export async function getBonusQuestions(): Promise<BonusQuestion[]> {
 	return api.get<BonusQuestion[]>('/predictions/bonus/questions');
+}
+
+/** Everyone's bonus answers — 403 until Phase 1 locks (blind pool). */
+export async function getBonusOverview(): Promise<BonusOverviewResponse> {
+	return api.get<BonusOverviewResponse>('/predictions/overview/bonus');
 }
 
 export async function getMyBonusPredictions(): Promise<BonusPrediction[]> {

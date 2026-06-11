@@ -20,6 +20,9 @@ from app.models.prediction_history import PredictionAction, PredictionSource
 from app.models.user import User
 from app.schemas.fixture import FixtureScore
 from app.schemas.prediction import (
+    BonusOverviewAnswerRow,
+    BonusOverviewQuestion,
+    BonusOverviewResponse,
     BracketOverviewResponse,
     BracketOverviewTeamRow,
     BracketPrediction,
@@ -35,10 +38,11 @@ from app.schemas.prediction import (
     OverviewGroup,
     OverviewTeamRow,
 )
-from app.models.bonus import BonusPrediction
+from app.models.bonus import BonusAnswer, BonusPrediction
 from app.models.player import Player
 from app.services.bonus import (
     BonusQuestion,
+    answer_in,
     fetch_competition_teams,
     get_fifa_rankings,
     get_questions as get_bonus_questions,
@@ -969,6 +973,91 @@ async def get_bracket_overview(
 
     response = BracketOverviewResponse(
         phase=phase, total_predictors=len(predictor_names), teams=team_rows
+    )
+    _overview_cache_put(cache_key, response)
+    return response
+
+
+@router.get("/overview/bonus", response_model=BonusOverviewResponse)
+async def get_bonus_overview(
+    session: DbSession,
+    _user: CurrentUser,
+) -> BonusOverviewResponse:
+    """Distribution of everyone's bonus-question answers.
+
+    Per question: every distinct answer with its pick count and who is
+    behind it, plus the recorded correct answer(s) once the admin enters
+    them (so the overview can mark winners as the tournament resolves).
+
+    Blind pool: 403 until the Phase 1 deadline — bonus picks lock with
+    Phase 1, so afterwards the whole distribution is visible at once.
+    The cache TTL means a freshly-recorded correct answer can take up to
+    5 minutes to surface, same as the other overview aggregates.
+    """
+    if not await is_phase1_locked(session):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The overview unlocks when Phase 1 predictions lock",
+        )
+
+    comp_result = await session.execute(
+        select(Competition.id).where(Competition.is_active == True)  # noqa: E712
+    )
+    competition_id = comp_result.scalar_one_or_none()
+
+    cache_key = f"overview:bonus:{competition_id}"
+    cached = _overview_cache_get(cache_key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+
+    rows_result = await session.execute(
+        select(BonusPrediction.question_id, BonusPrediction.answer, User.name)
+        .join(User, BonusPrediction.user_id == User.id)
+    )
+    users_by_answer: dict[str, dict[str, list[str]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
+    predictor_names: set[str] = set()
+    for question_id, answer, user_name in rows_result.all():
+        if not answer:
+            continue
+        users_by_answer[question_id][answer].append(user_name)
+        predictor_names.add(user_name)
+
+    ans_result = await session.execute(select(BonusAnswer))
+    correct_by_qid: dict[str, list[str]] = defaultdict(list)
+    for a in ans_result.scalars().all():
+        correct_by_qid[a.question_id].append(a.correct_answer)
+
+    # Question metadata only (labels, category points) — the dropdown
+    # eligibility lists aren't needed here, so no team/rankings lookups.
+    questions: list[BonusOverviewQuestion] = []
+    for q in get_bonus_questions():
+        corrects = correct_by_qid.get(q.id, [])
+        answer_rows = [
+            BonusOverviewAnswerRow(
+                answer=answer,
+                count=len(names),
+                users=sorted(names, key=str.casefold),
+                is_correct=answer_in(answer, corrects) if corrects else None,
+            )
+            for answer, names in users_by_answer.get(q.id, {}).items()
+        ]
+        answer_rows.sort(key=lambda r: (-r.count, r.answer.casefold()))
+        questions.append(
+            BonusOverviewQuestion(
+                id=q.id,
+                category=q.category,
+                label=q.label,
+                input_type=q.input_type,
+                points=q.points,
+                correct_answers=corrects,
+                answers=answer_rows,
+            )
+        )
+
+    response = BonusOverviewResponse(
+        total_predictors=len(predictor_names), questions=questions
     )
     _overview_cache_put(cache_key, response)
     return response

@@ -461,11 +461,25 @@ export interface BracketSummary {
 	phase2_stages: Record<string, string[]>;
 }
 
+export interface UserBonusPredictionView {
+	question_id: string;
+	label: string;
+	category: 'group_stage' | 'top_flop' | 'awards';
+	points: number;
+	answer: string;
+	/** Recorded correct answer(s) — multiple on ties; empty until entered. */
+	correct_answers: string[];
+	/** Null while no correct answer is recorded; true/false afterwards. */
+	is_correct: boolean | null;
+}
+
 export interface UserPredictionsResponse {
 	user_id: string;
 	user_name: string;
 	match_predictions: UserMatchPredictionView[];
 	bracket_summary: BracketSummary;
+	/** Bonus-question picks — empty before Phase 1 locks (blind pool). */
+	bonus_predictions: UserBonusPredictionView[];
 }
 
 // API Response types

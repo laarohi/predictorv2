@@ -607,6 +607,116 @@
 .pn-ov-modal .pn-md-bar .rar-chip .lab { display: none; }
 .pn-ov-modal .pn-md-bar .seg-lbl span { display: none; }
 
+/* ----------------------------- Bonus questions ---------------------------- */
+.pn .pn-ov-bonus {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+	gap: 16px;
+	padding-bottom: 8px;
+}
+.pn .pn-ov-bq {
+	background: var(--paper);
+	border: 2px solid var(--ink);
+	box-shadow: 5px 5px 0 var(--ink);
+	padding: 14px 14px 12px;
+	min-width: 0;
+}
+.pn .pn-ov-bq .bqh {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+	border-bottom: 2px solid var(--ink);
+	padding-bottom: 7px;
+}
+.pn .pn-ov-bq .bqtitle {
+	font-family: var(--display);
+	font-size: 15px;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+.pn .pn-ov-bq .bqpts {
+	font-family: var(--mono);
+	font-size: 11px;
+	font-weight: 700;
+	color: var(--gold);
+	white-space: nowrap;
+}
+.pn .pn-ov-bq .bqsub {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	margin: 7px 0 9px;
+}
+.pn .pn-ov-bq .bqrows {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.pn .pn-ov-bq .bqrow {
+	display: grid;
+	grid-template-columns: minmax(0, 1.4fr) 1fr 26px;
+	align-items: center;
+	gap: 8px;
+	text-align: left;
+	padding: 4px 5px;
+	margin: 0;
+}
+.pn .pn-ov-bq .bqname {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	font-family: var(--body);
+	font-size: 12.5px;
+	font-weight: 600;
+}
+.pn .pn-ov-bq .bqname .nm {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.pn .pn-ov-bq .bqname .mk {
+	font-style: normal;
+	font-family: var(--mono);
+	font-weight: 700;
+}
+.pn .pn-ov-bq .bqname .mk.hit { color: var(--green); }
+.pn .pn-ov-bq .bqname .mk.miss { color: var(--red); }
+.pn .pn-ov-bq .bqrow.hit { background: rgba(27, 108, 62, 0.1); }
+.pn .pn-ov-bq .bqrow.miss { opacity: 0.55; }
+.pn .pn-ov-bq .bqbar {
+	height: 8px;
+	background: var(--paper-2);
+	border: 1px solid var(--ink);
+	overflow: hidden;
+}
+.pn .pn-ov-bq .bqbar span {
+	display: block;
+	height: 100%;
+	background: var(--red);
+}
+.pn .pn-ov-bq .bqrow.hit .bqbar span { background: var(--green); }
+.pn .pn-ov-bq .bqct {
+	font-family: var(--mono);
+	font-size: 11.5px;
+	font-weight: 700;
+	text-align: right;
+}
+.pn .pn-ov-bq .bqans {
+	margin-top: 9px;
+	padding-top: 7px;
+	border-top: 1.5px dashed var(--paper-3);
+	font-family: var(--mono);
+	font-size: 10.5px;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: var(--ink-2);
+}
+.pn .pn-ov-bq .bqans b { color: var(--green); }
+
 /* -------------------------------- Mobile --------------------------------- */
 @media (max-width: 699px) {
 	.pn .pn-ov-hero {
@@ -619,6 +729,7 @@
 	.pn .pn-ovswitch a,
 	.pn .pn-ovswitch button { padding: 9px 12px; font-size: 12px; }
 	.pn .pn-ov-groups { grid-template-columns: 1fr; gap: 14px; }
+	.pn .pn-ov-bonus { grid-template-columns: 1fr; gap: 14px; }
 	.pn .pn-ov-table thead th button { padding: 9px 7px; }
 	.pn .pn-ov-table tbody td { padding: 6px 7px; }
 	/* Pin the team column while the round columns scroll sideways. The rank

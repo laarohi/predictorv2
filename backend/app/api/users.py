@@ -10,7 +10,8 @@ from sqlmodel import select
 
 from app.dependencies import CurrentUser, DbSession, OptionalUser
 from app.models.fixture import Fixture, MatchStatus
-from app.models.bonus import BonusPrediction
+from app.models.bonus import BonusAnswer, BonusPrediction
+from app.services.bonus import answer_in, get_questions as get_bonus_questions
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.score import Score
 from app.models.user import User
@@ -69,6 +70,20 @@ class BracketSummary(BaseModel):
     phase2_stages: dict[str, list[str]] = {}  # Phase 2 bracket
 
 
+class UserBonusPredictionView(BaseModel):
+    """A user's answer to one bonus question, with resolution context."""
+
+    question_id: str
+    label: str
+    category: str  # 'group_stage' | 'top_flop' | 'awards'
+    points: int
+    answer: str
+    # Recorded correct answer(s) — multiple on ties; empty until entered.
+    correct_answers: list[str] = []
+    # None while no correct answer is recorded; True/False afterwards.
+    is_correct: bool | None = None
+
+
 class UserPredictionsResponse(BaseModel):
     """All visible predictions for a user."""
 
@@ -76,6 +91,7 @@ class UserPredictionsResponse(BaseModel):
     user_name: str
     match_predictions: list[UserMatchPredictionView]
     bracket_summary: BracketSummary
+    bonus_predictions: list[UserBonusPredictionView] = []
 
 
 # Endpoints
@@ -329,6 +345,41 @@ async def get_user_predictions(
             phase2_stages.setdefault(tp.stage, []).append(tp.team)
         stages.setdefault(tp.stage, []).append(tp.team)
 
+    # Bonus picks: same blind-pool rule as the Phase 1 bracket — they lock
+    # with the Phase 1 deadline, so only the owner sees them before that.
+    bonus_predictions: list[UserBonusPredictionView] = []
+    if is_owner or phase1_locked:
+        bonus_rows = (
+            await session.execute(
+                select(BonusPrediction).where(BonusPrediction.user_id == user_id)
+            )
+        ).scalars().all()
+        if bonus_rows:
+            # YAML order keeps the list stable across users and renders.
+            questions_by_id = {q.id: q for q in get_bonus_questions()}
+            ans_rows = (await session.execute(select(BonusAnswer))).scalars().all()
+            correct_by_qid: dict[str, list[str]] = {}
+            for a in ans_rows:
+                correct_by_qid.setdefault(a.question_id, []).append(a.correct_answer)
+
+            by_qid = {bp.question_id: bp for bp in bonus_rows}
+            for qid, question in questions_by_id.items():
+                bp = by_qid.get(qid)
+                if bp is None or not bp.answer:
+                    continue
+                corrects = correct_by_qid.get(qid, [])
+                bonus_predictions.append(
+                    UserBonusPredictionView(
+                        question_id=qid,
+                        label=question.label,
+                        category=question.category,
+                        points=question.points,
+                        answer=bp.answer,
+                        correct_answers=corrects,
+                        is_correct=answer_in(bp.answer, corrects) if corrects else None,
+                    )
+                )
+
     return UserPredictionsResponse(
         user_id=user.id,
         user_name=user.name,
@@ -338,4 +389,5 @@ async def get_user_predictions(
             phase1_stages=phase1_stages,
             phase2_stages=phase2_stages,
         ),
+        bonus_predictions=bonus_predictions,
     )

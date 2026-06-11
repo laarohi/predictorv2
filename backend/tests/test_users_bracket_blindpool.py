@@ -31,7 +31,11 @@ def _session(user, team_preds) -> AsyncMock:
     match_result.all.return_value = []
     team_result = MagicMock()
     team_result.scalars.return_value.all.return_value = team_preds
-    session.execute.side_effect = [user_result, match_result, team_result]
+    # Empty bonus-prediction result — the endpoint queries it whenever the
+    # viewer is the owner or Phase 1 has locked (see bonus_predictions).
+    bonus_result = MagicMock()
+    bonus_result.scalars.return_value.all.return_value = []
+    session.execute.side_effect = [user_result, match_result, team_result, bonus_result]
     return session
 
 
@@ -105,7 +109,11 @@ def _session_with_match(user, match_rows, team_preds) -> AsyncMock:
     match_result.all.return_value = match_rows
     team_result = MagicMock()
     team_result.scalars.return_value.all.return_value = team_preds
-    session.execute.side_effect = [user_result, match_result, team_result]
+    # Empty bonus-prediction result — the endpoint queries it whenever the
+    # viewer is the owner or Phase 1 has locked (see bonus_predictions).
+    bonus_result = MagicMock()
+    bonus_result.scalars.return_value.all.return_value = []
+    session.execute.side_effect = [user_result, match_result, team_result, bonus_result]
     return session
 
 

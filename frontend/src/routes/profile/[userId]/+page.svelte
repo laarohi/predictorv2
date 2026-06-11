@@ -360,8 +360,47 @@
 				</section>
 			{/if}
 
+			<!-- Bonus picks — question → answer, coloured by resolution -->
+			{#if predictions && predictions.bonus_predictions.length > 0}
+				<section class="pn-pf-section">
+					<div class="h">
+						<span>Bonus picks</span>
+						<span class="right">{predictions.bonus_predictions.length} questions · border: in green · out red</span>
+					</div>
+					<div class="body">
+						<div class="pn-pf-bracket">
+							{#each predictions.bonus_predictions as bp (bp.question_id)}
+								{@const fate = bp.is_correct === null ? 'tbd' : bp.is_correct ? 'in' : 'out'}
+								{@const isTeam = bp.category !== 'awards'}
+								<div class="strow">
+									<!-- Question labels are "Nickname — long description";
+									     the narrow column takes the nickname, the title
+									     attribute carries the full wording. -->
+									<div class="lbl" title={bp.label}>{bp.label.split('—')[0].trim()}<span class="n">+{bp.points}</span></div>
+									<div class="tags">
+										<span class="pn-tag pick-tag fate-{fate}">
+											{#if isTeam}<PnFlag code={teamCode(bp.answer)} w={12} h={9} />{/if}
+											{bp.answer}
+										</span>
+										{#if bp.is_correct === false && bp.correct_answers.length > 0}
+											<span class="pn-tag pick-tag fate-tbd">
+												→
+												{#each bp.correct_answers as correct, i (correct)}
+													{#if isTeam}<PnFlag code={teamCode(correct)} w={12} h={9} />{/if}
+													{correct}{i < bp.correct_answers.length - 1 ? ' / ' : ''}
+												{/each}
+											</span>
+										{/if}
+									</div>
+								</div>
+							{/each}
+						</div>
+					</div>
+				</section>
+			{/if}
+
 			<!-- Blind-pool empty state: nothing visible yet for this viewer -->
-			{#if predictions && predictions.match_predictions.length === 0 && bracketPhases.length === 0}
+			{#if predictions && predictions.match_predictions.length === 0 && bracketPhases.length === 0 && predictions.bonus_predictions.length === 0}
 				<section class="pn-pf-section">
 					<div class="h"><span>Predictions</span><span class="right">Blind pool</span></div>
 					<div class="body">

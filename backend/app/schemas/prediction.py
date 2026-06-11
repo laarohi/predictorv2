@@ -209,3 +209,33 @@ class BracketOverviewResponse(BaseModel):
     phase: int
     total_predictors: int
     teams: list[BracketOverviewTeamRow]
+
+
+class BonusOverviewAnswerRow(BaseModel):
+    """One distinct answer to a bonus question and who picked it."""
+
+    answer: str
+    count: int
+    users: list[str]
+    # None while the admin hasn't recorded a correct answer for the
+    # question; True/False once one exists.
+    is_correct: bool | None = None
+
+
+class BonusOverviewQuestion(BaseModel):
+    """A bonus question with the pool-wide answer distribution."""
+
+    id: str
+    category: str  # 'group_stage' | 'top_flop' | 'awards'
+    label: str
+    input_type: str  # 'team' | 'player'
+    points: int
+    # Recorded correct answer(s) — multiple on ties; empty until entered.
+    correct_answers: list[str]
+    # Distinct answers, most popular first (ties alphabetical).
+    answers: list[BonusOverviewAnswerRow]
+
+
+class BonusOverviewResponse(BaseModel):
+    total_predictors: int
+    questions: list[BonusOverviewQuestion]

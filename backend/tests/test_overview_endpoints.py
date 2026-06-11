@@ -16,18 +16,21 @@ import pytest_asyncio
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlmodel import SQLModel
+from sqlmodel import SQLModel, select
 
 from app.api.predictions import (
     _overview_cache,
+    get_bonus_overview,
     get_bracket_overview,
     get_groups_overview,
 )
+from app.models.bonus import BonusAnswer, BonusPrediction
 from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.score import Score
 from app.models.user import User
+from app.services.bonus import BonusQuestion
 
 KICKOFF = datetime(2026, 6, 11, 19, 0, tzinfo=timezone.utc)
 
@@ -270,3 +273,85 @@ async def test_bracket_overview_phase2_counts(session, seeded):
     assert teams["Mexico"].winner.count == 0
     # Only Bob has Phase 2 rows.
     assert resp.total_predictors == 1
+
+
+# ---- /overview/bonus ---------------------------------------------------------
+
+
+def _bonus_questions():
+    """Controlled question list — the endpoint's metadata source is patched
+    so tests don't depend on the worldcup2026.yml contents."""
+    return [
+        BonusQuestion(
+            id="dark_horse", category="top_flop", label="The dark horse",
+            input_type="team", points=25,
+        ),
+        BonusQuestion(
+            id="golden_boot", category="awards", label="Golden Boot",
+            input_type="player", points=15,
+        ),
+    ]
+
+
+@pytest_asyncio.fixture
+async def seeded_bonus(session, seeded):
+    alice, bob = seeded["alice"], seeded["bob"]
+    session.add_all(
+        [
+            BonusPrediction(user_id=alice.id, question_id="dark_horse", answer="Morocco"),
+            BonusPrediction(user_id=bob.id, question_id="dark_horse", answer="Japan"),
+            BonusPrediction(user_id=alice.id, question_id="golden_boot", answer="Kylian Mbappé"),
+            BonusPrediction(user_id=bob.id, question_id="golden_boot", answer="Kylian Mbappé"),
+        ]
+    )
+    await session.commit()
+    return seeded
+
+
+@pytest.mark.asyncio
+async def test_bonus_overview_403_before_phase1_deadline(session, seeded_bonus):
+    with patch("app.api.predictions.is_phase1_locked", new=AsyncMock(return_value=False)):
+        with pytest.raises(HTTPException) as exc:
+            await get_bonus_overview(session, _viewer())
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_bonus_overview_distribution_and_correct_marking(session, seeded_bonus):
+    alice = seeded_bonus["alice"]
+    comp_id = (
+        await session.execute(select(Competition.id))
+    ).scalar_one()
+    # Admin has recorded dark_horse = Morocco; golden_boot still open.
+    session.add(
+        BonusAnswer(
+            competition_id=comp_id, question_id="dark_horse", correct_answer="Morocco"
+        )
+    )
+    await session.commit()
+
+    with (
+        patch("app.api.predictions.is_phase1_locked", new=AsyncMock(return_value=True)),
+        patch("app.api.predictions.get_bonus_questions", new=_bonus_questions),
+    ):
+        resp = await get_bonus_overview(session, _viewer())
+
+    assert resp.total_predictors == 2
+    assert [q.id for q in resp.questions] == ["dark_horse", "golden_boot"]
+
+    dark_horse = resp.questions[0]
+    assert dark_horse.points == 25
+    assert dark_horse.correct_answers == ["Morocco"]
+    # Equal counts → alphabetical; resolution marks each answer.
+    assert [(r.answer, r.count, r.is_correct) for r in dark_horse.answers] == [
+        ("Japan", 1, False),
+        ("Morocco", 1, True),
+    ]
+    assert dark_horse.answers[1].users == ["Alice"]
+
+    golden_boot = resp.questions[1]
+    assert golden_boot.correct_answers == []
+    assert [(r.answer, r.count, r.is_correct) for r in golden_boot.answers] == [
+        ("Kylian Mbappé", 2, None),
+    ]
+    assert golden_boot.answers[0].users == ["Alice", "Bob"]
