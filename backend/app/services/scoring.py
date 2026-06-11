@@ -419,6 +419,7 @@ async def calculate_group_position_bonus(
     *,
     actual_standings: dict | None = None,
     qualifying_thirds: list | None = None,
+    group_completion: tuple[set[str], set[str]] | None = None,
 ) -> int:
     """Phase 1 bonus: reward correctly predicting a team's group position.
 
@@ -434,12 +435,19 @@ async def calculate_group_position_bonus(
       - Position 3 → bonus only if the team is one of the 8 best thirds
       - Position 4 → never (team eliminated)
 
+    A group's positions only count once that group is COMPLETE (all of its
+    fixtures finished) — partial standings after one match would pay the
+    bonus immediately and revoke it as later results reshuffle the table.
+    Third-place bonuses additionally wait for ALL groups to complete,
+    because the best-8-thirds ranking is a cross-group comparison.
+
     Phase 2 has no group match predictions, so this bonus is Phase 1 only.
     """
     # Imported inside the function to avoid pulling standings (which imports
     # MatchPrediction) into the import chain that scoring.py participates in.
     from app.services.standings import (
         get_actual_group_standings,
+        get_group_completion,
         get_predicted_group_standings,
         get_qualifying_third_place_teams,
     )
@@ -449,9 +457,18 @@ async def calculate_group_position_bonus(
     if bonus_value <= 0:
         return 0
 
-    # The user's predicted standings vary per user; the actual standings and
-    # qualifying-thirds are global, so the leaderboard build passes them in
-    # precomputed (computed once instead of per user).
+    # The user's predicted standings vary per user; the actual standings,
+    # qualifying-thirds and group completion are global, so the leaderboard
+    # build passes them in precomputed (computed once instead of per user).
+    completed_groups, all_groups = (
+        group_completion
+        if group_completion is not None
+        else await get_group_completion(session)
+    )
+    if not completed_groups:
+        return 0
+    all_groups_complete = completed_groups == all_groups
+
     predicted, _ = await get_predicted_group_standings(session, user_id)
     actual = (
         actual_standings
@@ -470,6 +487,8 @@ async def calculate_group_position_bonus(
 
     total = 0
     for group, predicted_teams in predicted.items():
+        if group not in completed_groups:
+            continue
         actual_teams = actual.get(group, [])
         if not actual_teams:
             continue
@@ -486,9 +505,12 @@ async def calculate_group_position_bonus(
             if predicted_position == 4:
                 continue
             # Position 1/2 always qualifies → bonus.
-            # Position 3 only if best-8-thirds.
+            # Position 3 only if best-8-thirds — undecidable (and unstable)
+            # until every group is complete, so it waits for all of them.
             if predicted_position in (1, 2) or (
-                predicted_position == 3 and team_name in qualifying_third_names
+                predicted_position == 3
+                and all_groups_complete
+                and team_name in qualifying_third_names
             ):
                 total += bonus_value
 
@@ -624,6 +646,7 @@ async def calculate_user_points(
     actual_advancement_cache: dict[str, str] | None = None,
     actual_standings_cache: dict | None = None,
     qualifying_thirds_cache: list | None = None,
+    group_completion_cache: tuple[set[str], set[str]] | None = None,
 ) -> PointBreakdown:
     """Calculate total points for a user.
 
@@ -740,6 +763,7 @@ async def calculate_user_points(
         user_id,
         actual_standings=actual_standings_cache,
         qualifying_thirds=qualifying_thirds_cache,
+        group_completion=group_completion_cache,
     )
 
     # Bonus-question points (cross-phase). Imported here to avoid a circular

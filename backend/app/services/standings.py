@@ -463,6 +463,33 @@ async def get_actual_group_standings_with_warnings(
     return out_standings, out_warnings
 
 
+async def get_group_completion(
+    session: AsyncSession,
+) -> tuple[set[str], set[str]]:
+    """Return (completed_groups, all_groups) by group letter.
+
+    A group is complete when every one of its fixtures is FINISHED —
+    only then are its final positions decided. Used to gate the
+    group-position scoring bonus: paying on partial standings would
+    award points after a single match (the opening-day bug) and then
+    revoke them as later results reshuffle the table.
+    """
+    rows = (
+        await session.execute(
+            select(Fixture.group, Fixture.status).where(Fixture.stage == "group")
+        )
+    ).all()
+    all_groups: set[str] = set()
+    incomplete: set[str] = set()
+    for group, match_status in rows:
+        if not group:
+            continue
+        all_groups.add(group)
+        if match_status != MatchStatus.FINISHED:
+            incomplete.add(group)
+    return all_groups - incomplete, all_groups
+
+
 async def get_group_positions(session: AsyncSession) -> dict[str, str]:
     """Get team positions in each group (e.g., '1A' -> 'France')."""
     standings = await get_actual_group_standings(session)

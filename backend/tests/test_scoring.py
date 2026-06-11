@@ -678,7 +678,9 @@ class TestGroupPositionBonus:
             # Brazil (1st), France (2nd) match → 2 * 5 = 10
             # Mexico (3rd) matches AND is a qualifying third → +5
             # Iran (4th) doesn't qualify → no bonus
-            points = await calculate_group_position_bonus(session, user_id)
+            points = await calculate_group_position_bonus(
+                session, user_id, group_completion=({"A"}, {"A"})
+            )
             assert points == 15
 
     @pytest.mark.asyncio
@@ -696,7 +698,9 @@ class TestGroupPositionBonus:
             # Brazil predicted 1st but actually 2nd → no bonus
             # France predicted 2nd but actually 1st → no bonus
             # Mexico (3rd) matches AND qualifies → +5
-            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            points = await calculate_group_position_bonus(
+                MagicMock(), user_id, group_completion=({"A"}, {"A"})
+            )
             assert points == 5
 
     @pytest.mark.asyncio
@@ -712,7 +716,9 @@ class TestGroupPositionBonus:
             patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[{"team": "Mexico"}])),
         ):
             # 1st + 2nd + 3rd-qualifying = 3 * 5 = 15
-            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            points = await calculate_group_position_bonus(
+                MagicMock(), user_id, group_completion=({"A"}, {"A"})
+            )
             assert points == 15
 
     @pytest.mark.asyncio
@@ -728,7 +734,9 @@ class TestGroupPositionBonus:
             patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[])),  # nobody qualifies as third
         ):
             # 1st (5) + 2nd (5) + 3rd-not-qualifying (0) + 4th (0) = 10
-            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            points = await calculate_group_position_bonus(
+                MagicMock(), user_id, group_completion=({"A"}, {"A"})
+            )
             assert points == 10
 
     @pytest.mark.asyncio
@@ -744,7 +752,9 @@ class TestGroupPositionBonus:
             patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[{"team": "A3"}])),
         ):
             # All four positions match. 1+2+3-qualifying = 15. A4 = 0.
-            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            points = await calculate_group_position_bonus(
+                MagicMock(), user_id, group_completion=({"A"}, {"A"})
+            )
             assert points == 15
 
     @pytest.mark.asyncio
@@ -756,7 +766,9 @@ class TestGroupPositionBonus:
             patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value={})),
             patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[])),
         ):
-            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            points = await calculate_group_position_bonus(
+                MagicMock(), user_id, group_completion=({"A"}, {"A"})
+            )
             assert points == 0
 
     @pytest.mark.asyncio
@@ -776,5 +788,96 @@ class TestGroupPositionBonus:
             patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value=actual)),
             patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[])),
         ):
-            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            points = await calculate_group_position_bonus(
+                MagicMock(), user_id, group_completion=({"A"}, {"A"})
+            )
             assert points == 7
+
+    # ---- completion gating (regression: opening day paid bracket points
+    # ---- after ONE finished match, because partial "actual standings"
+    # ---- already had a 1st and 2nd place) --------------------------------
+
+    @pytest.mark.asyncio
+    async def test_incomplete_group_pays_nothing(self):
+        """One finished match puts the winner '1st' in partial standings —
+        no bonus may be paid until the whole group is complete."""
+        user_id = uuid.uuid4()
+        # Partial actual standings: only the two teams that played so far.
+        actual = {"A": self._standings(["Brazil", "France"])}
+        predicted = {"A": self._standings(["Brazil", "France", "Mexico", "Iran"])}
+
+        with (
+            patch("app.services.standings.get_predicted_group_standings", new=AsyncMock(return_value=(predicted, []))),
+            patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value=actual)),
+            patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[])),
+        ):
+            points = await calculate_group_position_bonus(
+                MagicMock(), user_id, group_completion=(set(), {"A"})
+            )
+            assert points == 0
+
+    @pytest.mark.asyncio
+    async def test_only_completed_groups_pay(self):
+        """Group A complete, Group B mid-flight: only A's positions pay,
+        and A's correctly-predicted third does NOT pay yet (best-8-thirds
+        is a cross-group ranking — undecidable until ALL groups finish)."""
+        user_id = uuid.uuid4()
+        actual = {
+            "A": self._standings(["Brazil", "France", "Mexico", "Iran"]),
+            "B": self._standings(["Spain", "Norway"], group="B"),
+        }
+        predicted = {
+            "A": self._standings(["Brazil", "France", "Mexico", "Iran"]),
+            "B": self._standings(["Spain", "Norway", "Ghana", "Chile"], group="B"),
+        }
+
+        with (
+            patch("app.services.standings.get_predicted_group_standings", new=AsyncMock(return_value=(predicted, []))),
+            patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value=actual)),
+            # Mexico would qualify on current (incomplete) data — must be ignored.
+            patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[{"team": "Mexico"}])),
+        ):
+            points = await calculate_group_position_bonus(
+                MagicMock(), user_id, group_completion=({"A"}, {"A", "B"})
+            )
+            # A: 1st (5) + 2nd (5); A's 3rd waits for all groups; B: nothing.
+            assert points == 10
+
+    @pytest.mark.asyncio
+    async def test_third_place_pays_once_all_groups_complete(self):
+        """Same prediction as test_only_completed_groups_pay's group A, but
+        with every group complete — now the third-place bonus joins in."""
+        user_id = uuid.uuid4()
+        actual = {"A": self._standings(["Brazil", "France", "Mexico", "Iran"])}
+        predicted = {"A": self._standings(["Brazil", "France", "Mexico", "Iran"])}
+
+        with (
+            patch("app.services.standings.get_predicted_group_standings", new=AsyncMock(return_value=(predicted, []))),
+            patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value=actual)),
+            patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[{"team": "Mexico"}])),
+        ):
+            points = await calculate_group_position_bonus(
+                MagicMock(), user_id, group_completion=({"A"}, {"A"})
+            )
+            assert points == 15
+
+    @pytest.mark.asyncio
+    async def test_completion_queried_when_not_cached(self):
+        """Without the cache kwarg, the function resolves completion itself
+        via standings.get_group_completion."""
+        user_id = uuid.uuid4()
+        actual = {"A": self._standings(["Brazil", "France"])}
+        predicted = {"A": self._standings(["Brazil", "France", "Mexico", "Iran"])}
+
+        with (
+            patch("app.services.standings.get_predicted_group_standings", new=AsyncMock(return_value=(predicted, []))),
+            patch("app.services.standings.get_actual_group_standings", new=AsyncMock(return_value=actual)),
+            patch("app.services.standings.get_qualifying_third_place_teams", new=AsyncMock(return_value=[])),
+            patch(
+                "app.services.standings.get_group_completion",
+                new=AsyncMock(return_value=(set(), {"A"})),
+            ) as mock_completion,
+        ):
+            points = await calculate_group_position_bonus(MagicMock(), user_id)
+            assert points == 0
+            mock_completion.assert_awaited_once()

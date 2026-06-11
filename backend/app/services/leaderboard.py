@@ -172,6 +172,7 @@ async def calculate_leaderboard(
         from app.services.scoring import get_actual_advancement, get_all_outcome_counts
         from app.services.standings import (
             get_actual_group_standings,
+            get_group_completion,
             get_qualifying_third_place_teams,
         )
 
@@ -179,6 +180,7 @@ async def calculate_leaderboard(
         actual_advancement = await get_actual_advancement(session)
         actual_standings = await get_actual_group_standings(session)
         qualifying_thirds = await get_qualifying_third_place_teams(session)
+        group_completion = await get_group_completion(session)
 
         entries: list[LeaderboardEntry] = []
 
@@ -190,6 +192,7 @@ async def calculate_leaderboard(
                 actual_advancement_cache=actual_advancement,
                 actual_standings_cache=actual_standings,
                 qualifying_thirds_cache=qualifying_thirds,
+                group_completion_cache=group_completion,
             )
             correct_outcomes, exact_scores = await get_user_match_stats(session, user.id)
 
