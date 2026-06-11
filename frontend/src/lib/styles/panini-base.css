@@ -669,15 +669,17 @@
 	overflow-y: auto;
 }
 
+/* Positioning lives on the page shell's .mobile-only wrapper (sticky
+ * bottom). Never position this fixed — iOS standalone (home-screen) mode
+ * strands fixed layers mid-screen after keyboard dismissal / app resume. */
 .pn-mob-tab {
-	position: sticky;
-	bottom: 0;
-	left: 0;
-	right: 0;
 	background: var(--ink);
 	border-top: 3px solid var(--red);
 	display: flex;
-	z-index: 4;
+	/* Bleed ink past the bottom edge: iOS rounds the sticky box to device
+	 * pixels against a fractional viewport height, which can leave a 1–2px
+	 * cream hairline under the nav. The shadow adds no layout/scroll size. */
+	box-shadow: 0 4px 0 var(--ink);
 }
 .pn-mob-tab a {
 	flex: 1;

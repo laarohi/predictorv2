@@ -26,7 +26,7 @@
 		currentPath === href || (href !== '/' && currentPath.startsWith(href));
 </script>
 
-<nav class="pn-mob-tab" style="position: fixed; bottom: 0; left: 0; right: 0;">
+<nav class="pn-mob-tab">
 	{#each items as item (item.key)}
 		{@const active = isActive(item.href)}
 		<a href={item.href} class:on={active}>

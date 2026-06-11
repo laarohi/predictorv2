@@ -74,10 +74,20 @@
 	}
 	.mobile-only {
 		display: block;
+		/* Sticky (not fixed) bottom nav: iOS standalone (home-screen) mode
+		 * leaves position:fixed layers composited at stale offsets after
+		 * keyboard dismissal / app resume — the nav would freeze mid-screen.
+		 * Sticky is anchored to the scroller, which stays correct. This
+		 * wrapper is the shell's last flex child, so bottom: 0 has the whole
+		 * document as travel room (the nav itself can't stick — its containing
+		 * block would be this wrapper, which is exactly its own height). */
+		position: sticky;
+		bottom: 0;
+		z-index: 40;
 	}
 	:global(.pn-shell main.pn-body) {
 		flex: 1;
-		padding-bottom: 80px; /* room for fixed mobile bottom nav */
+		padding-bottom: 16px; /* nav is in-flow now; just breathing room */
 	}
 	@media (min-width: 700px) {
 		.desktop-only {
