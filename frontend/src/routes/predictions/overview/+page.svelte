@@ -34,7 +34,7 @@
 	import { getLeaderboard, type PhaseFilter } from '$api/leaderboard';
 	import { getScoringConfig, type ScoringConfig } from '$api/competition';
 	import { getBonusOverview, type BonusOverviewResponse } from '$api/bonus';
-	import { buildCells, pickActualScore, toGridPlayer, type GridPlayer } from '$lib/utils/matchDetail';
+	import { buildCells, gridAxes, pickActualScore, toGridPlayer, type GridPlayer } from '$lib/utils/matchDetail';
 	import { teamCode } from '$lib/utils/teamCodes';
 	import { displayTeamName } from '$lib/utils/teamName';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
@@ -331,7 +331,8 @@
 			);
 		});
 	})();
-	$: modalCells = buildCells(modalPlayers);
+	$: modalGridMax = gridAxes(modalPlayers, modalActual);
+	$: modalCells = buildCells(modalPlayers, modalGridMax.homeMax, modalGridMax.awayMax);
 	$: modalYou = modalPlayers.find((p) => p.you) ?? null;
 	$: modalActual = pickActualScore(modalCommunity?.actual ?? null);
 	$: modalMode = (modalActual ? 'post' : 'pre') as 'pre' | 'post';

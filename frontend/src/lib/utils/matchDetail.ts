@@ -78,12 +78,38 @@ export function toGridPlayer(
 	};
 }
 
-/** Group all picks by (home, away) cell — clamped to [0, gridMax] inclusive. */
-export function buildCells(players: GridPlayer[], gridMax: number = 4): Record<string, BubbleCell> {
+/** Per-axis goal maxima for the heatmap grid: 4 each as the floor, expanded
+ *  to cover every pick and the actual score so no scoreline ever clamps
+ *  onto an edge cell it doesn't belong to. */
+export function gridAxes(
+	players: GridPlayer[],
+	actual: { home_score: number; away_score: number } | null = null
+): { homeMax: number; awayMax: number } {
+	let homeMax = 4;
+	let awayMax = 4;
+	for (const p of players) {
+		homeMax = Math.max(homeMax, p.home);
+		awayMax = Math.max(awayMax, p.away);
+	}
+	if (actual) {
+		homeMax = Math.max(homeMax, actual.home_score);
+		awayMax = Math.max(awayMax, actual.away_score);
+	}
+	return { homeMax, awayMax };
+}
+
+/** Group all picks by (home, away) cell — clamped to [0, max] per axis.
+ *  Pass `gridAxes(...)` maxima so the clamp never actually bites; the
+ *  defaults only matter for callers that want the fixed 4×4 grid. */
+export function buildCells(
+	players: GridPlayer[],
+	homeMax: number = 4,
+	awayMax: number = homeMax
+): Record<string, BubbleCell> {
 	const cells: Record<string, BubbleCell> = {};
 	for (const p of players) {
-		const h = Math.min(gridMax, Math.max(0, p.home));
-		const a = Math.min(gridMax, Math.max(0, p.away));
+		const h = Math.min(homeMax, Math.max(0, p.home));
+		const a = Math.min(awayMax, Math.max(0, p.away));
 		const k = `${h},${a}`;
 		if (!cells[k]) cells[k] = { h, a, players: [] };
 		cells[k].players.push(p);

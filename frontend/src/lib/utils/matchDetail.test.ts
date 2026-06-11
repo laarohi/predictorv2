@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
 	buildCells,
 	classifyPick,
+	gridAxes,
 	heatColor,
 	outcomeOf,
 	pickStr,
@@ -74,9 +75,43 @@ describe('buildCells', () => {
 		expect(cells['4,1'].players[0].home).toBe(7);
 	});
 
+	it('keeps high scores on their true cell with per-axis maxima', () => {
+		const cells = buildCells([p('A', 7, 1)], 7, 4);
+		expect(Object.keys(cells)).toEqual(['7,1']);
+	});
+
 	it('preserves the you flag', () => {
 		const cells = buildCells([p('A', 2, 1, true)]);
 		expect(cells['2,1'].players[0].you).toBe(true);
+	});
+});
+
+describe('gridAxes', () => {
+	function p(name: string, h: number, a: number) {
+		return toGridPlayer(
+			{ user_name: name, home_score: h, away_score: a } as CommunityPrediction,
+			false,
+			null,
+			null,
+			null
+		);
+	}
+
+	it('floors both axes at 4', () => {
+		expect(gridAxes([p('A', 1, 0), p('B', 2, 2)])).toEqual({ homeMax: 4, awayMax: 4 });
+		expect(gridAxes([])).toEqual({ homeMax: 4, awayMax: 4 });
+	});
+
+	it('expands only the axis a high pick needs', () => {
+		expect(gridAxes([p('A', 7, 1)])).toEqual({ homeMax: 7, awayMax: 4 });
+		expect(gridAxes([p('A', 1, 6)])).toEqual({ homeMax: 4, awayMax: 6 });
+	});
+
+	it('covers the actual result too', () => {
+		expect(gridAxes([p('A', 2, 1)], { home_score: 5, away_score: 0 })).toEqual({
+			homeMax: 5,
+			awayMax: 4
+		});
 	});
 });
 

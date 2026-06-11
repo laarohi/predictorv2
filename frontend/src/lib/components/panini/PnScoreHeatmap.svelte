@@ -1,6 +1,8 @@
 <script lang="ts">
 	/**
-	 * 5×5 scoreline heatmap — every player's pick for one fixture.
+	 * Scoreline heatmap — every player's pick for one fixture. 5×5 (goals
+	 * 0–4 per side) by default, expanding per axis when a pick or the
+	 * actual result goes beyond 4 goals.
 	 *
 	 * Successor to PnBubbleGrid (same props, same call sites): cell colour
 	 * intensity scales with how many predictors picked that score, the
@@ -24,13 +26,19 @@
 	/** Scoring values used to label hover tooltip points. */
 	export let pointsExact: number = 15;
 	export let pointsOutcome: number = 5;
+	/** Highest goal count per axis (from `gridAxes`). 4 is the floor; the
+	 *  grid grows row/column-wise for high-scoring picks or results. Must
+	 *  match what the caller passed to `buildCells`. */
+	export let homeMax: number = 4;
+	export let awayMax: number = 4;
 
-	const GOALS = [0, 1, 2, 3, 4];
+	$: homeGoals = Array.from({ length: homeMax + 1 }, (_, i) => i);
+	$: awayGoals = Array.from({ length: awayMax + 1 }, (_, i) => i);
 
 	$: maxCount = Math.max(1, ...Object.values(cells).map((c) => c.players.length));
-	// Picks beyond 4 goals clamp onto the edge cells, mirroring buildCells.
-	$: youH = youPlayer ? Math.min(4, Math.max(0, youPlayer.home)) : -1;
-	$: youA = youPlayer ? Math.min(4, Math.max(0, youPlayer.away)) : -1;
+	// Clamp mirrors buildCells — a no-op when the axes came from gridAxes.
+	$: youH = youPlayer ? Math.min(homeMax, Math.max(0, youPlayer.home)) : -1;
+	$: youA = youPlayer ? Math.min(awayMax, Math.max(0, youPlayer.away)) : -1;
 
 	function kindOf(h: number, a: number): string {
 		if (mode === 'pre') return 'pre-' + outcomeOf(h, a);
@@ -89,14 +97,17 @@
 			</span>
 		</div>
 
-		<div class="pn-hm">
+		<div
+			class="pn-hm"
+			style="--hm-cols: {awayGoals.length}; --hm-ratio: {awayGoals.length + 1} / {homeGoals.length + 1};"
+		>
 			<div class="corner" />
-			{#each GOALS as a (`h-${a}`)}
+			{#each awayGoals as a (`h-${a}`)}
 				<div class="hdr">{a}</div>
 			{/each}
-			{#each GOALS as h (`r-${h}`)}
+			{#each homeGoals as h (`r-${h}`)}
 				<div class="hdr side">{h}</div>
-				{#each GOALS as a (`c-${h}-${a}`)}
+				{#each awayGoals as a (`c-${h}-${a}`)}
 					{@const c = cells[`${h},${a}`]}
 					{@const n = c ? c.players.length : 0}
 					{@const kind = kindOf(h, a)}

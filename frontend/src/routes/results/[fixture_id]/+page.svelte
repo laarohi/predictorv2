@@ -44,6 +44,7 @@
 	} from '$lib/utils/matchBreakdown';
 	import {
 		buildCells,
+		gridAxes,
 		toGridPlayer,
 		fmtKickoff,
 		pickActualScore,
@@ -166,7 +167,8 @@
 		});
 	})();
 
-	$: cells = buildCells(gridPlayers);
+	$: gridMax = gridAxes(gridPlayers, actualScore);
+	$: cells = buildCells(gridPlayers, gridMax.homeMax, gridMax.awayMax);
 	$: youPlayer = gridPlayers.find((p) => p.you) ?? null;
 
 	$: state = fixture ? matchState(fixture) : null;
