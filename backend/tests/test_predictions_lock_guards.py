@@ -297,16 +297,22 @@ class TestUpdateBracketPredictionsGuards:
         assert "phase 2" in exc.value.detail.lower()
 
     @pytest.mark.asyncio
+    @patch("app.api.predictions.validate_phase1_bracket", new_callable=AsyncMock)
     @patch("app.api.predictions.is_phase2_bracket_locked", new_callable=AsyncMock)
     @patch("app.api.predictions.is_phase1_locked", new_callable=AsyncMock)
     @patch("app.api.predictions.get_current_phase", new_callable=AsyncMock)
     async def test_bracket_writable_when_no_lock(
-        self, mock_phase, mock_phase1, mock_phase2_bracket
+        self, mock_phase, mock_phase1, mock_phase2_bracket, mock_validate
     ):
-        """Happy path: both lock predicates return False — rewrite proceeds."""
+        """Happy path: both lock predicates return False — rewrite proceeds.
+
+        The Phase 1 consistency validator is stubbed out (it would otherwise
+        consume this test's mocked session.execute side_effects); its real
+        behaviour is covered in test_bracket_consistency.py."""
         mock_phase.return_value = PredictionPhase.PHASE_1
         mock_phase1.return_value = False
         mock_phase2_bracket.return_value = False
+        mock_validate.return_value = []
 
         # Two execute() calls happen: SELECT existing picks, then DELETE.
         # First returns an empty list (no prior picks to capture); second is
