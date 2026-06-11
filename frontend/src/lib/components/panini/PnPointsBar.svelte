@@ -158,8 +158,14 @@
 			{#each segs as s (s.lbl)}
 				<!-- A 0-count segment has zero flex width: its text would
 				     overflow and overlap the neighbouring label, so it
-				     renders nothing (the bar + brace rows already do). -->
-				<div class="seg-lbl" style="flex: {s.count}; min-width: 0;">
+				     renders nothing (the bar + brace rows already do).
+				     Non-zero labels get a floor share (~25% of the pool) so
+				     a 1-pick sliver still fits "X WIN · 1 pick · 4%" — only
+				     the BAR below stays strictly proportional. -->
+				<div
+					class="seg-lbl"
+					style="flex: {s.count > 0 ? Math.max(s.count, total * 0.25) : 0}; min-width: 0;"
+				>
 					{#if s.count > 0}
 						<b>{s.lbl}</b>
 						<span>{s.count} pick{s.count !== 1 ? 's' : ''} · {s.sub}</span>
