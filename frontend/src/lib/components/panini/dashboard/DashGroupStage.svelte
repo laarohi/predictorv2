@@ -42,7 +42,7 @@
 		fetchLeaderboard();
 		fetchMatchPredictions();
 		try {
-			trajectoryData = await getMyRankTrajectory(7);
+			trajectoryData = await getMyRankTrajectory(5);
 		} catch {
 			trajectoryData = null;
 		}
@@ -264,12 +264,14 @@
 		isCurrentUser: e.user_id === $user?.id
 	}));
 
+	$: youIndex = $leaderboard.findIndex((e) => e.user_id === $user?.id);
 	$: youRow = (() => {
 		const me = $currentUserPosition;
 		if (!me) return null;
-		// Threshold matches the visible row count (5) — pin the user row
-		// at the bottom only when they're outside the top 5.
-		if (me.position <= 5) return null;
+		// Gate on ROW index, not position number: ties share a position
+		// (competition ranking), so "position <= 5" can be true for a user
+		// rendered well below the fifth row — invisible in the 5-row slice.
+		if (youIndex >= 0 && youIndex < 5) return null;
 		return {
 			userId: me.user_id,
 			position: me.position,

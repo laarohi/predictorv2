@@ -53,7 +53,7 @@
 		fetchMatchPredictions();
 		try {
 			[trajectoryData, p1Exposure, p2Exposure] = await Promise.all([
-				getMyRankTrajectory(7),
+				getMyRankTrajectory(5),
 				getBracketExposure('phase_1').catch(() => null),
 				getBracketExposure('phase_2').catch(() => null)
 			]);
@@ -276,10 +276,14 @@
 		points: e.total_points,
 		isCurrentUser: e.user_id === $user?.id
 	}));
+	$: youIndex = $leaderboard.findIndex((e) => e.user_id === $user?.id);
 	$: youRow = (() => {
 		const me = $currentUserPosition;
 		if (!me) return null;
-		if (me.position <= 5) return null;
+		// Gate on ROW index, not position number: ties share a position
+		// (competition ranking), so "position <= 5" can be true for a user
+		// rendered well below the fifth row — invisible in the 5-row slice.
+		if (youIndex >= 0 && youIndex < 5) return null;
 		const moveChip = me.movement !== 0 ? ` · ${me.movement > 0 ? '▲' : '▼'}${Math.abs(me.movement)}` : '';
 		return {
 			userId: me.user_id,

@@ -160,9 +160,13 @@
 		points: e.total_points,
 		isCurrentUser: e.user_id === $user?.id
 	}));
+	$: youIndex = $leaderboard.findIndex((e) => e.user_id === $user?.id);
 	$: youRow = (() => {
 		const me = $currentUserPosition;
-		if (!me || me.position <= 5) return null;
+		// Gate on ROW index, not position number: ties share a position
+		// (competition ranking), so "position <= 5" can be true for a user
+		// rendered well below the fifth row — invisible in the 5-row slice.
+		if (!me || (youIndex >= 0 && youIndex < 5)) return null;
 		const gap = me.position > 1 ? ` · −${($leaderboard[0]?.total_points ?? me.total_points) - me.total_points} to #1` : '';
 		return {
 			userId: me.user_id,
