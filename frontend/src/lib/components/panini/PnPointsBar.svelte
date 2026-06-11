@@ -7,12 +7,15 @@
 	 *   the same rarity underbrace (they're the same outcome bucket).
 	 * - Pre-match: 3 segments (Home / Draw / Away). Each has its own brace.
 	 *
-	 * The rarity tiers (Solo / Rare / Uncommon / Common) reflect what bonus
-	 * the *outcome bucket* would earn under hybrid scoring. They're
-	 * derived from the count of picks in that bucket vs. the pool size,
-	 * mirroring `rarityFor(pct)` in the design.
+	 * The rarity bonus per *outcome bucket* is the REAL number scoring will
+	 * pay: `logarithmicRarityBonus` from matchBreakdown.ts, the shared
+	 * mirror of the backend's `_logarithmic_rarity_bonus` (validated by the
+	 * golden parity cases). The Solo/Rare/Uncommon/Common label is derived
+	 * from that bonus. A bucket nobody picked gets no brace at all — there
+	 * is no one to pay a bonus to.
 	 */
 	import { classifyPick, outcomeOf, type GridPlayer } from '$lib/utils/matchDetail';
+	import { logarithmicRarityBonus } from '$lib/utils/matchBreakdown';
 
 	export let mode: 'pre' | 'post';
 	export let homeCode: string;
@@ -21,6 +24,7 @@
 	export let players: GridPlayer[];
 	export let pointsExact: number = 15;
 	export let pointsOutcome: number = 5;
+	export let rarityCap: number = 10;
 
 	type RarTier = { lbl: string; bonus: number; cls: 'solo' | 'rare' | 'uncommon' | 'common' };
 	type SegKind = 'green' | 'gold' | 'miss' | 'navy' | 'paper' | 'red';
@@ -35,11 +39,13 @@
 		you: boolean;
 	}
 
-	function tierOf(pct: number): RarTier {
-		if (pct < 4) return { lbl: 'Solo', bonus: 10, cls: 'solo' };
-		if (pct < 8) return { lbl: 'Rare', bonus: 5, cls: 'rare' };
-		if (pct < 22) return { lbl: 'Uncommon', bonus: 2, cls: 'uncommon' };
-		return { lbl: 'Common', bonus: 0, cls: 'common' };
+	function tierFor(count: number, totalPicks: number, cap: number): RarTier | null {
+		if (count <= 0) return null;
+		const bonus = logarithmicRarityBonus(totalPicks, count, cap);
+		if (count === 1) return { lbl: 'Solo', bonus, cls: 'solo' };
+		if (bonus >= 5) return { lbl: 'Rare', bonus, cls: 'rare' };
+		if (bonus >= 2) return { lbl: 'Uncommon', bonus, cls: 'uncommon' };
+		return { lbl: 'Common', bonus, cls: 'common' };
 	}
 
 	function pct(n: number, t: number): string {
@@ -52,9 +58,9 @@
 	$: homeCt = players.filter((p) => p.home > p.away).length;
 	$: drawCt = players.filter((p) => p.home === p.away).length;
 	$: awayCt = players.filter((p) => p.home < p.away).length;
-	$: rarHome = tierOf((homeCt / Math.max(1, total)) * 100);
-	$: rarDraw = tierOf((drawCt / Math.max(1, total)) * 100);
-	$: rarAway = tierOf((awayCt / Math.max(1, total)) * 100);
+	$: rarHome = tierFor(homeCt, total, rarityCap);
+	$: rarDraw = tierFor(drawCt, total, rarityCap);
+	$: rarAway = tierFor(awayCt, total, rarityCap);
 
 	$: youOutcome = you ? outcomeOf(you.home, you.away) : null;
 
@@ -150,9 +156,14 @@
 	<div class="bar-section">
 		<div class="lbl-row">
 			{#each segs as s (s.lbl)}
+				<!-- A 0-count segment has zero flex width: its text would
+				     overflow and overlap the neighbouring label, so it
+				     renders nothing (the bar + brace rows already do). -->
 				<div class="seg-lbl" style="flex: {s.count}; min-width: 0;">
-					<b>{s.lbl}</b>
-					<span>{s.count} pick{s.count !== 1 ? 's' : ''} · {s.sub}</span>
+					{#if s.count > 0}
+						<b>{s.lbl}</b>
+						<span>{s.count} pick{s.count !== 1 ? 's' : ''} · {s.sub}</span>
+					{/if}
 				</div>
 			{/each}
 		</div>

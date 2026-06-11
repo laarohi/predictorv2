@@ -19,12 +19,14 @@
 		rarityLabel,
 		type GridPlayer
 	} from '$lib/utils/matchDetail';
+	import { logarithmicRarityBonus } from '$lib/utils/matchBreakdown';
 
 	export let mode: 'pre' | 'post';
 	export let actual: { home_score: number; away_score: number } | null = null;
 	export let players: GridPlayer[];
 	export let pointsExact: number = 15;
 	export let pointsOutcome: number = 5;
+	export let rarityCap: number = 10;
 
 	type PickFilter = 'all' | 'scorers' | 'home' | 'draw' | 'away';
 	let filter: PickFilter = mode === 'post' ? 'scorers' : 'all';
@@ -47,6 +49,14 @@
 			counts[key] = (counts[key] || 0) + 1;
 		}
 		const total = players.length;
+		// Rarity bonus paid to everyone who called the actual outcome —
+		// same formula as backend scoring (shared logarithmic mirror).
+		const actualOutcome =
+			mode === 'post' && actual ? outcomeOf(actual.home_score, actual.away_score) : null;
+		const correctCt = actualOutcome
+			? players.filter((p) => outcomeOf(p.home, p.away) === actualOutcome).length
+			: 0;
+		const rarBonus = actualOutcome ? logarithmicRarityBonus(total, correctCt, rarityCap) : 0;
 		const all: Row[] = players.map((p) => {
 			const key = p.home + ',' + p.away;
 			const ct = counts[key] || 0;
@@ -58,9 +68,9 @@
 			const pts =
 				mode === 'post' && actual
 					? kind === 'exact'
-						? pointsExact + pointsOutcome
+						? pointsExact + pointsOutcome + rarBonus
 						: kind === 'outcome'
-							? pointsOutcome
+							? pointsOutcome + rarBonus
 							: 0
 					: null;
 			return {

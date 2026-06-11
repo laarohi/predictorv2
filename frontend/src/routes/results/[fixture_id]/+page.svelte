@@ -458,6 +458,7 @@
 									players={gridPlayers}
 									pointsExact={scoringConfig.exact_points}
 									pointsOutcome={scoringConfig.outcome_points}
+									rarityCap={scoringConfig.rarity_cap}
 								/>
 							</div>
 							{#if groupStandings && fixture.group}
@@ -482,6 +483,7 @@
 								players={gridPlayers}
 								pointsExact={scoringConfig.exact_points}
 								pointsOutcome={scoringConfig.outcome_points}
+								rarityCap={scoringConfig.rarity_cap}
 							/>
 						</div>
 					</div>
@@ -647,6 +649,7 @@
 								players={gridPlayers}
 								pointsExact={scoringConfig.exact_points}
 								pointsOutcome={scoringConfig.outcome_points}
+								rarityCap={scoringConfig.rarity_cap}
 							/>
 						</div>
 					</div>
@@ -668,6 +671,7 @@
 						players={gridPlayers}
 						pointsExact={scoringConfig.exact_points}
 						pointsOutcome={scoringConfig.outcome_points}
+						rarityCap={scoringConfig.rarity_cap}
 					/>
 				{/if}
 			</div>
