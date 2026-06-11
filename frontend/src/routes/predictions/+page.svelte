@@ -54,6 +54,10 @@
 	} from '$lib/utils/standings';
 	import { BRACKET_TOTAL_SLOTS_PHASE2, countBracketSlotsFilled } from '$lib/utils/bracketProgress';
 	import {
+		reconcileBracketWithStandings,
+		type RemovedPick
+	} from '$lib/utils/bracketReconcile';
+	import {
 		initPersistence,
 		hydrateFromStorage,
 		lastLocalSave
@@ -92,6 +96,11 @@
 	// Detail for a failed save (FLOW-8): surfaced on the Retry button so the
 	// user knows WHY (e.g. "2 matches have already locked") instead of a bare ×.
 	let saveError: string | null = null;
+	// Knockout picks the last save CLEARED because group-score changes
+	// reshaped the predicted standings beneath the saved bracket. Persisting
+	// the re-resolved bracket (holes included) is the integrity fix — this
+	// banner tells the user what was cleared and where to re-pick.
+	let bracketPruneNotice: RemovedPick[] | null = null;
 
 	// Cross-tab + cross-refresh draft persistence (silent localStorage mirror).
 	// fetchesDone gates hydration so we only overlay localStorage drafts AFTER
@@ -369,8 +378,10 @@
 			done += p.done;
 			total += p.total;
 		}
-		// Phase 1 bracket — 63 advancement picks (R32 + R16 + QF + SF + F + W)
-		const bracket = countBracketSlotsFilled($unsavedBracketPrediction || $bracketPrediction);
+		// Phase 1 bracket — 63 advancement picks (R32 + R16 + QF + SF + F + W).
+		// Counted on the RESOLVED bracket: a saved pick invalidated by group
+		// edits renders as an empty slot and must not count as predicted.
+		const bracket = countBracketSlotsFilled(resolvedDisplayBracket);
 		done += bracket.done;
 		total += bracket.total;
 		// Bonus questions — only count once they've loaded (avoids "100%" flash
@@ -555,6 +566,30 @@
 	let bracketComponent: PnKnockoutBracket;
 	$: displayBracket = $unsavedBracketPrediction || $bracketPrediction;
 
+	// The bracket as it actually RESOLVES against current (saved + draft)
+	// standings. Saved picks that no longer fit render as empty slots, so
+	// progress and save flows must count/persist this, never the raw stored
+	// strings — otherwise the progress bar claims 145/145 over a bracket
+	// with holes. Guarded on allGroupsComplete: reconciliation against
+	// partial standings is a no-op by design (see bracketReconcile.ts).
+	$: bracketReconciliation =
+		displayBracket && allGroupsComplete
+			? reconcileBracketWithStandings(displayBracket, standingsMap, $fifaRankings)
+			: null;
+	$: resolvedDisplayBracket = bracketReconciliation?.resolved ?? displayBracket;
+
+	// Picks the NEXT save will clear: only group-score edits change the
+	// standings beneath the bracket, so the warning only applies while
+	// group changes are pending (the save flow prunes exactly then — and
+	// only while Phase 1 is open, mirroring handleSaveAll's guard).
+	$: pendingBracketPrune =
+		$hasUnsavedChanges &&
+		!$isPhase1Locked &&
+		bracketReconciliation &&
+		bracketReconciliation.removed.length > 0
+			? bracketReconciliation.removed
+			: null;
+
 	function bracketToPredictions(b: BracketPrediction): TeamAdvancementPrediction[] {
 		const out: TeamAdvancementPrediction[] = [];
 		const push = (stage: string, teams: (string | undefined)[] | undefined) => {
@@ -631,17 +666,68 @@
 	async function handleSaveAll() {
 		saveStatus = 'saving';
 		saveError = null;
+		bracketPruneNotice = null;
 		let bonusErr: string | null = null;
+
+		// ---- Phase 1 bracket reconciliation, captured up front -------------
+		// Snapshotted BEFORE any await: standingsMap already reflects draft
+		// group scores (it derives from livePredictionMap), and reading it now
+		// keeps this function independent of when Svelte flushes reactive
+		// recomputes during the awaits below.
+		//
+		// The bracket is (re-)saved when the user edited it, OR when pending
+		// group-score changes invalidate saved picks. In both cases we persist
+		// the RESOLVED bracket — exactly what the user sees rendered — so the
+		// DB can never hold knockout picks that contradict the group picks
+		// saved alongside them. Resolution is idempotent for a consistent
+		// bracket (locked by bracketReconcile.test.ts), so this never alters
+		// picks that still fit.
+		const groupsDirty = $hasUnsavedChanges;
+		const userEditedBracket = $hasUnsavedBracketChanges && !!$unsavedBracketPrediction;
+		const bracketSource = $unsavedBracketPrediction || $bracketPrediction;
+		let phase1BracketSave: { toSave: BracketPrediction; removed: RemovedPick[] } | null = null;
+		// The !$isPhase1Locked guard matters once Phase 2 is active: PUT
+		// /bracket writes to the CURRENT phase, so a Phase 1 prune fired from
+		// stale restored drafts would overwrite the user's Phase 2 bracket
+		// with Phase 1 data. Post-lock there is nothing to prune anyway.
+		if (
+			bracketSource &&
+			allGroupsComplete &&
+			!$isPhase1Locked &&
+			(userEditedBracket || groupsDirty)
+		) {
+			const r = reconcileBracketWithStandings(bracketSource, standingsMap, $fifaRankings);
+			if (userEditedBracket || r.changed) {
+				phase1BracketSave = { toSave: r.resolved, removed: r.removed };
+			}
+		} else if (bracketSource && userEditedBracket) {
+			// Groups incomplete — the wizard gates the bracket UI so this
+			// shouldn't happen, but a user edit must never be silently dropped.
+			phase1BracketSave = { toSave: bracketSource, removed: [] };
+		}
+
+		// ---- 1. Group scores FIRST (sequential) -----------------------------
+		// The bracket save below prunes against the standings these scores
+		// imply, and the backend validates the bracket against SAVED match
+		// predictions — both require the group save to have landed first.
+		let groupsOk = true;
+		if (groupsDirty) {
+			groupsOk = await saveAllPredictions();
+		}
+
+		// ---- 2. Everything else (parallel) ----------------------------------
 		const tasks: Promise<boolean>[] = [];
 
-		if ($hasUnsavedChanges) {
-			tasks.push(saveAllPredictions());
-		}
-		if ($hasUnsavedBracketChanges && $unsavedBracketPrediction) {
-			const b = $unsavedBracketPrediction;
+		// Phase 1 bracket — skipped if the group save failed: pruning against
+		// standings that didn't persist could clear picks that are still valid.
+		if (groupsOk && phase1BracketSave) {
+			const { toSave, removed } = phase1BracketSave;
 			tasks.push(
-				saveBracketPredictions(bracketToPredictions(b)).then((ok) => {
-					if (ok) unsavedBracketPrediction.set(null);
+				saveBracketPredictions(bracketToPredictions(toSave)).then((ok) => {
+					if (ok) {
+						unsavedBracketPrediction.set(null);
+						if (removed.length > 0) bracketPruneNotice = removed;
+					}
 					return ok;
 				})
 			);
@@ -678,7 +764,11 @@
 		}
 
 		const results = await Promise.all(tasks);
-		const allOk = results.length > 0 && results.every((r) => r);
+		// "Did everything we attempted succeed, and did we attempt anything?"
+		// The group save runs before the parallel tasks, so it counts as an
+		// attempt of its own (the old `results.length > 0` no longer covers it).
+		const attempted = (groupsDirty ? 1 : 0) + tasks.length;
+		const allOk = attempted > 0 && groupsOk && results.every((r) => r);
 		saveStatus = allOk ? 'saved' : 'error';
 		if (!allOk) saveError = $matchPredictionsError || $bracketError || $phase2BracketError || bonusErr || 'Some predictions could not be saved — please check your connection and Retry.';
 		if (allOk) setTimeout(() => (saveStatus = 'idle'), 2000);
@@ -915,6 +1005,45 @@
 				</div>
 			</div>
 		{/if}
+		{#if pendingBracketPrune}
+			<!-- Live warning: unsaved group-score edits reshape the knockout
+			     line-up, so saving will clear the picks listed here. Derived
+			     state — it disappears by itself when the edits are saved or
+			     reverted, so it carries no dismiss button. -->
+			<div class="pn-restore-banner-wrap" transition:fade={{ duration: 400 }}>
+				<div class="pn-restore-banner">
+					<div class="content">
+						<span class="icon">⚠</span>
+						<div class="text">
+							<b>Your group changes reshape the knockout line-up.</b>
+							Saving will clear {pendingBracketPrune.length} knockout
+							{pendingBracketPrune.length === 1 ? 'pick' : 'picks'}
+							({[...new Set(pendingBracketPrune.map((p) => displayTeamName(p.team)))].join(', ')})
+							— you can re-pick those slots in the Knockout tab afterwards.
+						</div>
+					</div>
+				</div>
+			</div>
+		{/if}
+		{#if bracketPruneNotice}
+			<div class="pn-restore-banner-wrap" transition:fade={{ duration: 400 }}>
+				<div class="pn-restore-banner">
+					<div class="content">
+						<span class="icon">⚠</span>
+						<div class="text">
+							<b>Knockout picks cleared.</b>
+							Your group-stage changes reshaped the bracket, so
+							{bracketPruneNotice.length}
+							{bracketPruneNotice.length === 1 ? 'pick' : 'picks'}
+							({[...new Set(bracketPruneNotice.map((p) => displayTeamName(p.team)))].join(', ')})
+							no longer fit and {bracketPruneNotice.length === 1 ? 'was' : 'were'} removed —
+							open the Knockout tab to fill the empty slots.
+						</div>
+					</div>
+					<button class="dismiss" aria-label="Dismiss" on:click={() => (bracketPruneNotice = null)}>×</button>
+				</div>
+			</div>
+		{/if}
 		<!-- Hero / progress / phase toggle — DESKTOP (≥700px) -->
 		<div class="pn-ws-only">
 		<section class="pn-wiz-hero">
@@ -1009,7 +1138,7 @@
 		<!-- Hero / progress / tabs — MOBILE (≤699px) -->
 		<div
 			class="pn-wm-only pn-wm-wrap"
-			class:has-banner={restorationBanner}
+			class:has-banner={restorationBanner || pendingBracketPrune || bracketPruneNotice}
 		>
 			<section class="pn-wm-hero">
 				<div class="top-row">

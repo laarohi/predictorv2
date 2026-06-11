@@ -206,15 +206,20 @@ class TestBracketRewriteHistoryCapture:
     insert row per new pick — so the audit trail is reconstructible."""
 
     @pytest.mark.asyncio
+    @patch("app.api.predictions.validate_phase1_bracket", new_callable=AsyncMock)
     @patch("app.api.predictions.is_phase2_bracket_locked", new_callable=AsyncMock)
     @patch("app.api.predictions.is_phase1_locked", new_callable=AsyncMock)
     @patch("app.api.predictions.get_current_phase", new_callable=AsyncMock)
     async def test_records_delete_then_insert_pair(
-        self, mock_phase, mock_phase1, mock_phase2_bracket
+        self, mock_phase, mock_phase1, mock_phase2_bracket, mock_validate
     ):
         mock_phase.return_value = PredictionPhase.PHASE_1
         mock_phase1.return_value = False
         mock_phase2_bracket.return_value = False
+        # Consistency validation is stubbed out (it would consume this test's
+        # mocked session.execute side_effects); its real behaviour is covered
+        # in test_bracket_consistency.py.
+        mock_validate.return_value = []
 
         user = _user()
         # Two existing picks the user is overwriting.

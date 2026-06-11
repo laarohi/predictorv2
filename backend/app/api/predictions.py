@@ -43,6 +43,7 @@ from app.services.bonus import (
     get_fifa_rankings,
     get_questions as get_bonus_questions,
 )
+from app.services.bracket_consistency import validate_phase1_bracket
 from app.services.bracket_exposure import compute_bracket_exposure
 from app.services.locking import (
     check_fixture_locked,
@@ -537,6 +538,23 @@ async def update_bracket_predictions(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Phase 2 bracket predictions are locked",
         )
+
+    # Phase 1 brackets derive from the user's predicted group standings —
+    # reject payloads that contradict them (stale client, manual API use).
+    # The schema validator above only checks shape; this checks meaning.
+    # See services/bracket_consistency.py for what is (and isn't) enforced.
+    if current_phase == PredictionPhase.PHASE_1:
+        problems = await validate_phase1_bracket(
+            session, current_user.id, bracket_data.predictions
+        )
+        if problems:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    "Bracket is inconsistent with your saved group predictions "
+                    "— reload the page and re-save. (" + " | ".join(problems) + ")"
+                ),
+            )
 
     # Load existing picks for history capture before we delete them.
     existing_result = await session.execute(
