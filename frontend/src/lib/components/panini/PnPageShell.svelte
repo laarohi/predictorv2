@@ -21,6 +21,29 @@
 	export let showStrip: boolean = true;
 
 	let chromeEl: HTMLElement | null = null;
+	let navWrapEl: HTMLElement | null = null;
+	let nudgeRaf = 0;
+
+	/**
+	 * Re-anchor the sticky bottom nav after visual-viewport changes.
+	 *
+	 * iOS standalone (home-screen) mode sometimes leaves the sticky layer
+	 * composited at a stale offset after keyboard dismissal or app resume —
+	 * no layout invalidation happens, so WebKit keeps the cached position
+	 * (same bug family that stranded the old position:fixed nav, just
+	 * rarer). A one-frame transform toggle forces the compositor to
+	 * recompute the layer; visually a no-op everywhere else.
+	 */
+	function nudgeNav() {
+		if (!browser || !navWrapEl) return;
+		cancelAnimationFrame(nudgeRaf);
+		nudgeRaf = requestAnimationFrame(() => {
+			if (!navWrapEl) return;
+			navWrapEl.style.transform = 'translateZ(0)';
+			void navWrapEl.offsetHeight; // force reflow while transformed
+			navWrapEl.style.transform = '';
+		});
+	}
 
 	function updateChromeHeight() {
 		if (!browser || !chromeEl) return;
@@ -39,9 +62,25 @@
 		// 700px and offsetHeight jumps between 0 and ~76px.
 		const onResize = () => updateChromeHeight();
 		window.addEventListener('resize', onResize);
+
+		// Sticky-nav re-anchor triggers: every event iOS standalone fires
+		// around keyboard show/hide, app resume and rotation.
+		const vv = window.visualViewport;
+		vv?.addEventListener('resize', nudgeNav);
+		vv?.addEventListener('scroll', nudgeNav);
+		window.addEventListener('pageshow', nudgeNav);
+		window.addEventListener('orientationchange', nudgeNav);
+		document.addEventListener('visibilitychange', nudgeNav);
+
 		return () => {
 			ro.disconnect();
 			window.removeEventListener('resize', onResize);
+			vv?.removeEventListener('resize', nudgeNav);
+			vv?.removeEventListener('scroll', nudgeNav);
+			window.removeEventListener('pageshow', nudgeNav);
+			window.removeEventListener('orientationchange', nudgeNav);
+			document.removeEventListener('visibilitychange', nudgeNav);
+			cancelAnimationFrame(nudgeRaf);
 		};
 	});
 </script>
@@ -58,7 +97,7 @@
 		<slot />
 	</main>
 
-	<div class="mobile-only">
+	<div class="mobile-only" bind:this={navWrapEl}>
 		<PnBottomNav />
 	</div>
 </div>
@@ -67,7 +106,11 @@
 	.pn-shell {
 		display: flex;
 		flex-direction: column;
-		min-height: 100vh;
+		/* dvh tracks the DYNAMIC viewport: with plain 100vh (the large
+		 * viewport), a short page in non-standalone Safari with the URL bar
+		 * expanded puts the nav's natural position below the visible area. */
+		min-height: 100vh; /* fallback for pre-15.4 Safari */
+		min-height: 100dvh;
 	}
 	.desktop-only {
 		display: none;

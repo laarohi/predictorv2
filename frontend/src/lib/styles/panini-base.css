@@ -31,7 +31,8 @@
 	background: var(--paper);
 	color: var(--ink);
 	width: 100%;
-	min-height: 100vh;
+	min-height: 100vh; /* fallback for pre-15.4 Safari */
+	min-height: 100dvh; /* dynamic viewport — see PnPageShell .pn-shell */
 	position: relative;
 }
 .pn *,
