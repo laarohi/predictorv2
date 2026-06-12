@@ -106,9 +106,13 @@ async def get_admin_stats(
 ) -> AdminStats:
     """Get admin dashboard statistics."""
     # User counts
-    total_users = await session.scalar(select(func.count(User.id)))
+    total_users = await session.scalar(
+        select(func.count(User.id)).where(User.is_ghost == False)  # noqa: E712
+    )
     active_users = await session.scalar(
-        select(func.count(User.id)).where(User.is_active == True)
+        select(func.count(User.id)).where(
+            User.is_active == True, User.is_ghost == False  # noqa: E712
+        )
     )
 
     # Fixture counts

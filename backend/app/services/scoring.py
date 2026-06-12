@@ -26,6 +26,7 @@ from app.config import get_tournament_config
 from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.score import Score
+from app.models.user import User
 from app.schemas.leaderboard import PhaseBreakdown, PointBreakdown
 
 
@@ -791,7 +792,12 @@ async def get_outcome_counts(session: AsyncSession, fixture_id: uuid.UUID) -> di
         Dict with keys '1', 'X', '2' and counts
     """
     result = await session.execute(
-        select(MatchPrediction).where(MatchPrediction.fixture_id == fixture_id)
+        select(MatchPrediction)
+        .join(User, MatchPrediction.user_id == User.id)
+        .where(
+            MatchPrediction.fixture_id == fixture_id,
+            User.is_ghost == False,  # noqa: E712 — ghosts must never move rarity
+        )
     )
     predictions = result.scalars().all()
 
@@ -812,7 +818,11 @@ async def get_all_outcome_counts(
     build calls this once and passes the result into calculate_user_points
     instead of issuing one query per fixture per user.
     """
-    result = await session.execute(select(MatchPrediction))
+    result = await session.execute(
+        select(MatchPrediction)
+        .join(User, MatchPrediction.user_id == User.id)
+        .where(User.is_ghost == False)  # noqa: E712 — ghosts must never move rarity
+    )
     by_fixture: dict[uuid.UUID, dict[str, int]] = {}
     for pred in result.scalars().all():
         counts = by_fixture.setdefault(pred.fixture_id, {"1": 0, "X": 0, "2": 0})

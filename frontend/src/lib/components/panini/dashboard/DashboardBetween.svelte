@@ -152,7 +152,10 @@
 	// already in the top 5, OR 4 top rows + the pinned `you` row when the
 	// user is outside. Keeps the standings card at a constant height
 	// regardless of where the user sits on the leaderboard.
-	$: topFive = $leaderboard.slice(0, youRow ? 4 : 5).map((e) => ({
+	// Ghost entrants (crowd/market bots) are a leaderboard-page feature —
+	// the dashboard mini-standings shows ranked humans only.
+	$: rankedBoard = $leaderboard.filter((e) => !e.is_ghost);
+	$: topFive = rankedBoard.slice(0, youRow ? 4 : 5).map((e) => ({
 		userId: e.user_id,
 		position: e.position,
 		name: e.user_name,
@@ -160,7 +163,7 @@
 		points: e.total_points,
 		isCurrentUser: e.user_id === $user?.id
 	}));
-	$: youIndex = $leaderboard.findIndex((e) => e.user_id === $user?.id);
+	$: youIndex = rankedBoard.findIndex((e) => e.user_id === $user?.id);
 	$: youRow = (() => {
 		const me = $currentUserPosition;
 		// Gate on ROW index, not position number: ties share a position

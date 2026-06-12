@@ -209,6 +209,8 @@ async def get_progression(session: DbSession, _user: CurrentUser) -> Progression
 
     series: list[ProgressionSeries] = []
     for entry in live.entries:  # already sorted by current position
+        if entry.is_ghost:
+            continue  # ghosts are unranked and never snapshotted
         points = [
             RankSnapshotPoint(
                 position=s.position,
@@ -300,6 +302,7 @@ async def get_tournament_winner_pickers(
     from app.models.fixture import Fixture, MatchStatus
     from app.models.prediction import PredictionPhase, TeamPrediction
     from app.models.score import Score
+    from app.models.user import User
 
     # Step 1: find the actual tournament winner from the FINAL fixture's score
     result = await session.execute(
@@ -328,8 +331,10 @@ async def get_tournament_winner_pickers(
         # Total predictors who made any winner pick in this phase
         total_result = await session.execute(
             select(func.count(func.distinct(TeamPrediction.user_id)))
+            .join(User, TeamPrediction.user_id == User.id)
             .where(TeamPrediction.stage == "winner")
             .where(TeamPrediction.phase == phase)
+            .where(User.is_ghost == False)  # noqa: E712
         )
         total = total_result.scalar() or 0
 
@@ -338,9 +343,11 @@ async def get_tournament_winner_pickers(
         if actual_winner is not None:
             picker_result = await session.execute(
                 select(func.count(func.distinct(TeamPrediction.user_id)))
+                .join(User, TeamPrediction.user_id == User.id)
                 .where(TeamPrediction.stage == "winner")
                 .where(TeamPrediction.phase == phase)
                 .where(TeamPrediction.team == actual_winner)
+                .where(User.is_ghost == False)  # noqa: E712
             )
             picker = picker_result.scalar() or 0
         return picker, total
@@ -453,6 +460,7 @@ async def get_my_highlights(
     from app.models.fixture import Fixture, MatchStatus
     from app.models.prediction import MatchPrediction
     from app.models.score import Score
+    from app.models.user import User
     from app.services.scoring import calculate_user_points
 
     # --- best_exact_streak + most_contrarian_correct ------------------------
@@ -498,7 +506,12 @@ async def get_my_highlights(
     if exact_hits:
         hit_fixture_ids = [f.id for f, _p, _s in exact_hits]
         all_preds_result = await session.execute(
-            select(MatchPrediction).where(MatchPrediction.fixture_id.in_(hit_fixture_ids))
+            select(MatchPrediction)
+            .join(User, MatchPrediction.user_id == User.id)
+            .where(
+                MatchPrediction.fixture_id.in_(hit_fixture_ids),
+                User.is_ghost == False,  # noqa: E712
+            )
         )
         by_fixture: dict[uuid.UUID, list[MatchPrediction]] = defaultdict(list)
         for p in all_preds_result.scalars().all():

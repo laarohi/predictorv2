@@ -655,7 +655,10 @@ async def get_community_predictions(
     result = await session.execute(
         select(MatchPrediction, User.name)
         .join(User, MatchPrediction.user_id == User.id)
-        .where(MatchPrediction.fixture_id == fixture_id)
+        .where(
+            MatchPrediction.fixture_id == fixture_id,
+            User.is_ghost == False,  # noqa: E712 — ghosts never in community picks
+        )
     )
     rows = result.all()
 
@@ -743,6 +746,7 @@ async def _build_groups_aggregates(session: DbSession) -> dict:
         .where(
             Fixture.stage == "group",
             MatchPrediction.phase == PredictionPhase.PHASE_1,
+            User.is_ghost == False,  # noqa: E712
         )
     )
     outcome_counts: dict[uuid.UUID, dict[str, int]] = defaultdict(
@@ -760,6 +764,7 @@ async def _build_groups_aggregates(session: DbSession) -> dict:
         .where(
             TeamPrediction.stage == "round_of_32",
             TeamPrediction.phase == PredictionPhase.PHASE_1,
+            User.is_ghost == False,  # noqa: E712
         )
     )
     advance_users: dict[str, list[str]] = defaultdict(list)
@@ -923,6 +928,7 @@ async def get_bracket_overview(
         .where(
             TeamPrediction.phase == pred_phase,
             TeamPrediction.stage.in_(_KO_STAGES),  # type: ignore[union-attr]
+            User.is_ghost == False,  # noqa: E712
         )
     )
     stage_users: dict[str, dict[str, list[str]]] = defaultdict(
@@ -1013,6 +1019,7 @@ async def get_bonus_overview(
     rows_result = await session.execute(
         select(BonusPrediction.question_id, BonusPrediction.answer, User.name)
         .join(User, BonusPrediction.user_id == User.id)
+        .where(User.is_ghost == False)  # noqa: E712
     )
     users_by_answer: dict[str, dict[str, list[str]]] = defaultdict(
         lambda: defaultdict(list)
@@ -1338,7 +1345,12 @@ async def get_agreements(
 
     # 3. All predictions for the visible fixtures, in one query.
     all_preds_result = await session.execute(
-        select(MatchPrediction).where(MatchPrediction.fixture_id.in_(visible_ids))
+        select(MatchPrediction)
+        .join(User, MatchPrediction.user_id == User.id)
+        .where(
+            MatchPrediction.fixture_id.in_(visible_ids),
+            User.is_ghost == False,  # noqa: E712
+        )
     )
     by_fixture: dict[uuid.UUID, list[MatchPrediction]] = defaultdict(list)
     for p in all_preds_result.scalars().all():

@@ -86,7 +86,11 @@ async def _subscribed_user_ids(session: AsyncSession) -> set[uuid.UUID]:
     rows = await session.execute(
         select(PushSubscription.user_id)
         .join(User, User.id == PushSubscription.user_id)
-        .where(PushSubscription.active.is_(True), User.is_active.is_(True))
+        .where(
+            PushSubscription.active.is_(True),
+            User.is_active.is_(True),
+            User.is_ghost.is_(False),
+        )
         .distinct()
     )
     return set(rows.scalars().all())

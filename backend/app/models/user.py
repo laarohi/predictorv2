@@ -34,6 +34,13 @@ class User(SQLModel, table=True):
     auth_provider: AuthProvider = Field(default=AuthProvider.EMAIL)
     is_admin: bool = Field(default=False)
     is_active: bool = Field(default=True)
+    # Synthetic entrant (wisdom-of-the-crowd consensus, Polymarket bot).
+    # Ghosts hold ordinary prediction rows and are scored normally, but are
+    # excluded from every cross-user aggregate (rarity counts, overview,
+    # community picks, rank assignment, totals, notifications) so they can
+    # never affect the real competition. They appear only on the leaderboard
+    # (unranked, badge instead of position) and their own profile page.
+    is_ghost: bool = Field(default=False)
     # Admin-managed flag tracking whether this participant has paid their
     # entry. Default false; only mutated by /api/admin/users/{id}/paid.
     paid: bool = Field(default=False)

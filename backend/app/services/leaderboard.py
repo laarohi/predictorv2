@@ -209,20 +209,24 @@ async def calculate_leaderboard(
                     correct_outcomes=correct_outcomes,
                     exact_scores=exact_scores,
                     movement=0,  # Will be calculated after positioning
+                    is_ghost=user.is_ghost,
                 )
             )
 
         # Sort by phase points (descending), then by exact scores as tiebreaker
         entries.sort(key=lambda e: (e.total_points, e.exact_scores), reverse=True)
 
-        # Assign positions (handle ties)
+        # Assign positions (handle ties). Ghost entries stay interleaved by
+        # points for display but never consume a rank: positions are assigned
+        # over real users only, so a ghost can't shift anyone down a place.
+        ranked = [e for e in entries if not e.is_ghost]
         current_position = 1
-        for i, entry in enumerate(entries):
+        for i, entry in enumerate(ranked):
             if i > 0 and (
-                entry.total_points < entries[i - 1].total_points
+                entry.total_points < ranked[i - 1].total_points
                 or (
-                    entry.total_points == entries[i - 1].total_points
-                    and entry.exact_scores < entries[i - 1].exact_scores
+                    entry.total_points == ranked[i - 1].total_points
+                    and entry.exact_scores < ranked[i - 1].exact_scores
                 )
             ):
                 current_position = i + 1
@@ -237,9 +241,9 @@ async def calculate_leaderboard(
         _cache[cache_key] = CachedLeaderboard(
             entries=entries,
             last_calculated=now,
-            total_participants=len(users),
+            total_participants=len(ranked),
             phase=phase,
-            previous_positions={e.user_id: e.position for e in entries},
+            previous_positions={e.user_id: e.position for e in ranked},
         )
 
         return _response_from_cache(_cache[cache_key])

@@ -255,7 +255,10 @@
 	// chrome for what is primarily a rank-and-points readout. The widget
 	// hides the hint line when it's empty, so each row collapses to a
 	// single line.
-	$: topFive = $leaderboard.slice(0, youRow ? 4 : 5).map((e) => ({
+	// Ghost entrants (crowd/market bots) are a leaderboard-page feature —
+	// the dashboard mini-standings shows ranked humans only.
+	$: rankedBoard = $leaderboard.filter((e) => !e.is_ghost);
+	$: topFive = rankedBoard.slice(0, youRow ? 4 : 5).map((e) => ({
 		userId: e.user_id,
 		position: e.position,
 		name: e.user_name,
@@ -264,7 +267,7 @@
 		isCurrentUser: e.user_id === $user?.id
 	}));
 
-	$: youIndex = $leaderboard.findIndex((e) => e.user_id === $user?.id);
+	$: youIndex = rankedBoard.findIndex((e) => e.user_id === $user?.id);
 	$: youRow = (() => {
 		const me = $currentUserPosition;
 		if (!me) return null;

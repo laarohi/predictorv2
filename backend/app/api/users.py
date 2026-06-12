@@ -143,7 +143,9 @@ async def get_roster(
     # Active users only — drops `is_active=False` rows (admin-disabled
     # or otherwise sidelined). Sorted by name for stability.
     users_result = await session.execute(
-        select(User).where(User.is_active == True).order_by(User.name)  # noqa: E712
+        select(User)
+        .where(User.is_active == True, User.is_ghost == False)  # noqa: E712
+        .order_by(User.name)
     )
     users = list(users_result.scalars().all())
 

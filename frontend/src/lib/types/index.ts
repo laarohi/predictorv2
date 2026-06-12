@@ -281,6 +281,9 @@ export interface LeaderboardEntry {
 	correct_outcomes: number;
 	exact_scores: number;
 	movement: number;
+	/** Synthetic entrant (crowd consensus / market bot) — interleaved by
+	 *  points but unranked (position stays 0). */
+	is_ghost: boolean;
 }
 
 export interface LeaderboardResponse {

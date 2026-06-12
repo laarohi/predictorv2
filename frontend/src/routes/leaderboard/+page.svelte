@@ -245,12 +245,14 @@
 							{#each $leaderboard as r (r.user_id)}
 								{@const isYou = r.user_id === $user?.id}
 								{@const isOpen = expanded.has(r.user_id)}
-								<tr class:you={isYou} class:open={isOpen} on:click={() => toggle(r.user_id)} style="cursor: pointer;">
-									<td class="pos" class:gold={r.position <= 3}>{r.position}</td>
+								<tr class:you={isYou} class:ghost={r.is_ghost} class:open={isOpen} on:click={() => toggle(r.user_id)} style="cursor: pointer;">
+									<td class="pos" class:gold={!r.is_ghost && r.position <= 3}>
+										{#if r.is_ghost}<span class="ghost-chip">BOT</span>{:else}{r.position}{/if}
+									</td>
 									<td class="nm-cell">
 										<a href="/profile/{r.user_id}" style="color: inherit; text-decoration: none;" on:click|stopPropagation>
 											{r.user_name}
-											<span class="h">{isYou ? 'YOU' : `@${r.user_name.split(' ')[0].toLowerCase()}`}</span>
+											<span class="h">{isYou ? 'YOU' : r.is_ghost ? 'UNRANKED' : `@${r.user_name.split(' ')[0].toLowerCase()}`}</span>
 										</a>
 									</td>
 									<td class="c exact">{exactPts(r.breakdown, $leaderboardPhase)}</td>
@@ -351,15 +353,16 @@
 					{@const isOpen = expanded.has(r.user_id)}
 					<div
 						class="pn-m-lb-row"
-						class:gold={r.position <= 3}
+						class:gold={!r.is_ghost && r.position <= 3}
 						class:you={isYou}
+						class:ghost={r.is_ghost}
 						class:open={isOpen}
 						role="button"
 						tabindex="0"
 						on:click={() => toggle(r.user_id)}
 						on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggle(r.user_id)}
 					>
-						<div class="pos">{r.position}</div>
+						<div class="pos">{#if r.is_ghost}<span class="ghost-chip">BOT</span>{:else}{r.position}{/if}</div>
 						<div>
 							<div class="nm">
 								<!-- Name navigates to the profile; the rest of the row still toggles. -->

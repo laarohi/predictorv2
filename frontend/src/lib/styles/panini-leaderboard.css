@@ -547,3 +547,23 @@
 	border-color: var(--chip, var(--ink));
 	color: var(--paper);
 }
+
+/* ===== Ghost entrants (crowd consensus / market bots) =====
+ * Unranked rows interleaved by points: navy BOT chip instead of a
+ * position number, slightly muted row so they read as reference, not
+ * competition. */
+.pn .ghost-chip {
+	display: inline-block;
+	background: var(--navy);
+	color: var(--paper);
+	font-family: var(--mono);
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.06em;
+	padding: 2px 6px;
+	border: 2px solid var(--ink);
+}
+.pn .pn-lb-table tr.ghost td { background: var(--paper-2); }
+.pn .pn-lb-table tr.ghost .nm-cell { font-style: italic; }
+.pn .pn-m-lb-row.ghost { background: var(--paper-2); }
+.pn .pn-m-lb-row.ghost .nm { font-style: italic; }

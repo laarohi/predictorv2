@@ -61,7 +61,10 @@ async def take_daily_snapshots(session: AsyncSession) -> int:
             "captured_at": utc_now(),
         }
         for entry in leaderboard.entries
+        if not entry.is_ghost  # ghosts are unranked — no trajectory
     ]
+    if not rows:
+        return 0
 
     stmt = (
         pg_insert(LeaderboardSnapshot)

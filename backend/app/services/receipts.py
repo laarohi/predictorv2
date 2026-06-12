@@ -490,8 +490,11 @@ async def send_phase1_receipts(
     picks up from user N+1.
     """
     # All active users — ordered by id for deterministic iteration order.
+    # Ghosts have unroutable placeholder emails; never send to them.
     users_result = await session.execute(
-        select(User).where(User.is_active == True).order_by(User.id)
+        select(User)
+        .where(User.is_active == True, User.is_ghost == False)  # noqa: E712
+        .order_by(User.id)
     )
     users = list(users_result.scalars().all())
 

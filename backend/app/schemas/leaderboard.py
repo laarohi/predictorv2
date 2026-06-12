@@ -173,6 +173,10 @@ class LeaderboardEntry(BaseModel):
     correct_outcomes: int = 0
     exact_scores: int = 0
     movement: int = 0  # Position change since last update
+    # Synthetic entrant (crowd consensus / Polymarket bot): interleaved by
+    # points but unranked — position stays 0 and real users' positions are
+    # assigned as if the ghost weren't there.
+    is_ghost: bool = False
 
 
 class LeaderboardResponse(BaseModel):
