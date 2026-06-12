@@ -10,10 +10,13 @@ needs DuckDB or network access to Polymarket.
         backend/scripts/generate_polymarket_snapshot.py
 
 Selection rules (mirrors the crowd ghost's outcome-first logic):
-- per match: modal OUTCOME from the de-vig-free 1X2 mids, then the
-  highest-probability concrete scoreline within that outcome from the
-  exact-score grid ("any other score" buckets ignored). If the grid has
-  no scoreline for the favoured outcome, fall back to 2-1 / 1-1 / 1-2.
+- per match: modal OUTCOME from the 1X2 mids (those markets are liquid),
+  then the highest-MID concrete scoreline within that outcome — counting
+  ONLY two-sided books (real bid AND ask). Exact-score markets are
+  mostly untraded; an ask-only book yields yes_price = ask/2, which once
+  produced garbage like "Cape Verde 3-0 Saudi Arabia at 0.435" and a
+  wall of 3-0 picks. If no two-sided scoreline exists for the favoured
+  outcome, fall back to 2-1 / 1-1 / 1-2.
 - team_stage_probs: raw mids per reach market, keyed by our stage names.
 - award_answers: top yes-price outcome of each award market.
 """
@@ -63,13 +66,19 @@ def match_scores(con) -> list[dict]:
             fav[key] = outcome
 
     grid = con.execute(
-        "select home, away, score_home, score_away, prob_raw from polymarket_match_score "
+        "select home, away, score_home, score_away, best_bid, best_ask "
+        "from polymarket_match_score "
         "where is_other = false and score_home is not null"
     ).fetchall()
     by_match: dict[tuple[str, str], list[tuple[float, int, int]]] = {}
-    for home, away, sh, sa, p in grid:
-        by_match.setdefault((home, away), []).append((p or 0.0, int(sh), int(sa)))
+    for home, away, sh, sa, bid, ask in grid:
+        # Two-sided books only — see module docstring for the ask-only trap.
+        if bid is None or ask is None or bid <= 0:
+            continue
+        mid = (bid + ask) / 2
+        by_match.setdefault((home, away), []).append((mid, int(sh), int(sa)))
 
+    fallbacks = 0
     rows = []
     for key, outcome in sorted(fav.items()):
         home, away = key
@@ -78,11 +87,13 @@ def match_scores(con) -> list[dict]:
             (p, h, a) for p, h, a in by_match.get(key, []) if side(h, a) == outcome
         ]
         if candidates:
-            # max probability; ties -> fewer goals, lower home score.
+            # max mid; ties -> fewer goals, lower home score.
             _, h, a = max(candidates, key=lambda c: (c[0], -(c[1] + c[2]), -c[1]))
         else:
+            fallbacks += 1
             h, a = FALLBACK_SCORE[outcome]
         rows.append({"home": home, "away": away, "score": [h, a]})
+    print(f"  {fallbacks} matches had no two-sided scoreline (fallback used)")
     return rows
 
 

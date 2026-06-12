@@ -61,7 +61,8 @@ from scripts.ghost_lib import (
     modal_score,
 )
 
-CROWD = ("crowd@ghosts.predictor.invalid", "The Crowd")
+# "Ċikku l-Poplu" — Maltese for the average Joe; the pool's consensus.
+CROWD = ("crowd@ghosts.predictor.invalid", "Ċikku l-Poplu")
 POLYMARKET = ("polymarket@ghosts.predictor.invalid", "Polymarket")
 POLY_DATA = Path(__file__).parent / "data" / "polymarket_wc2026.json"
 
@@ -93,6 +94,12 @@ async def _get_or_create_ghost(session: AsyncSession, email: str, name: str) -> 
         print(f"created ghost user {name} ({user.id})")
     elif not user.is_ghost:
         raise SystemExit(f"{email} exists but is_ghost is False — refusing to touch it")
+    elif user.name != name:
+        # Keep the display name in sync with this script (renames propagate
+        # on the next reseed).
+        user.name = name
+        await session.commit()
+        print(f"renamed ghost user to {name}")
     return user
 
 

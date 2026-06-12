@@ -53,7 +53,7 @@
    "home": "Belgium",
    "away": "Iran",
    "score": [
-    3,
+    1,
     0
    ]
   },
@@ -101,7 +101,7 @@
    "home": "Cape Verde Islands",
    "away": "Saudi Arabia",
    "score": [
-    3,
+    1,
     0
    ]
   },
@@ -109,7 +109,7 @@
    "home": "Colombia",
    "away": "Congo DR",
    "score": [
-    3,
+    1,
     0
    ]
   },
@@ -117,15 +117,15 @@
    "home": "Colombia",
    "away": "Portugal",
    "score": [
-    0,
-    1
+    1,
+    2
    ]
   },
   {
    "home": "Congo DR",
    "away": "Uzbekistan",
    "score": [
-    3,
+    1,
     0
    ]
   },
@@ -133,7 +133,7 @@
    "home": "Croatia",
    "away": "Ghana",
    "score": [
-    3,
+    1,
     0
    ]
   },
@@ -141,8 +141,8 @@
    "home": "Curaçao",
    "away": "Ivory Coast",
    "score": [
-    2,
-    3
+    0,
+    2
    ]
   },
   {
@@ -165,8 +165,8 @@
    "home": "Ecuador",
    "away": "Curaçao",
    "score": [
-    3,
-    2
+    2,
+    0
    ]
   },
   {
@@ -181,7 +181,7 @@
    "home": "Egypt",
    "away": "Iran",
    "score": [
-    3,
+    2,
     1
    ]
   },
@@ -189,8 +189,8 @@
    "home": "England",
    "away": "Croatia",
    "score": [
-    3,
-    0
+    2,
+    1
    ]
   },
   {
@@ -205,7 +205,7 @@
    "home": "France",
    "away": "Iraq",
    "score": [
-    3,
+    1,
     0
    ]
   },
@@ -261,8 +261,8 @@
    "home": "Iraq",
    "away": "Norway",
    "score": [
-    2,
-    3
+    0,
+    2
    ]
   },
   {
@@ -309,7 +309,7 @@
    "home": "Mexico",
    "away": "South Korea",
    "score": [
-    3,
+    1,
     0
    ]
   },
@@ -317,7 +317,7 @@
    "home": "Morocco",
    "away": "Haiti",
    "score": [
-    3,
+    2,
     0
    ]
   },
@@ -333,8 +333,8 @@
    "home": "Netherlands",
    "away": "Sweden",
    "score": [
-    3,
-    1
+    1,
+    0
    ]
   },
   {
@@ -374,7 +374,7 @@
    "away": "Croatia",
    "score": [
     0,
-    3
+    1
    ]
   },
   {
@@ -405,8 +405,8 @@
    "home": "Portugal",
    "away": "Uzbekistan",
    "score": [
-    3,
-    1
+    2,
+    0
    ]
   },
   {
@@ -438,15 +438,15 @@
    "away": "Morocco",
    "score": [
     0,
-    3
+    1
    ]
   },
   {
    "home": "Senegal",
    "away": "Iraq",
    "score": [
-    3,
-    2
+    1,
+    0
    ]
   },
   {
@@ -454,7 +454,7 @@
    "away": "South Korea",
    "score": [
     0,
-    3
+    1
    ]
   },
   {
@@ -493,15 +493,15 @@
    "home": "Switzerland",
    "away": "Bosnia-Herzegovina",
    "score": [
-    3,
-    0
+    2,
+    1
    ]
   },
   {
    "home": "Switzerland",
    "away": "Canada",
    "score": [
-    3,
+    2,
     1
    ]
   },
@@ -517,8 +517,8 @@
    "home": "Tunisia",
    "away": "Netherlands",
    "score": [
-    2,
-    3
+    0,
+    1
    ]
   },
   {
@@ -557,7 +557,7 @@
    "home": "Uruguay",
    "away": "Cape Verde Islands",
    "score": [
-    3,
+    2,
     0
    ]
   },
@@ -566,7 +566,7 @@
    "away": "Spain",
    "score": [
     0,
-    3
+    1
    ]
   },
   {
@@ -968,6 +968,6 @@
   "best_player": "Kylian Mbappé",
   "top_scorer": "Kylian Mbappe",
   "best_young_player": "Lamine Yamal",
-  "golden_glove": "Emiliano Martínez"
+  "golden_glove": "Jordan Pickford"
  }
 }
