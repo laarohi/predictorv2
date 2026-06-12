@@ -453,6 +453,7 @@
 									youPlayer={youPlayer}
 									pointsExact={scoringConfig.exact_points}
 									pointsOutcome={scoringConfig.outcome_points}
+									rarityCap={scoringConfig.rarity_cap}
 								/>
 								<PnPointsBar
 									mode={phase}
@@ -646,6 +647,7 @@
 								compact={true}
 								pointsExact={scoringConfig.exact_points}
 								pointsOutcome={scoringConfig.outcome_points}
+								rarityCap={scoringConfig.rarity_cap}
 							/>
 							<PnPointsBar
 								mode={phase}

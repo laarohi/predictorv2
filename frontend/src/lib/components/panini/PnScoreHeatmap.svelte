@@ -15,6 +15,7 @@
 	import PnFlag from './PnFlag.svelte';
 	import type { BubbleCell, GridPlayer } from '$lib/utils/matchDetail';
 	import { classifyPick, heatColor, outcomeOf } from '$lib/utils/matchDetail';
+	import { logarithmicRarityBonus } from '$lib/utils/matchBreakdown';
 
 	export let mode: 'pre' | 'post';
 	export let homeCode: string;
@@ -26,6 +27,7 @@
 	/** Scoring values used to label hover tooltip points. */
 	export let pointsExact: number = 15;
 	export let pointsOutcome: number = 5;
+	export let rarityCap: number = 10;
 	/** Highest goal count per axis (from `gridAxes`). 4 is the floor; the
 	 *  grid grows row/column-wise for high-scoring picks or results. Must
 	 *  match what the caller passed to `buildCells`. */
@@ -36,6 +38,19 @@
 	$: awayGoals = Array.from({ length: awayMax + 1 }, (_, i) => i);
 
 	$: maxCount = Math.max(1, ...Object.values(cells).map((c) => c.players.length));
+
+	// Rarity bonus paid to everyone who called the actual outcome — same
+	// computation as PnMatchLeaderboard (shared logarithmic mirror of the
+	// backend), so the tooltip points match the rows below the grid.
+	$: totalPicks = Object.values(cells).reduce((n, c) => n + c.players.length, 0);
+	$: actualOutcome =
+		mode === 'post' && actual ? outcomeOf(actual.home_score, actual.away_score) : null;
+	$: correctCt = actualOutcome
+		? Object.values(cells)
+				.filter((c) => outcomeOf(c.h, c.a) === actualOutcome)
+				.reduce((n, c) => n + c.players.length, 0)
+		: 0;
+	$: rarBonus = actualOutcome ? logarithmicRarityBonus(totalPicks, correctCt, rarityCap) : 0;
 	// Clamp mirrors buildCells — a no-op when the axes came from gridAxes.
 	$: youH = youPlayer ? Math.min(homeMax, Math.max(0, youPlayer.home)) : -1;
 	$: youA = youPlayer ? Math.min(awayMax, Math.max(0, youPlayer.away)) : -1;
@@ -72,9 +87,9 @@
 		tip = null;
 	}
 
-	function pointsFor(kind: string): number {
-		if (kind === 'exact') return pointsExact + pointsOutcome;
-		if (kind === 'outcome') return pointsOutcome;
+	function pointsFor(kind: string, bonus: number): number {
+		if (kind === 'exact') return pointsExact + pointsOutcome + bonus;
+		if (kind === 'outcome') return pointsOutcome + bonus;
 		return 0;
 	}
 </script>
@@ -165,7 +180,7 @@
 			</div>
 			<ul>
 				{#each tip.cell.players as p (p.name)}
-					{@const pts = mode === 'post' ? pointsFor(tip.kind) : null}
+					{@const pts = mode === 'post' ? pointsFor(tip.kind, rarBonus) : null}
 					<li class={p.you ? 'you' : ''}>
 						<span>{p.you ? '◉ ' + p.name : p.name}</span>
 						{#if mode === 'post' && pts != null}

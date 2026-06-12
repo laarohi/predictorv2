@@ -742,6 +742,7 @@
 								youPlayer={modalYou}
 								pointsExact={scoringConfig.exact_points}
 								pointsOutcome={scoringConfig.outcome_points}
+								rarityCap={scoringConfig.rarity_cap}
 							/>
 							<!-- Same W/D/L distribution + rarity underbraces as the
 							     match detail page — one canonical component. -->
