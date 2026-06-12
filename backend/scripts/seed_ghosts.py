@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import json
 import sys
+import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -254,6 +255,38 @@ async def seed_crowd(session: AsyncSession) -> None:
           f"{len(answers)} bonus answers, winner = {stages['winner'][0]}")
 
 
+def _norm_name(s: str) -> str:
+    return "".join(
+        c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c)
+    ).casefold()
+
+
+async def _canonicalize_award_answers(
+    session: AsyncSession, answers: dict[str, str]
+) -> dict[str, str]:
+    """Map scraped market player names onto our players-table full_name
+    (accent/case-insensitive), so the ghost's answer string matches what
+    the admin will pick from the same dropdown. Unmatched names are kept
+    raw with a warning — bonus scoring then treats them as a miss unless
+    fixed by hand."""
+    from app.models.player import Player
+
+    rows = await session.execute(select(Player.full_name))
+    by_norm: dict[str, str] = {}
+    for (full_name,) in rows.all():
+        by_norm.setdefault(_norm_name(full_name), full_name)
+
+    out: dict[str, str] = {}
+    for qid, name in answers.items():
+        canon = by_norm.get(_norm_name(name))
+        if canon is None:
+            print(f"  warning: market answer '{name}' ({qid}) not in players table")
+            out[qid] = name
+        else:
+            out[qid] = canon
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Polymarket ghost
 # ---------------------------------------------------------------------------
@@ -306,7 +339,9 @@ async def seed_polymarket(session: AsyncSession) -> None:
 
     # Bonus: award answers straight from the market; the rest derived from
     # the ghost's own predicted scores / bracket.
-    answers: dict[str, str] = dict(data.get("award_answers", {}))
+    answers: dict[str, str] = await _canonicalize_award_answers(
+        session, dict(data.get("award_answers", {}))
+    )
     answers.update(derived_group_goal_answers(score_by_teams))
     rank_of = {team: i + 1 for i, team in enumerate(rankings)}
     all_teams = sorted({t for pair in score_by_teams for t in pair})

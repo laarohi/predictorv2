@@ -133,7 +133,8 @@ export async function pollLiveData(): Promise<void> {
 		// yank them off their Phase I/II tab and show overall rows under it.
 		if (get(leaderboardPhase) === 'overall') {
 			leaderboard.set(data.leaderboard);
-			totalParticipants.set(data.leaderboard.length);
+			// Ghosts are unranked extras — the participant count is humans only.
+			totalParticipants.set(data.leaderboard.filter((e) => !e.is_ghost).length);
 		}
 	} catch (e) {
 		leaderboardError.set(e instanceof Error ? e.message : 'Failed to load live data');
