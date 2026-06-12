@@ -12,6 +12,9 @@ READ
 - get_user_trajectory(session, user_id, days) — return the last `days` of
   snapshot points for one user (oldest first). The current live position is
   NOT included; the API endpoint prepends/appends it as needed.
+- get_all_trajectories(session) — the full snapshot history for every user,
+  grouped by user (each series oldest first). Backs the leaderboard's
+  Progression chart.
 """
 
 from __future__ import annotations
@@ -98,3 +101,22 @@ async def get_user_trajectory(
     stmt = stmt.order_by(LeaderboardSnapshot.captured_date.asc())
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_all_trajectories(
+    session: AsyncSession,
+) -> dict[uuid.UUID, list[LeaderboardSnapshot]]:
+    """Full snapshot history for every user, keyed by user id.
+
+    Each user's list is oldest first. One query for the whole tournament —
+    ~30 users × ~40 days stays trivially small, so no date filtering here;
+    the Progression chart wants the entire arc anyway.
+    """
+    stmt = select(LeaderboardSnapshot).order_by(
+        LeaderboardSnapshot.captured_date.asc()
+    )
+    result = await session.execute(stmt)
+    by_user: dict[uuid.UUID, list[LeaderboardSnapshot]] = {}
+    for snap in result.scalars().all():
+        by_user.setdefault(snap.user_id, []).append(snap)
+    return by_user

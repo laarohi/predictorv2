@@ -39,6 +39,23 @@ export async function getMyRankTrajectory(days: number = 7): Promise<RankTraject
 	return api.get<RankTrajectoryResponse>(`/leaderboard/snapshots/me?days=${days}`);
 }
 
+// ---- Progression (all-users rank history, backs the leaderboard sub-tab) ----
+
+export interface ProgressionSeries {
+	user_id: string;
+	user_name: string;
+	points: RankSnapshotPoint[];
+}
+
+export interface ProgressionResponse {
+	users: ProgressionSeries[]; // ordered by current position
+	total_participants: number;
+}
+
+export async function getProgression(): Promise<ProgressionResponse> {
+	return api.get<ProgressionResponse>('/leaderboard/progression');
+}
+
 // ---- Tournament winner pickers (post-competition) ---------------------------
 export interface TournamentWinnerPickers {
 	actual_winner: string | null;

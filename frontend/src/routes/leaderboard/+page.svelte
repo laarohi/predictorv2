@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
 	import { isAuthenticated, user } from '$stores/auth';
 	import {
 		fetchLeaderboard,
@@ -16,7 +17,9 @@
 		type LeaderboardPhase
 	} from '$stores/leaderboard';
 	import { getGroupTotal, type PhaseBreakdown, type PointBreakdown } from '$types';
+	import { getProgression, type ProgressionResponse } from '$lib/api/leaderboard';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
+	import PnBumpChart from '$components/panini/PnBumpChart.svelte';
 
 	$: if (!$isAuthenticated) {
 		goto('/login');
@@ -25,6 +28,9 @@
 	onMount(() => {
 		if ($isAuthenticated) {
 			startPolling(60000);
+			if ($page.url.searchParams.get('view') === 'progression') {
+				void setView('progression');
+			}
 		}
 	});
 
@@ -82,6 +88,23 @@
 		if (phase === 'phase_1') return getGroupTotal(b.phase1) + b.phase1.round_of_32_points + b.phase1.round_of_16_points + b.phase1.quarter_final_points + b.phase1.semi_final_points + b.phase1.final_points + b.phase1.winner_points;
 		if (phase === 'phase_2') return getGroupTotal(b.phase2) + b.phase2.round_of_32_points + b.phase2.round_of_16_points + b.phase2.quarter_final_points + b.phase2.semi_final_points + b.phase2.final_points + b.phase2.winner_points;
 		return b.bracket_total;
+	}
+
+	// Standings table vs Progression bump chart
+	type View = 'table' | 'progression';
+	let view: View = 'table';
+	let progression: ProgressionResponse | null = null;
+	let progressionLoading = false;
+	async function setView(v: View) {
+		view = v;
+		if (v === 'progression' && !progression && !progressionLoading) {
+			progressionLoading = true;
+			try {
+				progression = await getProgression();
+			} finally {
+				progressionLoading = false;
+			}
+		}
 	}
 
 	// Row expansion state
@@ -144,10 +167,18 @@
 		<div class="pn-desk">
 			<div class="pn-lb-h">
 				<div class="ttl">THE <em>STANDINGS</em></div>
-				<div class="pn-lb-tabs">
-					<button class:on={$leaderboardPhase === 'overall'} on:click={() => handlePhaseChange('overall')}>Overall</button>
-					<button class:on={$leaderboardPhase === 'phase_1'} on:click={() => handlePhaseChange('phase_1')}>Phase I</button>
-					<button class:on={$leaderboardPhase === 'phase_2'} on:click={() => handlePhaseChange('phase_2')}>Phase II</button>
+				<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 8px;">
+					<div class="pn-lb-view" style="margin-bottom: 0;">
+						<button class:on={view === 'table'} on:click={() => setView('table')}>Standings</button>
+						<button class:on={view === 'progression'} on:click={() => setView('progression')}>Progression</button>
+					</div>
+					{#if view === 'table'}
+						<div class="pn-lb-tabs">
+							<button class:on={$leaderboardPhase === 'overall'} on:click={() => handlePhaseChange('overall')}>Overall</button>
+							<button class:on={$leaderboardPhase === 'phase_1'} on:click={() => handlePhaseChange('phase_1')}>Phase I</button>
+							<button class:on={$leaderboardPhase === 'phase_2'} on:click={() => handlePhaseChange('phase_2')}>Phase II</button>
+						</div>
+					{/if}
 				</div>
 			</div>
 
@@ -173,6 +204,21 @@
 				</div>
 			{/if}
 
+			{#if view === 'progression'}
+				<div class="pn-card pn-lb-card">
+					<div class="pn-card-h">
+						<span>★ PROGRESSION · RANK BY DAY</span>
+						<span class="right">{#if progressionLoading}LOADING…{/if}</span>
+					</div>
+					<div class="pn-card-body" style="padding: 16px 20px 20px;">
+						{#if progression}
+							<PnBumpChart users={progression.users} youId={$user?.id ?? null} />
+						{:else if !progressionLoading}
+							<div style="padding: 24px; text-align: center; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No history yet</div>
+						{/if}
+					</div>
+				</div>
+			{:else}
 			<div class="pn-card pn-lb-card">
 				<div class="pn-card-h">
 					<span>★ STANDINGS · {$totalParticipants || $leaderboard.length} PLAYERS</span>
@@ -249,6 +295,7 @@
 					</table>
 				</div>
 			</div>
+			{/if}
 		</div>
 
 		<!-- ===== MOBILE ===== -->
@@ -258,11 +305,18 @@
 				<div class="meta">{$totalParticipants || $leaderboard.length} PLAYERS<br />{#if $lastCalculated}UPD {formatLastUpdated($lastCalculated)}{/if}</div>
 			</div>
 
+			<div class="pn-lb-view">
+				<button class:on={view === 'table'} on:click={() => setView('table')}>Standings</button>
+				<button class:on={view === 'progression'} on:click={() => setView('progression')}>Progression</button>
+			</div>
+
+			{#if view === 'table'}
 			<div class="pn-m-lb-tabs">
 				<button class:on={$leaderboardPhase === 'overall'} on:click={() => handlePhaseChange('overall')}>Overall</button>
 				<button class:on={$leaderboardPhase === 'phase_1'} on:click={() => handlePhaseChange('phase_1')}>Phase I</button>
 				<button class:on={$leaderboardPhase === 'phase_2'} on:click={() => handlePhaseChange('phase_2')}>Phase II</button>
 			</div>
+			{/if}
 
 			{#if $currentUserPosition}
 				<div class="pn-m-lb-self">
@@ -280,6 +334,17 @@
 				</div>
 			{/if}
 
+			{#if view === 'progression'}
+				<div class="pn-card" style="padding: 12px;">
+					{#if progression}
+						<PnBumpChart users={progression.users} youId={$user?.id ?? null} />
+					{:else}
+						<div style="padding: 24px; text-align: center; font-family: var(--mono); font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">
+							{progressionLoading ? 'Loading…' : 'No history yet'}
+						</div>
+					{/if}
+				</div>
+			{:else}
 			<div class="pn-m-lb-rows">
 				{#each $leaderboard as r (r.user_id)}
 					{@const isYou = r.user_id === $user?.id}
@@ -336,6 +401,7 @@
 					</div>
 				{/each}
 			</div>
+			{/if}
 		</div>
 	</PnPageShell>
 {/if}

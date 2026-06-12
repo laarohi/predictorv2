@@ -466,3 +466,84 @@
 	.pn .pn-desk { display: block; }
 	.pn .pn-mob { display: none; }
 }
+
+/* ===== Progression bump chart (PnBumpChart) =====
+ * Sub-view of the Standings page: rank-over-time lines for every player.
+ * Shared by desktop and mobile — the SVG widens per day and the wrapper
+ * scrolls horizontally when it overflows. */
+.pn .pn-lb-view {
+	display: flex;
+	border: 2px solid var(--ink);
+	width: fit-content;
+	margin-bottom: 18px;
+}
+.pn .pn-lb-view button {
+	background: var(--paper);
+	border: 0;
+	border-right: 2px solid var(--ink);
+	padding: 8px 16px;
+	font-family: var(--display);
+	font-size: 12px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	color: var(--ink);
+	cursor: pointer;
+}
+.pn .pn-lb-view button:last-child { border-right: 0; }
+.pn .pn-lb-view button.on { background: var(--ink); color: var(--paper); }
+
+.pn .pn-bump-scroll {
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	padding: 4px 0 8px;
+}
+.pn .pn-bump svg { display: block; }
+.pn .pn-bump .grid {
+	stroke: var(--paper-3);
+	stroke-width: 1;
+}
+.pn .pn-bump .tick {
+	font-family: var(--mono);
+	font-size: 10px;
+	fill: var(--ink-3);
+	text-anchor: middle;
+	text-transform: uppercase;
+}
+.pn .pn-bump .ln {
+	fill: none;
+	stroke-linejoin: round;
+	stroke-linecap: round;
+}
+.pn .pn-bump .ln.dim {
+	stroke: var(--paper-3);
+	stroke-width: 1.5;
+}
+.pn .pn-bump .ln.hot { stroke-width: 3; }
+.pn .pn-bump .endlab {
+	font-family: var(--display);
+	font-size: 12px;
+}
+.pn .pn-bump-legend {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 12px;
+	border-top: 2px solid var(--ink);
+	padding-top: 12px;
+}
+.pn .pn-bump-legend .chip {
+	border: 2px solid var(--ink);
+	background: var(--paper);
+	color: var(--ink);
+	font-family: var(--mono);
+	font-size: 11px;
+	padding: 4px 10px;
+	cursor: pointer;
+	text-transform: uppercase;
+	letter-spacing: 0.03em;
+}
+.pn .pn-bump-legend .chip.on {
+	background: var(--chip, var(--ink));
+	border-color: var(--chip, var(--ink));
+	color: var(--paper);
+}

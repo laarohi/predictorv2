@@ -12,7 +12,7 @@ from app.models._datetime import utc_now
 from app.schemas.leaderboard import LeaderboardResponse, PointBreakdown
 from app.services.leaderboard import calculate_leaderboard, invalidate_cache
 from app.services.scoring import calculate_user_points, get_scoring_config, SCORING_STRATEGIES
-from app.services.snapshots import get_user_trajectory
+from app.services.snapshots import get_all_trajectories, get_user_trajectory
 
 router = APIRouter()
 
@@ -177,6 +177,67 @@ async def _build_trajectory(
         user_id=user_id,
         points=points,
         total_participants=live.total_participants,
+    )
+
+
+class ProgressionSeries(BaseModel):
+    """One user's full rank history for the Progression chart."""
+
+    user_id: uuid.UUID
+    user_name: str
+    points: list[RankSnapshotPoint]
+
+
+class ProgressionResponse(BaseModel):
+    """Every participant's rank trajectory across the whole tournament.
+
+    Each series is oldest → newest and ends with the user's live current
+    rank (same convention as /snapshots/me). Users are ordered by current
+    position so the frontend's "highlight the top 3" default needs no sort.
+    """
+
+    users: list[ProgressionSeries]
+    total_participants: int
+
+
+@router.get("/progression", response_model=ProgressionResponse)
+async def get_progression(session: DbSession, _user: CurrentUser) -> ProgressionResponse:
+    """All-users rank trajectories — backs the leaderboard Progression tab."""
+    by_user = await get_all_trajectories(session)
+    live = await calculate_leaderboard(session, phase=None)
+    today = utc_now().date()
+
+    series: list[ProgressionSeries] = []
+    for entry in live.entries:  # already sorted by current position
+        points = [
+            RankSnapshotPoint(
+                position=s.position,
+                total_points=s.total_points,
+                exact_scores=s.exact_scores,
+                correct_outcomes=s.correct_outcomes,
+                captured_date=s.captured_date,
+            )
+            for s in by_user.get(entry.user_id, [])
+        ]
+        live_point = RankSnapshotPoint(
+            position=entry.position,
+            total_points=entry.total_points,
+            exact_scores=entry.exact_scores,
+            correct_outcomes=entry.correct_outcomes,
+            captured_date=today,
+        )
+        if points and points[-1].captured_date == today:
+            points[-1] = live_point
+        else:
+            points.append(live_point)
+        series.append(
+            ProgressionSeries(
+                user_id=entry.user_id, user_name=entry.user_name, points=points
+            )
+        )
+
+    return ProgressionResponse(
+        users=series, total_participants=live.total_participants
     )
 
 
