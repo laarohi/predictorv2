@@ -553,15 +553,16 @@
  * position number, slightly muted row so they read as reference, not
  * competition. */
 .pn .ghost-chip {
-	display: inline-block;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	background: var(--navy);
 	color: var(--paper);
-	font-family: var(--mono);
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.06em;
-	padding: 2px 6px;
+	width: 24px;
+	height: 24px;
 	border: 2px solid var(--ink);
+	/* sanctioned decorative tilt: small accent chips only, never cards */
+	transform: rotate(-4deg);
 }
 .pn .pn-lb-table tr.ghost td { background: var(--paper-2); }
 .pn .pn-lb-table tr.ghost .nm-cell { font-style: italic; }

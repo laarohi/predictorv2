@@ -20,6 +20,7 @@
 	import { getProgression, type ProgressionResponse } from '$lib/api/leaderboard';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import PnBumpChart from '$components/panini/PnBumpChart.svelte';
+	import PnIcon from '$components/panini/PnIcon.svelte';
 
 	$: if (!$isAuthenticated) {
 		goto('/login');
@@ -247,7 +248,11 @@
 								{@const isOpen = expanded.has(r.user_id)}
 								<tr class:you={isYou} class:ghost={r.is_ghost} class:open={isOpen} on:click={() => toggle(r.user_id)} style="cursor: pointer;">
 									<td class="pos" class:gold={!r.is_ghost && r.position <= 3}>
-										{#if r.is_ghost}<span class="ghost-chip">BOT</span>{:else}{r.position}{/if}
+										{#if r.is_ghost}
+											<span class="ghost-chip" role="img" aria-label="Unranked bot entry" title="Unranked bot — for reference only">
+												<PnIcon name="ghost" size={14} color="var(--paper)" />
+											</span>
+										{:else}{r.position}{/if}
 									</td>
 									<td class="nm-cell">
 										<a href="/profile/{r.user_id}" style="color: inherit; text-decoration: none;" on:click|stopPropagation>
@@ -362,7 +367,13 @@
 						on:click={() => toggle(r.user_id)}
 						on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && toggle(r.user_id)}
 					>
-						<div class="pos">{#if r.is_ghost}<span class="ghost-chip">BOT</span>{:else}{r.position}{/if}</div>
+						<div class="pos">
+							{#if r.is_ghost}
+								<span class="ghost-chip" role="img" aria-label="Unranked bot entry">
+									<PnIcon name="ghost" size={13} color="var(--paper)" />
+								</span>
+							{:else}{r.position}{/if}
+						</div>
 						<div>
 							<div class="nm">
 								<!-- Name navigates to the profile; the rest of the row still toggles. -->

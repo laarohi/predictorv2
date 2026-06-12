@@ -35,6 +35,7 @@
 		leaderboard,
 		totalParticipants
 	} from '$stores/leaderboard';
+	import { humanEntries } from '$lib/utils/ghosts';
 	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
 	import { getMyRankTrajectory, type RankTrajectoryResponse } from '$api/leaderboard';
 	import { getBracketExposure, type BracketExposureResponse } from '$api/predictions';
@@ -270,7 +271,7 @@
 	// regardless of where the user sits on the leaderboard.
 	// Ghost entrants (crowd/market bots) are a leaderboard-page feature —
 	// the dashboard mini-standings shows ranked humans only.
-	$: rankedBoard = $leaderboard.filter((e) => !e.is_ghost);
+	$: rankedBoard = humanEntries($leaderboard);
 	$: topFive = rankedBoard.slice(0, youRow ? 4 : 5).map((e) => ({
 		userId: e.user_id,
 		position: e.position,

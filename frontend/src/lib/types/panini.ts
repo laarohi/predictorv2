@@ -17,6 +17,7 @@ export type IconName =
 	| 'star'
 	| 'lock'
 	| 'clock'
+	| 'ghost'
 	| 'whistle'
 	| 'user'
 	| 'cog';

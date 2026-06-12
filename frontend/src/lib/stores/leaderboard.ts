@@ -8,6 +8,7 @@ import * as leaderboardApi from '$api/leaderboard';
 import type { PhaseFilter } from '$api/leaderboard';
 import * as scoresApi from '$api/scores';
 import { user } from './auth';
+import { humanCount } from '$lib/utils/ghosts';
 import type { LeaderboardEntry, LeaderboardResponse, PointBreakdown, LiveMatchScore } from '$types';
 
 // Phase filter type
@@ -134,7 +135,7 @@ export async function pollLiveData(): Promise<void> {
 		if (get(leaderboardPhase) === 'overall') {
 			leaderboard.set(data.leaderboard);
 			// Ghosts are unranked extras — the participant count is humans only.
-			totalParticipants.set(data.leaderboard.filter((e) => !e.is_ghost).length);
+			totalParticipants.set(humanCount(data.leaderboard));
 		}
 	} catch (e) {
 		leaderboardError.set(e instanceof Error ? e.message : 'Failed to load live data');

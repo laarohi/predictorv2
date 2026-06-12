@@ -21,7 +21,16 @@
 	style="--ic-color: {color};"
 	aria-hidden="true"
 >
-	{#if name === 'ball'}
+	{#if name === 'ghost'}
+		<!-- classic sheet ghost: dome head, wavy hem, two eyes -->
+		<path
+			d="M12 3a7 7 0 00-7 7v10.5l2.33-2 2.33 2 2.34-2 2.34 2 2.33-2 2.33 2V10a7 7 0 00-7-7z"
+			fill={color}
+			stroke="none"
+		/>
+		<circle cx="9.5" cy="10.5" r="1.4" fill="#fff" stroke="none" />
+		<circle cx="14.5" cy="10.5" r="1.4" fill="#fff" stroke="none" />
+	{:else if name === 'ball'}
 		<circle cx="12" cy="12" r="9" fill={color} />
 		<polygon points="12,7 16,10 14.5,14.5 9.5,14.5 8,10" fill="#fff" stroke="#fff" />
 	{:else if name === 'home'}
