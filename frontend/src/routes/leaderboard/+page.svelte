@@ -296,7 +296,12 @@
 					>
 						<div class="pos">{r.position}</div>
 						<div>
-							<div class="nm">{r.user_name}</div>
+							<div class="nm">
+								<!-- Name navigates to the profile; the rest of the row still toggles. -->
+								<a href="/profile/{r.user_id}" style="color: inherit; text-decoration: none;" on:click|stopPropagation>
+									{r.user_name}
+								</a>
+							</div>
 							<div class="h">{r.exact_scores} ex · {r.correct_outcomes} outc · <span class="chev">▾</span></div>
 						</div>
 						<div class="pts">{r.total_points}</div>
