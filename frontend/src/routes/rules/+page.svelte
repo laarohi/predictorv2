@@ -77,16 +77,18 @@
 	}));
 
 	onMount(async () => {
-		try {
-			[info, scoring, bonusQuestions] = await Promise.all([
-				getCompetitionInfo(),
-				getScoringConfig(),
-				getBonusQuestions()
-			]);
-		} catch (_e) {
-			// Public endpoints — failure usually means backend is down. Page
-			// still renders with the static fallbacks above.
-		}
+		// Independent fetches: one transient failure must not null the other
+		// two (Promise.all once left `info` unset after a blip, pinning the
+		// rarity table to the illustrative 25-player fallback). Each falls
+		// back to its static default alone.
+		const [infoRes, scoringRes, bonusRes] = await Promise.allSettled([
+			getCompetitionInfo(),
+			getScoringConfig(),
+			getBonusQuestions()
+		]);
+		if (infoRes.status === 'fulfilled') info = infoRes.value;
+		if (scoringRes.status === 'fulfilled') scoring = scoringRes.value;
+		if (bonusRes.status === 'fulfilled') bonusQuestions = bonusRes.value;
 	});
 
 	function fmtCurrency(n: number): string {

@@ -56,12 +56,15 @@ async def get_competition_info(session: DbSession) -> CompetitionInfo:
         )
 
     total = await session.scalar(
-        select(func.count(User.id)).where(User.is_active == True)  # noqa: E712
+        select(func.count(User.id)).where(
+            User.is_active == True, User.is_ghost == False  # noqa: E712
+        )
     )
     paid = await session.scalar(
         select(func.count(User.id))
         .where(User.is_active == True)  # noqa: E712
         .where(User.paid == True)  # noqa: E712
+        .where(User.is_ghost == False)  # noqa: E712
     )
 
     # YAML is the source of truth for entry_fee — the dashboard payment

@@ -241,6 +241,20 @@ async def test_agreements_exclude_ghosts(session):
 
 
 @pytest.mark.asyncio
+async def test_competition_info_counts_humans_only(session):
+    """/api/competition/info feeds the public rules page ("N players
+    signed up" + the rarity-band table's pool size) — ghosts must not
+    inflate either count."""
+    from app.api.competition import get_competition_info
+
+    await _seed(session, with_ghost_predictions=True)
+
+    info = await get_competition_info(session)
+    assert info.total_players == 2
+    assert info.paid_players == 0
+
+
+@pytest.mark.asyncio
 async def test_daily_snapshots_skip_ghost_rows(session):
     """take_daily_snapshots writes rows for humans only (ghosts have no
     rank, so a snapshot row would be meaningless and would leak into the
