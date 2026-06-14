@@ -194,9 +194,9 @@
 							<span style="background: var(--paper); color: var(--red); padding: 2px 6px; font-size: 11px; margin-left: 8px;">YOU</span>
 						</div>
 						<div class="sub">
-							{yourExact} exact · {yourOutcomes} outcomes
+							{yourOutcomes} outcomes · {yourExact} exact
 							{#if yourMovement !== 0}
-								· {yourMovement > 0 ? '▲' : '▼'}{Math.abs(yourMovement)} last update
+								· {yourMovement > 0 ? '▲' : '▼'}{Math.abs(yourMovement)} since yesterday
 							{/if}
 						</div>
 					</div>
@@ -233,8 +233,8 @@
 							<tr>
 								<th>#</th>
 								<th>Player</th>
-								<th class="c">Exact</th>
 								<th class="c">Outcome</th>
+								<th class="c">Exact</th>
 								<th class="c">Bonus</th>
 								<th class="c">Bracket</th>
 								<th class="r">Total</th>
@@ -260,8 +260,8 @@
 											<span class="h">{isYou ? 'YOU' : r.is_ghost ? 'UNRANKED' : `@${r.user_name.split(' ')[0].toLowerCase()}`}</span>
 										</a>
 									</td>
-									<td class="c exact">{exactPts(r.breakdown, $leaderboardPhase)}</td>
 									<td class="c">{outcomePts(r.breakdown, $leaderboardPhase)}</td>
+									<td class="c exact">{exactPts(r.breakdown, $leaderboardPhase)}</td>
 									<td class="c bonus">{bonusPts(r.breakdown, $leaderboardPhase)}</td>
 									<td class="c bracket">{bracketPts(r.breakdown, $leaderboardPhase)}</td>
 									<td class="r total">{#if isYou}<em>{r.total_points}</em>{:else}{r.total_points}{/if}</td>
@@ -381,7 +381,7 @@
 									{r.user_name}
 								</a>
 							</div>
-							<div class="h">{r.exact_scores} ex · {r.correct_outcomes} outc · <span class="chev">▾</span></div>
+							<div class="h">{r.correct_outcomes} outc · {r.exact_scores} ex · <span class="chev">▾</span></div>
 						</div>
 						<div class="pts">{r.total_points}</div>
 						<div class="mv">
