@@ -6,8 +6,8 @@ Supports filtering by phase (overall, phase_1, phase_2).
 
 import asyncio
 import uuid
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from dataclasses import dataclass
+from datetime import date, datetime, timedelta
 
 from app.models._datetime import utc_now
 from typing import Literal
@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
 from app.models.fixture import Fixture, MatchStatus
+from app.models.leaderboard_snapshot import LeaderboardSnapshot
 from app.models.prediction import MatchPrediction
 from app.models.score import Score
 from app.models.user import User
@@ -34,8 +35,6 @@ class CachedLeaderboard:
     last_calculated: datetime
     total_participants: int
     phase: str | None
-    # Previous positions for movement tracking
-    previous_positions: dict[uuid.UUID, int] = field(default_factory=dict)
 
 
 # In-memory cache - keyed by phase.
@@ -56,6 +55,35 @@ def _lock_for(cache_key: str) -> asyncio.Lock:
         lock = asyncio.Lock()
         _cache_locks[cache_key] = lock
     return lock
+
+
+async def _previous_day_positions(
+    session: AsyncSession, today: date
+) -> dict[uuid.UUID, int]:
+    """Each user's most recent leaderboard position from a PRIOR day.
+
+    Backs the day-over-day movement chip (▲/▼ N). We deliberately diff
+    against the latest snapshot with ``captured_date < today`` rather than
+    against the previous cache rebuild: rebuilds happen every 30s and reset
+    their own baseline, so nobody's rank ever "moves" between two of them and
+    the chip read ±0 even after a real climb. Yesterday's snapshot is a
+    stable reference, and it's the SAME point the trajectory chart's final
+    segment compares the live rank against — so chip and chart agree.
+
+    Loaded with a portable ordered scan (last-write-wins per user) instead of
+    Postgres ``DISTINCT ON`` so the query also runs under sqlite in tests.
+    The snapshot set is ~users × days — small enough that the full scan beats
+    the round-trips of a per-user query.
+    """
+    result = await session.execute(
+        select(LeaderboardSnapshot.user_id, LeaderboardSnapshot.position)
+        .where(LeaderboardSnapshot.captured_date < today)
+        .order_by(LeaderboardSnapshot.captured_date.asc())
+    )
+    positions: dict[uuid.UUID, int] = {}
+    for user_id, position in result.all():
+        positions[user_id] = position  # ascending order → latest prior day wins
+    return positions
 
 
 def _response_from_cache(cached: CachedLeaderboard) -> LeaderboardResponse:
@@ -156,10 +184,11 @@ async def calculate_leaderboard(
 
         now = utc_now()
 
-        # Store previous positions for movement tracking
-        previous_positions: dict[uuid.UUID, int] = {}
-        if cache_key in _cache:
-            previous_positions = {e.user_id: e.position for e in _cache[cache_key].entries}
+        # Day-over-day movement baseline: each user's latest position from a
+        # prior calendar day (UTC, matching the snapshot write path). See
+        # _previous_day_positions for why this replaced the old "diff vs last
+        # cache rebuild" logic, which was ~always a no-op.
+        prev_day_positions = await _previous_day_positions(session, now.date())
 
         # Get all active users
         result = await session.execute(select(User).where(User.is_active == True))
@@ -232,8 +261,8 @@ async def calculate_leaderboard(
                 current_position = i + 1
             entry.position = current_position
 
-            # Calculate movement from previous position
-            prev_pos = previous_positions.get(entry.user_id)
+            # Day-over-day movement vs the latest prior-day snapshot.
+            prev_pos = prev_day_positions.get(entry.user_id)
             if prev_pos is not None:
                 entry.movement = prev_pos - entry.position  # Positive = moved up
 
@@ -243,7 +272,6 @@ async def calculate_leaderboard(
             last_calculated=now,
             total_participants=len(ranked),
             phase=phase,
-            previous_positions={e.user_id: e.position for e in ranked},
         )
 
         return _response_from_cache(_cache[cache_key])
