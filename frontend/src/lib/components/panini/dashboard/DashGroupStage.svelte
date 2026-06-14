@@ -31,12 +31,18 @@
 	import { humanEntries } from '$lib/utils/ghosts';
 	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
 	import { getMyRankTrajectory, type RankTrajectoryResponse } from '$api/leaderboard';
+	import { getAgreements, type FixtureAgreement } from '$api/predictions';
+	import { getScoringConfig, type ScoringConfig } from '$api/competition';
 	import { teamCode } from '$lib/utils/teamCodes';
 	import { goto } from '$app/navigation';
-	import { koChipLabel } from '$lib/utils/matchBreakdown';
-	import type { Fixture } from '$types';
+	import { koChipLabel, computeMatchPoints } from '$lib/utils/matchBreakdown';
+	import type { Fixture, MatchPrediction } from '$types';
 
 	let trajectoryData: RankTrajectoryResponse | null = null;
+	// Per-fixture predictor counts + scoring config — needed to fold the
+	// rarity (hybrid) bonus into the group totals, matching the leaderboard.
+	let agreements: FixtureAgreement[] = [];
+	let scoringConfig: ScoringConfig | null = null;
 
 	onMount(async () => {
 		fetchAllFixtures();
@@ -46,6 +52,15 @@
 			trajectoryData = await getMyRankTrajectory(5);
 		} catch {
 			trajectoryData = null;
+		}
+		try {
+			// Independent of the trajectory fetch: a failure here just leaves the
+			// group strip on outcome+exact (no rarity) rather than blanking it.
+			const [agg, cfg] = await Promise.all([getAgreements(), getScoringConfig()]);
+			agreements = agg;
+			scoringConfig = cfg;
+		} catch {
+			/* keep the flat fallback */
 		}
 	});
 
@@ -213,18 +228,74 @@
 	$: upcomingLive = upcoming.filter((f) => f.status === 'live' || f.status === 'halftime').length;
 
 	// ---- Per-group point totals ------------------------------------------
-	$: groupBreakdown = (() => {
-		const map = new Map<string, number>();
-		for (const f of $fixtures) {
+	// Split each finished group match into outcome / exact / rarity-bonus,
+	// then sum per group. The rarity bonus needs per-fixture predictor counts
+	// (agreements) + the scoring config, so we route through the SAME
+	// `computeMatchPoints` mirror the Results page and the backend use — the
+	// group total then equals the user's real leaderboard contribution from
+	// the group stage, not a flat outcome+exact approximation.
+	$: agreementMap = new Map(agreements.map((a) => [a.fixture_id, a]));
+	$: groupBreakdown = buildGroupBreakdown(
+		$fixtures,
+		$predictionsByFixture,
+		scoringConfig,
+		agreementMap
+	);
+
+	function matchSplit(
+		f: Fixture,
+		pred: MatchPrediction | undefined,
+		cfg: ScoringConfig | null,
+		ag: FixtureAgreement | undefined
+	): { outcome: number; exact: number; bonus: number } {
+		if (!pred || f.status !== 'finished' || !f.score) {
+			return { outcome: 0, exact: 0, bonus: 0 };
+		}
+		const outcomePts = cfg?.outcome_points ?? POINTS_PER_OUTCOME;
+		const exactPts = cfg?.exact_points ?? POINTS_PER_EXACT_BONUS;
+		const res = computeMatchPoints({
+			// Until the config loads, 'fixed' yields outcome+exact with no
+			// rarity — the bonus simply fills in once agreements arrive.
+			mode: cfg?.mode ?? 'fixed',
+			predictedHome: pred.home_score,
+			predictedAway: pred.away_score,
+			actualHome: f.score.home_score,
+			actualAway: f.score.away_score,
+			totalPredictors: ag?.total ?? 0,
+			correctPredictors: ag?.agrees_outcome ?? 0,
+			outcomePoints: outcomePts,
+			exactPoints: exactPts,
+			cap: cfg?.rarity_cap ?? 10
+		});
+		const outcome = res.correctOutcome ? outcomePts : 0;
+		const exact = res.exactScore ? exactPts : 0;
+		// Whatever's left after outcome+exact IS the rarity bonus — so the
+		// three buckets always sum back to the parity-tested total.
+		return { outcome, exact, bonus: res.points - outcome - exact };
+	}
+
+	function buildGroupBreakdown(
+		allFixtures: Fixture[],
+		preds: Map<string, MatchPrediction>,
+		cfg: ScoringConfig | null,
+		agMap: Map<string, FixtureAgreement>
+	): Array<{ group: string; outcome: number; exact: number; bonus: number }> {
+		const map = new Map<string, { outcome: number; exact: number; bonus: number }>();
+		for (const f of allFixtures) {
 			if (f.stage !== 'group' || !f.group) continue;
 			if (f.status !== 'finished') continue;
-			map.set(f.group, (map.get(f.group) ?? 0) + pointsFor(pickResult(f)));
+			const part = matchSplit(f, preds.get(f.id), cfg, agMap.get(f.id));
+			const cur = map.get(f.group) ?? { outcome: 0, exact: 0, bonus: 0 };
+			cur.outcome += part.outcome;
+			cur.exact += part.exact;
+			cur.bonus += part.bonus;
+			map.set(f.group, cur);
 		}
 		const groups = Array.from({ length: 12 }, (_, i) =>
 			String.fromCharCode('A'.charCodeAt(0) + i)
 		);
-		return groups.map((g) => ({ group: g, points: map.get(g) ?? 0 }));
-	})();
+		return groups.map((g) => ({ group: g, ...(map.get(g) ?? { outcome: 0, exact: 0, bonus: 0 }) }));
+	}
 
 	// ---- KPI values (real backend data) -----------------------------------
 	$: rank = $currentUserPosition?.position ?? null;
