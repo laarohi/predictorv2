@@ -368,6 +368,81 @@
 	letter-spacing: 0.04em;
 }
 
+/* Prize split — official cash payouts. Shares the bracket table's visual
+ * grammar (ink header, hard borders, gold headline row) so it reads as part
+ * of the same scoring/rewards language rather than a bolt-on. */
+.pn .pn-rl-prizes {
+	border: 2px solid var(--ink);
+	background: var(--paper);
+}
+.pn .pn-rl-prizes-head {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: center;
+	padding: 9px 16px;
+	background: var(--ink);
+	color: var(--paper);
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+}
+.pn .pn-rl-prizes-head .right { text-align: right; }
+.pn .pn-rl-prizes-row {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: center;
+	column-gap: 18px;
+	padding: 11px 16px;
+	border-top: 1px solid var(--paper-3);
+}
+.pn .pn-rl-prizes-row .lbl {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+.pn .pn-rl-prizes-row .lbl b {
+	font-family: var(--body);
+	font-size: 14px;
+	color: var(--ink);
+}
+.pn .pn-rl-prizes-row .lbl .note {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.04em;
+	color: var(--ink-3);
+	text-transform: uppercase;
+}
+.pn .pn-rl-prizes-row .amt {
+	font-family: var(--display);
+	font-size: 26px;
+	line-height: 1;
+	color: var(--ink);
+	text-align: right;
+}
+.pn .pn-rl-prizes-row.headline { background: rgba(212, 154, 46, 0.18); }
+.pn .pn-rl-prizes-row.headline .lbl b { color: var(--red); }
+.pn .pn-rl-prizes-row.headline .amt { color: var(--red); }
+.pn .pn-rl-prizes-foot {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	align-items: center;
+	border-top: 2px solid var(--ink);
+	padding: 10px 16px;
+	background: var(--paper-2);
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.14em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
+.pn .pn-rl-prizes-foot .amt {
+	font-family: var(--display);
+	font-size: 18px;
+	letter-spacing: 0;
+	color: var(--ink);
+}
+
 /* Final "fine print" rules list */
 .pn .pn-rl-print {
 	display: flex;

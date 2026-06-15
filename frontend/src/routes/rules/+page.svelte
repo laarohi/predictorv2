@@ -56,6 +56,21 @@
 		{ key: 'winner', label: 'Tournament winner' }
 	];
 
+	// Official WC2026 prize split — fixed cash payouts decided by the admin
+	// before Phase I locks. These are flat amounts (not a % of the live pool):
+	// the section copy promises they won't move after kick-off, so they must
+	// NOT be derived from `poolTotal` (which grows as buy-ins land). Total
+	// assumes the full 27 × €30 = €810 pool. If a future pool ever varies the
+	// split, lift this into the competition config and serve it via
+	// /competition/info rather than editing it here.
+	const PRIZES: Array<{ label: string; note: string; amount: number; headline?: boolean }> = [
+		{ label: 'Overall winner', note: 'Highest combined Phase I + II score', amount: 400, headline: true },
+		{ label: 'Overall runner-up', note: 'Second on the final leaderboard', amount: 110 },
+		{ label: 'Group stage winner', note: 'Top Phase I score', amount: 150 },
+		{ label: 'Phase II winner', note: 'Top Phase II score', amount: 150 }
+	];
+	const prizeTotal = PRIZES.reduce((sum, p) => sum + p.amount, 0);
+
 	$: RARITY_CAP = scoring?.rarity_cap ?? RARITY_CAP_FALLBACK;
 
 	// Phase 1 round table + the standalone group-position bonus (the endpoint
@@ -385,10 +400,34 @@
 				</div>
 			</div>
 			<p style="margin-top: 14px;">
-				<b>Prize distribution</b> is decided by the admin pre-tournament and announced in the
-				competition group chat. A common split: <b>60 / 25 / 15</b> for 1st / 2nd / 3rd, or
-				winner-takes-all for small pools. Final split is fixed before Phase I locks and won't
-				change after kick-off.
+				<b>Prize distribution</b> is fixed by the admin before Phase I locks and won't change
+				after kick-off. This year's {fmtCurrency(prizeTotal)} pot pays out across four prizes —
+				one for each headline race:
+			</p>
+			<div class="pn-rl-prizes">
+				<div class="pn-rl-prizes-head">
+					<span>Prize</span>
+					<span class="right">Payout</span>
+				</div>
+				{#each PRIZES as prize}
+					<div class="pn-rl-prizes-row" class:headline={prize.headline}>
+						<span class="lbl">
+							<b>{prize.label}</b>
+							<span class="note">{prize.note}</span>
+						</span>
+						<span class="amt">{fmtCurrency(prize.amount)}</span>
+					</div>
+				{/each}
+				<div class="pn-rl-prizes-foot">
+					<span>Total prize pool</span>
+					<span class="amt">{fmtCurrency(prizeTotal)}</span>
+				</div>
+			</div>
+			<p style="margin-top: 14px;">
+				Prizes <b>stack</b> — whoever wins overall still collects the Group stage or Phase II
+				prize if they topped that phase too. The overall winner and runner-up are decided on
+				combined Phase I + II score; the two phase prizes go to the highest score within that
+				phase alone.
 			</p>
 		</div>
 	</section>
