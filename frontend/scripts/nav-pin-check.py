@@ -1,27 +1,37 @@
 #!/usr/bin/env python3
 """Verify the mobile bottom nav stays pinned to the viewport bottom.
 
-The nav is position:sticky on the page shell's .mobile-only wrapper
-(commit 3fdf489 — iOS standalone strands position:fixed layers). Sticky
-fails SILENTLY if any ancestor becomes a scroll container (an
-overflow-x:hidden is enough), if a route scrolls an inner element
-instead of the document, or if the shell's height math leaves the nav's
-natural position off the visual bottom. Those are layout-engine
-behaviours, so they reproduce in Playwright's WEBKIT build (the iOS
-Safari engine) with iPhone emulation — this script is the regression
-loop for them. (The one thing it can't reproduce is the iOS standalone
-compositor losing track of layers on app resume / keyboard dismissal —
-see the visualViewport nudge in PnBottomNav.)
+ARCHITECTURE (post nav-stranding deep-dive): the app uses an APP-SHELL layout.
+The page shell (.pn-shell) is exactly one viewport tall and overflow:hidden —
+it NEVER scrolls. The inner <main class="pn-body"> is the SINGLE scroll
+container, and the bottom nav is a STATIC in-flow flex child that sits at the
+bottom by layout (not position:sticky/fixed). That removes the nav from the
+viewport-anchored composited-layer class that iOS standalone WebKit strands at
+a stale offset on app resume — the Heisenbug the earlier fixed→sticky + nudge
++ dvh attempts could not kill.
 
-For every route it checks, at top / mid / bottom scroll and after a
-viewport-height shrink+restore (keyboard-ish resize):
+This script is the LAYOUT regression loop for that model. It runs in
+Playwright's WEBKIT build (the iOS Safari engine) with iPhone emulation and,
+for every route, asserts the app-shell invariants:
 
-    nav.getBoundingClientRect().bottom == window.innerHeight  (±2px)
+    1. nav.getBoundingClientRect().bottom == window.innerHeight  (±2px)
+       at top / mid / bottom scroll, after viewport shrink+restore, and
+       through a focus-shrink-blur-restore keyboard cycle.
+    2. The DOCUMENT does not scroll — .pn-body is the only scroller.
+    3. No position:fixed element is a descendant of .pn-body. A fixed child
+       inside a -webkit-overflow-scrolling:touch container can ALSO strand on
+       iOS — i.e. this is the way the bug could be silently reintroduced.
+
+What it CANNOT reproduce is the on-device compositor stranding itself: that
+needs a real OS suspend/resume of an installed standalone PWA (GPU layer
+teardown), which headless WebKit never undergoes. A green run here is
+necessary but NOT sufficient — the only valid acceptance gate is the on-device
+background+resume loop. See the deep-dive notes / project memory.
 
 Run (dev stack up, dev login armed — see dev-screenshot.py):
     python3 frontend/scripts/nav-pin-check.py            # all routes
     python3 frontend/scripts/nav-pin-check.py /results   # one route
-Exits non-zero on any unpinned position, printing route + scenario.
+Exits non-zero on any violation, printing route + scenario.
 """
 
 import json
@@ -71,6 +81,44 @@ def nav_gap(page) -> float | None:
     )
 
 
+def body_metrics(page) -> dict | None:
+    """Scroll metrics of the inner .pn-body scroller (None if absent)."""
+    return page.evaluate(
+        """() => {
+            const b = document.querySelector('.pn-shell main.pn-body');
+            if (!b) return null;
+            return { scrollH: b.scrollHeight, clientH: b.clientHeight };
+        }"""
+    )
+
+
+def scroll_body(page, y: float) -> None:
+    page.evaluate(
+        "(y) => { const b = document.querySelector('.pn-shell main.pn-body'); if (b) b.scrollTop = y; }",
+        y,
+    )
+
+
+def document_scrolls(page) -> bool:
+    """App-shell invariant: the document itself must NOT scroll."""
+    return page.evaluate(
+        "() => document.scrollingElement.scrollHeight > window.innerHeight + 2"
+    )
+
+
+def fixed_in_scroller(page) -> int:
+    """Count position:fixed elements nested inside .pn-body — these can strand
+    inside an iOS momentum scroller and would reintroduce the bug."""
+    return page.evaluate(
+        """() => {
+            const b = document.querySelector('.pn-shell main.pn-body');
+            if (!b) return 0;
+            return [...b.querySelectorAll('*')]
+                .filter(el => getComputedStyle(el).position === 'fixed').length;
+        }"""
+    )
+
+
 def check_route(page, path: str) -> list[str]:
     failures: list[str] = []
     page.goto(f"{BASE}{path}")
@@ -84,19 +132,31 @@ def check_route(page, path: str) -> list[str]:
         elif abs(gap) > TOLERANCE:
             failures.append(f"{path} [{scenario}]: nav off-bottom by {gap:.1f}px")
 
-    doc_h = page.evaluate("document.documentElement.scrollHeight")
-    win_h = page.evaluate("window.innerHeight")
+    # App-shell structural invariants (independent of scroll position).
+    if document_scrolls(page):
+        failures.append(
+            f"{path}: document scrolls — app-shell broken "
+            f"(.pn-body must be the only scroller, .pn-shell overflow:hidden)"
+        )
+    n_fixed = fixed_in_scroller(page)
+    if n_fixed:
+        failures.append(
+            f"{path}: {n_fixed} position:fixed element(s) inside .pn-body — "
+            f"can strand on iOS; move them out of the scroller"
+        )
 
+    body = body_metrics(page)
     assert_pinned("top")
-    if doc_h > win_h + 10:
-        page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight / 2)")
+    if body and body["scrollH"] > body["clientH"] + 10:
+        scroll_body(page, body["scrollH"] / 2)
         page.wait_for_timeout(150)
         assert_pinned("mid-scroll")
-        page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
+        scroll_body(page, body["scrollH"])
         page.wait_for_timeout(150)
         assert_pinned("bottom-scroll")
+        scroll_body(page, 0)
 
-    # Keyboard-ish viewport shrink + restore: sticky must re-anchor.
+    # Keyboard-ish viewport shrink + restore: the static nav must stay pinned.
     vp = page.viewport_size
     page.set_viewport_size({"width": vp["width"], "height": vp["height"] - 280})
     page.wait_for_timeout(150)
@@ -105,9 +165,8 @@ def check_route(page, path: str) -> list[str]:
     page.wait_for_timeout(150)
     assert_pinned("restored-viewport")
 
-    # Full keyboard cycle where the page has an input: focus (iOS would
-    # raise the keyboard), shrink, blur (dismiss), restore. Exercises the
-    # PnPageShell visualViewport re-anchor nudge end to end.
+    # Full keyboard cycle where the page has an input: focus (iOS would raise
+    # the keyboard), shrink, blur (dismiss), restore.
     has_input = page.evaluate(
         "() => !!document.querySelector('input:not([type=hidden]), textarea')"
     )
@@ -148,7 +207,7 @@ def main() -> None:
         for f in failures:
             print(f"  {f}")
         sys.exit(1)
-    print("\nall routes pinned")
+    print("\nall routes pinned (layout) — NB: on-device resume test still required")
 
 
 if __name__ == "__main__":

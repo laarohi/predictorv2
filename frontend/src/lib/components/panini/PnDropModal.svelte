@@ -161,14 +161,32 @@
 		}
 	});
 
-	$: if (typeof document !== 'undefined') {
-		// Only lock scroll when a page is actually rendered ({#if open && drop && cur});
-		// never strand the body scroll-locked behind an invisible modal.
-		document.body.style.overflow = open && cur ? 'hidden' : '';
+	// Lock scroll while the drop is showing. The app shell makes the inner
+	// <main.pn-body> the scroll container (NOT <body>), so locking body alone
+	// leaves the page scrolling behind the fixed scrim on iOS — lock .pn-body
+	// too. The scrim is a sibling of the shell (mounted in +layout.svelte), so
+	// it never strands. Body is locked as well for any document-scroll fallback.
+	let lockedScroller: HTMLElement | null = null;
+	function setScrollLock(locked: boolean): void {
+		if (typeof document === 'undefined') return;
+		document.body.style.overflow = locked ? 'hidden' : '';
+		if (locked) {
+			if (!lockedScroller) {
+				lockedScroller = document.querySelector('.pn-shell main.pn-body');
+			}
+			if (lockedScroller) lockedScroller.style.overflow = 'hidden';
+		} else if (lockedScroller) {
+			lockedScroller.style.overflow = '';
+			lockedScroller = null;
+		}
 	}
+	// Only lock when a page is actually rendered ({#if open && drop && cur});
+	// never strand the scroller locked behind an invisible modal.
+	$: if (typeof document !== 'undefined') setScrollLock(open && !!cur);
+
 	onDestroy(() => {
 		stopRaf();
-		if (typeof document !== 'undefined') document.body.style.overflow = '';
+		setScrollLock(false);
 	});
 
 	function fmtDate(iso: string): string {

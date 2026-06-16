@@ -13,10 +13,11 @@
  * .pn-rs-sticky wrapper sticks at top: 0 once scrolled past. */
 .pn .pn-rs-sticky {
 	position: sticky;
-	/* Sit directly under the PnPageShell chrome (nav + strip). The chrome's
-	 * actual height is measured at runtime and exposed as --pn-chrome-h;
-	 * the fallback (76px = mast ~70 + strip ~6) covers the pre-JS render. */
-	top: var(--pn-chrome-h, 76px);
+	/* App-shell: the scroll container is .pn-body, whose top already sits BELOW
+	 * the PnPageShell chrome (the chrome is a non-scrolling sibling above it).
+	 * So this sticks at top:0 of the scroller — adding --pn-chrome-h here would
+	 * double-count the chrome and leave a ~chrome-height dead gap. */
+	top: 0;
 	z-index: 10;
 	margin: -28px var(--pn-body-neg-x) 16px;
 }
@@ -224,12 +225,12 @@
 	border-bottom: 2px solid var(--ink);
 	margin-bottom: 12px;
 	position: relative;
-	/* Reserve space below BOTH sticky chrome (PnPageShell nav + strip) AND
-	 * our own sticky ribbon, so scrollIntoView lands the day header in the
-	 * scrollable area below them. Both heights are measured at runtime;
-	 * fallbacks cover the pre-JS render. +18px breathing room so the
-	 * TODAY tag overlay isn't clipped by the ribbon's bottom edge. */
-	scroll-margin-top: calc(var(--pn-chrome-h, 76px) + var(--results-ribbon-h, 140px) + 18px);
+	/* Reserve space below our own sticky ribbon so scrollIntoView lands the day
+	 * header in the scrollable area below it. App-shell: the chrome is outside
+	 * the .pn-body scroller, so scroll offsets are measured relative to .pn-body
+	 * (already below the chrome) — only the ribbon height needs clearing, not
+	 * --pn-chrome-h. +18px breathing room so the TODAY tag isn't clipped. */
+	scroll-margin-top: calc(var(--results-ribbon-h, 140px) + 18px);
 }
 .pn .pn-rs-head:first-of-type {
 	margin-top: 0;

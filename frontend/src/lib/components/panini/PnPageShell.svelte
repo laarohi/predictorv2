@@ -1,13 +1,25 @@
 <script lang="ts">
 	// Page wrapper that establishes the .pn CSS scope and hosts the chrome.
-	// Above 700px: shows the desktop masthead + optional red sub-strip,
-	//              both kept sticky at top so the nav is always reachable
-	//              without having to scroll back. The chrome's actual height
-	//              is measured on mount + resize and written to a CSS custom
-	//              property (--pn-chrome-h) so pages with their own sticky
-	//              elements can stack below it via calc().
-	// Below 700px: shows the fixed bottom 5-tab nav (the existing root layout's
-	// dark nav still renders above us; the sandbox accepts that intentionally).
+	//
+	// APP-SHELL LAYOUT (the iOS-standalone nav-stranding fix):
+	// .pn-shell is exactly one viewport tall (100dvh) and overflow:hidden — it
+	// never scrolls. The inner <main class="pn-body"> is the SINGLE scroll
+	// container. The bottom nav is therefore a STATIC, in-flow flex child that
+	// sits at the bottom by layout, not by sticky/fixed positioning — so iOS
+	// WebKit never promotes it to a viewport-anchored composited layer that can
+	// be repainted at a stale offset after an app suspend/resume. That compositor
+	// behaviour is the Heisenbug that survived the earlier fixed→sticky + nudge +
+	// dvh attempts (git 3fdf489 / 64f5a05); removing the nav from the composited
+	// layer class deletes the bug's precondition rather than patching it.
+	//
+	// Above 700px: shows the desktop masthead + optional red sub-strip at the top
+	//              of the non-scrolling shell (always visible). Its height is
+	//              measured on mount + resize and written to --pn-chrome-h. NOTE:
+	//              page-level sticky elements now live INSIDE .pn-body, whose top
+	//              already sits below the chrome, so they anchor at top:0 — NOT
+	//              top:var(--pn-chrome-h), which would double-count the chrome
+	//              (see panini-results.css .pn-rs-sticky).
+	// Below 700px: shows the bottom tab nav as the shell's last static child.
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
 	import PnMast from './PnMast.svelte';
@@ -21,29 +33,6 @@
 	export let showStrip: boolean = true;
 
 	let chromeEl: HTMLElement | null = null;
-	let navWrapEl: HTMLElement | null = null;
-	let nudgeRaf = 0;
-
-	/**
-	 * Re-anchor the sticky bottom nav after visual-viewport changes.
-	 *
-	 * iOS standalone (home-screen) mode sometimes leaves the sticky layer
-	 * composited at a stale offset after keyboard dismissal or app resume —
-	 * no layout invalidation happens, so WebKit keeps the cached position
-	 * (same bug family that stranded the old position:fixed nav, just
-	 * rarer). A one-frame transform toggle forces the compositor to
-	 * recompute the layer; visually a no-op everywhere else.
-	 */
-	function nudgeNav() {
-		if (!browser || !navWrapEl) return;
-		cancelAnimationFrame(nudgeRaf);
-		nudgeRaf = requestAnimationFrame(() => {
-			if (!navWrapEl) return;
-			navWrapEl.style.transform = 'translateZ(0)';
-			void navWrapEl.offsetHeight; // force reflow while transformed
-			navWrapEl.style.transform = '';
-		});
-	}
 
 	function updateChromeHeight() {
 		if (!browser || !chromeEl) return;
@@ -63,24 +52,9 @@
 		const onResize = () => updateChromeHeight();
 		window.addEventListener('resize', onResize);
 
-		// Sticky-nav re-anchor triggers: every event iOS standalone fires
-		// around keyboard show/hide, app resume and rotation.
-		const vv = window.visualViewport;
-		vv?.addEventListener('resize', nudgeNav);
-		vv?.addEventListener('scroll', nudgeNav);
-		window.addEventListener('pageshow', nudgeNav);
-		window.addEventListener('orientationchange', nudgeNav);
-		document.addEventListener('visibilitychange', nudgeNav);
-
 		return () => {
 			ro.disconnect();
 			window.removeEventListener('resize', onResize);
-			vv?.removeEventListener('resize', nudgeNav);
-			vv?.removeEventListener('scroll', nudgeNav);
-			window.removeEventListener('pageshow', nudgeNav);
-			window.removeEventListener('orientationchange', nudgeNav);
-			document.removeEventListener('visibilitychange', nudgeNav);
-			cancelAnimationFrame(nudgeRaf);
 		};
 	});
 </script>
@@ -97,7 +71,7 @@
 		<slot />
 	</main>
 
-	<div class="mobile-only" bind:this={navWrapEl}>
+	<div class="mobile-only">
 		<PnBottomNav />
 	</div>
 </div>
@@ -106,39 +80,43 @@
 	.pn-shell {
 		display: flex;
 		flex-direction: column;
-		/* dvh tracks the DYNAMIC viewport: with plain 100vh (the large
-		 * viewport), a short page in non-standalone Safari with the URL bar
-		 * expanded puts the nav's natural position below the visible area. */
-		min-height: 100vh; /* fallback for pre-15.4 Safari */
-		min-height: 100dvh;
+		/* App-shell: the shell is exactly one viewport tall and NEVER scrolls;
+		 * .pn-body below is the only scroll container. This keeps the bottom nav
+		 * a static in-flow child instead of a viewport-anchored sticky/fixed
+		 * layer — the only object class iOS standalone's compositor strands at a
+		 * stale offset on resume. dvh tracks the dynamic viewport (URL bar). */
+		height: 100vh; /* fallback for pre-15.4 Safari */
+		height: 100dvh;
+		overflow: hidden;
 	}
 	.desktop-only {
 		display: none;
 	}
 	.mobile-only {
 		display: block;
-		/* Sticky (not fixed) bottom nav: iOS standalone (home-screen) mode
-		 * leaves position:fixed layers composited at stale offsets after
-		 * keyboard dismissal / app resume — the nav would freeze mid-screen.
-		 * Sticky is anchored to the scroller, which stays correct. This
-		 * wrapper is the shell's last flex child, so bottom: 0 has the whole
-		 * document as travel room (the nav itself can't stick — its containing
-		 * block would be this wrapper, which is exactly its own height). */
-		position: sticky;
-		bottom: 0;
+		/* Static, in-flow LAST child of the non-scrolling shell: it sits flush at
+		 * the bottom by flex layout, NOT by position:sticky/fixed, so WebKit never
+		 * composites it as its own layer and it cannot strand on resume. */
+		flex-shrink: 0;
 		z-index: 40;
 	}
 	:global(.pn-shell main.pn-body) {
 		flex: 1;
-		padding-bottom: 16px; /* nav is in-flow now; just breathing room */
+		/* CRITICAL: a flex item's default min-height:auto refuses to shrink below
+		 * its content, so the body would grow past the shell and push the nav
+		 * off-screen (and never scroll). min-height:0 lets it scroll internally. */
+		min-height: 0;
+		overflow-y: auto;
+		-webkit-overflow-scrolling: touch; /* momentum scroll on older iOS */
+		overscroll-behavior: contain; /* no scroll-chaining/rubber-band to the shell */
+		padding-bottom: 16px; /* breathing room above the nav */
 	}
 	@media (min-width: 700px) {
 		.desktop-only {
 			display: block;
-			/* Keep nav reachable without scrolling back to the top. Pages with
-			 * their own sticky elements (e.g. Results' ribbon) stack below
-			 * this using top: var(--pn-chrome-h). z-index keeps it over any
-			 * page-level sticky elements. */
+			/* First child of the non-scrolling shell → always visible at top.
+			 * sticky + z-index kept so the masthead avatar dropdown paints over
+			 * body content below it. */
 			position: sticky;
 			top: 0;
 			z-index: 50;
