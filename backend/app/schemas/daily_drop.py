@@ -52,10 +52,11 @@ class SpoonStat(BaseModel):
 
 
 class CalledItStat(BaseModel):
-    """🎯 The rarest correct EXACT score in the window — everyone who nailed it
-    (they share the same scoreline)."""
+    """🎯 The rarest correct EXACT score in the window. ``names`` is a SINGLE
+    winner (least-featured-of-the-tied); ``count`` is how many nailed it (1 = solo)."""
 
-    names: list[str]
+    names: list[str]  # single element (one player per picks award)
+    count: int  # how many players nailed this exact score (1 → "SOLO")
     home_team: str
     away_team: str
     home_score: int
@@ -63,14 +64,12 @@ class CalledItStat(BaseModel):
 
 
 class ContrarianStat(BaseModel):
-    """🧠 The correct OUTCOME (1/X/2) the fewest players got — all of them
-    (count is ``len(names)`` of ``total``)."""
+    """🧠 The Hipster — the player whose picks were the LEAST popular across the
+    whole day: lowest AVERAGE share of the rest of the pool that made the same
+    outcome call, over every match settled that day. ``names`` is a single winner."""
 
-    names: list[str]
-    home_team: str
-    away_team: str
-    outcome: str  # '1' | 'X' | '2'
-    total: int  # players who predicted this match (denominator)
+    names: list[str]  # single element (one player per picks award)
+    avg_pct: int  # avg % of OTHER players who agreed with their picks (lower = more contrarian)
 
 
 class BlunderStat(BaseModel):

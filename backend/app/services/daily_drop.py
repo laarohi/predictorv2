@@ -61,6 +61,15 @@ PICKS_WINDOW_HOURS = 30
 STREAK_MIN = 2
 
 
+def _pick_one(candidates: list[str], feature_count: dict[str, int]) -> str:
+    """Each picks-page award shows ONE player. When several tie, give it to the
+    one featured fewest times so far (alphabetical tiebreak) so the awards spread
+    across the group instead of one person sweeping the page. Records the pick."""
+    winner = min(sorted(candidates), key=lambda n: feature_count.get(n, 0))
+    feature_count[winner] = feature_count.get(winner, 0) + 1
+    return winner
+
+
 async def _snapshot_pair_dates(session: AsyncSession) -> tuple[date, date] | None:
     """The two most recent distinct snapshot days (latest, previous), or None
     if fewer than two days have been captured (→ no overnight movement yet)."""
@@ -135,10 +144,11 @@ async def _movement_stats(
 
 
 async def _pick_stats(
-    session: AsyncSession, *, since: datetime
+    session: AsyncSession, *, since: datetime, feature_count: dict[str, int]
 ) -> tuple[CalledItStat | None, ContrarianStat | None, BlunderStat | None, int]:
-    """called_it / contrarian / blunder over real players' picks on matches that
-    finished with kickoff >= ``since``. Returns the stats + the match count."""
+    """called_it / hipster / blunder over real players' picks on matches that
+    finished with kickoff >= ``since``. ONE winner per award (least-featured
+    tiebreak via ``feature_count``). Returns the stats + the match count."""
     result = await session.execute(
         select(Fixture, Score, MatchPrediction, User)
         .join(Score, Score.fixture_id == Fixture.id)
@@ -161,21 +171,23 @@ async def _pick_stats(
         fixtures[fixture.id] = fixture
         scores[fixture.id] = score
 
-    # Find the WINNING fixture/pick for each award in one pass, then resolve the
-    # full tied set afterwards (everyone who shares the winning achievement).
     #   called_it : the exact hit on the fixture FEWEST players nailed exactly.
-    #   contrarian: the correct outcome the fewest players got.
+    #   hipster   : the player whose picks were LEAST popular across the day —
+    #               lowest avg share of OTHER players who made the same outcome
+    #               call, over every settled match.
     #   blunder   : the most wrongly-confident pick (biggest GD swing against);
     #               the tied set = everyone who made that IDENTICAL pick.
     exact_users: dict[uuid.UUID, list[User]] = {}
-    outcome_users: dict[uuid.UUID, list[User]] = {}
     called_fid: uuid.UUID | None = None
     called_rarity: int | None = None
-    contrarian_fid: uuid.UUID | None = None
-    contrarian_rarity: int | None = None
     blunder_fid: uuid.UUID | None = None
     blunder_pred: tuple[int, int] | None = None
     blunder_swing = -1
+
+    # Hipster accumulation: average outcome-agreement (excluding self) per user.
+    pop_sum: dict[uuid.UUID, float] = defaultdict(float)
+    pop_cnt: dict[uuid.UUID, int] = defaultdict(int)
+    user_by_id: dict[uuid.UUID, User] = {}
 
     for fid, preds in by_fixture.items():
         sc = scores[fid]
@@ -183,14 +195,21 @@ async def _pick_stats(
             u for p, u in preds
             if p.home_score == sc.final_home_score and p.away_score == sc.final_away_score
         ]
-        outcome_users[fid] = [u for p, u in preds if p.predicted_outcome == sc.outcome]
-
         if exact_users[fid] and (called_rarity is None or len(exact_users[fid]) < called_rarity):
             called_rarity = len(exact_users[fid])
             called_fid = fid
-        if outcome_users[fid] and (contrarian_rarity is None or len(outcome_users[fid]) < contrarian_rarity):
-            contrarian_rarity = len(outcome_users[fid])
-            contrarian_fid = fid
+
+        # Popularity of each player's OUTCOME pick on this match (share of the
+        # rest of the pool that agreed) → averaged per player for the Hipster.
+        total = len(preds)
+        outcome_counts: dict[str, int] = defaultdict(int)
+        for p, u in preds:
+            outcome_counts[p.predicted_outcome] += 1
+            user_by_id[u.id] = u
+        if total > 1:
+            for p, u in preds:
+                pop_sum[u.id] += (outcome_counts[p.predicted_outcome] - 1) / (total - 1)
+                pop_cnt[u.id] += 1
 
         actual_gd = sc.final_home_score - sc.final_away_score
         for p, u in preds:
@@ -202,37 +221,43 @@ async def _pick_stats(
                 blunder_fid = fid
                 blunder_pred = (p.home_score, p.away_score)
 
+    # One winner per award, in page order (blunder hero, then honours), each
+    # spread across the group via least-featured tiebreak.
+    blunder: BlunderStat | None = None
+    if blunder_fid is not None and blunder_pred is not None:
+        fx, sc = fixtures[blunder_fid], scores[blunder_fid]
+        ph, pa = blunder_pred
+        cands = sorted(
+            u.name for p, u in by_fixture[blunder_fid]
+            if p.home_score == ph and p.away_score == pa
+        )
+        blunder = BlunderStat(
+            names=[_pick_one(cands, feature_count)],
+            home_team=fx.home_team, away_team=fx.away_team,
+            predicted=f"{ph}-{pa}",
+            actual=f"{sc.final_home_score}-{sc.final_away_score}",
+            swing=blunder_swing,
+        )
+
     called_it: CalledItStat | None = None
     if called_fid is not None:
         fx, sc = fixtures[called_fid], scores[called_fid]
+        cands = sorted(u.name for u in exact_users[called_fid])
         called_it = CalledItStat(
-            names=sorted(u.name for u in exact_users[called_fid]),
+            names=[_pick_one(cands, feature_count)],
+            count=len(exact_users[called_fid]),
             home_team=fx.home_team, away_team=fx.away_team,
             home_score=sc.final_home_score, away_score=sc.final_away_score,
         )
 
     contrarian: ContrarianStat | None = None
-    if contrarian_fid is not None:
-        fx, sc = fixtures[contrarian_fid], scores[contrarian_fid]
+    avgs = {uid: pop_sum[uid] / pop_cnt[uid] for uid in pop_cnt if pop_cnt[uid] > 0}
+    if avgs:
+        min_avg = min(avgs.values())
+        cands = sorted(user_by_id[uid].name for uid, a in avgs.items() if a == min_avg)
         contrarian = ContrarianStat(
-            names=sorted(u.name for u in outcome_users[contrarian_fid]),
-            home_team=fx.home_team, away_team=fx.away_team,
-            outcome=sc.outcome, total=len(by_fixture[contrarian_fid]),
-        )
-
-    blunder: BlunderStat | None = None
-    if blunder_fid is not None and blunder_pred is not None:
-        fx, sc = fixtures[blunder_fid], scores[blunder_fid]
-        ph, pa = blunder_pred
-        blunder = BlunderStat(
-            names=sorted(
-                u.name for p, u in by_fixture[blunder_fid]
-                if p.home_score == ph and p.away_score == pa
-            ),
-            home_team=fx.home_team, away_team=fx.away_team,
-            predicted=f"{ph}-{pa}",
-            actual=f"{sc.final_home_score}-{sc.final_away_score}",
-            swing=blunder_swing,
+            names=[_pick_one(cands, feature_count)],
+            avg_pct=round(min_avg * 100),
         )
 
     return called_it, contrarian, blunder, len(by_fixture)
@@ -279,24 +304,37 @@ async def compute_drop_payload(
                 behind_leader=leaders[0].total_points - spooners[0].total_points,
             )
 
-    # Streaks (already on the board entries) — list everyone tied at the top.
+    # Peak streak lengths (board entries); the single winner is chosen BELOW,
+    # after the picks awards, so the streaks share the least-featured spread.
     max_hot = max((e.hot_streak for e in ranked), default=0)
     max_cold = max((e.cold_streak for e in ranked), default=0)
-    hottest_streak = (
-        StreakStat(names=sorted(e.user_name for e in ranked if e.hot_streak == max_hot), length=max_hot)
-        if max_hot >= STREAK_MIN else None
-    )
-    coldest_streak = (
-        StreakStat(names=sorted(e.user_name for e in ranked if e.cold_streak == max_cold), length=max_cold)
-        if max_cold >= STREAK_MIN else None
-    )
 
     # --- Movement (snapshot diff) ----------------------------------------
     mover, faceplant, points_haul = await _movement_stats(session, ghost_ids, names)
 
-    # --- Picks (recent finished matches) ---------------------------------
+    # --- Picks (recent finished matches) — ONE winner per award, spread by
+    # least-featured across blunder → called_it → hipster → hottest → coldest.
+    feature_count: dict[str, int] = {}
     since = reference - timedelta(hours=PICKS_WINDOW_HOURS)
-    called_it, contrarian, blunder, match_count = await _pick_stats(session, since=since)
+    called_it, contrarian, blunder, match_count = await _pick_stats(
+        session, since=since, feature_count=feature_count
+    )
+    hottest_streak = (
+        StreakStat(
+            names=[_pick_one(sorted(e.user_name for e in ranked if e.hot_streak == max_hot), feature_count)],
+            length=max_hot,
+        )
+        if max_hot >= STREAK_MIN
+        else None
+    )
+    coldest_streak = (
+        StreakStat(
+            names=[_pick_one(sorted(e.user_name for e in ranked if e.cold_streak == max_cold), feature_count)],
+            length=max_cold,
+        )
+        if max_cold >= STREAK_MIN
+        else None
+    )
 
     return DropPayload(
         leader=leader,

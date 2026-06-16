@@ -1,9 +1,10 @@
-"""Daily Drop tie handling.
+"""Daily Drop picks awards.
 
-Each broadcast stat must list ALL tied players (deterministically, alphabetical),
-and the blunder lists only those who made the IDENTICAL worst pick — not everyone
-who happened to share the swing on a different match. ``_fmt_names`` does the
-overflow formatting reused on both sides.
+Each PICKS-page award shows ONE winner: when several tie, the least-featured-so-far
+player gets it (alphabetical tiebreak) so awards spread across the group instead of
+one person sweeping the page. The Hipster is whoever's picks were LEAST popular
+across the day (lowest average outcome-agreement). ``_fmt_names`` still does the
+overflow formatting for the (multi-name) table-page stats.
 """
 
 from datetime import timedelta
@@ -75,25 +76,36 @@ def test_fmt_names_overflow():
 
 
 @pytest.mark.asyncio
-async def test_called_it_and_contrarian_list_all_tied_alphabetically(session):
+async def test_picks_one_winner_spread_and_hipster(session):
     comp = Competition(name="WC", entry_fee=Decimal("0"), external_id="WC", is_active=True)
     session.add(comp)
     await session.commit()
     await session.refresh(comp)
 
+    # One match, 2-0 home win. Alice & Bob both NAIL 2-0 (tied for Nostradamus);
+    # Cara picks a draw and Dave an away win — both wrong, and each the lone voice
+    # on their outcome → both 0% agreement (Hipster candidates).
     fx = await _fixture(session, comp, "Mexico", "South Africa", 2, 0, group="A")
-    bob = await _user(session, "Bob", "bob@e.com")
     alice = await _user(session, "Alice", "alice@e.com")
-    # Both nail the exact score → tied on Called it AND Contrarian.
-    await _pred(session, bob, fx, 2, 0)
+    bob = await _user(session, "Bob", "bob@e.com")
+    cara = await _user(session, "Cara", "cara@e.com")
+    dave = await _user(session, "Dave", "dave@e.com")
     await _pred(session, alice, fx, 2, 0)
+    await _pred(session, bob, fx, 2, 0)
+    await _pred(session, cara, fx, 1, 1)
+    await _pred(session, dave, fx, 0, 1)
 
-    called, contrarian, blunder, n = await _pick_stats(session, since=utc_now() - SINCE)
+    called, contrarian, blunder, n = await _pick_stats(
+        session, since=utc_now() - SINCE, feature_count={}
+    )
     assert n == 1
-    assert called is not None and called.names == ["Alice", "Bob"]  # sorted, both
-    assert contrarian is not None and contrarian.names == ["Alice", "Bob"]
-    assert contrarian.total == 2
-    assert blunder is None  # nobody got the outcome wrong
+    # Single winner per award (NOT a tied list); called_it carries the tied count.
+    assert called is not None and called.names == ["Alice"] and called.count == 2
+    # Biggest wrong-outcome swing is Dave's 0-1 (gd −1 vs +2 → 3) over Cara's draw (2).
+    assert blunder is not None and blunder.names == ["Dave"] and blunder.predicted == "0-1"
+    # Cara & Dave tie at 0% agreement, but Dave already holds the blunder, so the
+    # least-featured tiebreak spreads the Hipster to Cara.
+    assert contrarian is not None and contrarian.names == ["Cara"] and contrarian.avg_pct == 0
 
 
 @pytest.mark.asyncio
@@ -113,7 +125,10 @@ async def test_blunder_lists_only_the_identical_worst_pick(session):
     await _pred(session, bob, fx, 0, 3)
     await _pred(session, cara, fx, 1, 2)
 
-    _called, _contra, blunder, _n = await _pick_stats(session, since=utc_now() - SINCE)
+    _called, _contra, blunder, _n = await _pick_stats(
+        session, since=utc_now() - SINCE, feature_count={}
+    )
     assert blunder is not None
     assert blunder.predicted == "0-3"
-    assert blunder.names == ["Anna", "Bob"]  # not Cara
+    # Single winner: least-featured of the tied identical-pick makers {Anna, Bob}.
+    assert blunder.names == ["Anna"]  # not Bob, and not Cara (different pick)

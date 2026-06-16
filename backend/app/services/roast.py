@@ -107,8 +107,8 @@ def _brief(p: DropPayload) -> list[str]:
     if p.contrarian:
         c = p.contrarian
         lines.append(
-            f"- Lone-wolf correct call: {_join(c.names)} ({len(c.names)} of {c.total}) "
-            f"backed the right result in {c.home_team} v {c.away_team}."
+            f"- The Hipster (least popular picks all day): {_join(c.names)} — on "
+            f"average only ~{c.avg_pct}% of the pool made the same calls as them."
         )
     if p.blunder:
         b = p.blunder
