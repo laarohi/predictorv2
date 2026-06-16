@@ -25,6 +25,7 @@ from app.models._datetime import utc_now
 from app.services.locking import get_active_competition
 from app.services.receipts import send_phase1_receipts
 from app.services.push_triggers import (
+    send_daily_drop_notification,
     send_knockout_lock_reminders,
     send_match_result_pushes,
     send_phase1_deadline_reminders,
@@ -111,6 +112,11 @@ async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> No
             await send_phase2_opened(session)
         except Exception:  # noqa: BLE001
             logger.exception("score_scheduler: phase2-opened push tick failed")
+
+        try:
+            await send_daily_drop_notification(session)
+        except Exception:  # noqa: BLE001
+            logger.exception("score_scheduler: daily-drop broadcast tick failed")
 
 
 async def _maybe_send_phase1_receipts(session: AsyncSession) -> None:

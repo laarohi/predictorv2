@@ -141,6 +141,35 @@
 	letter-spacing: 0.06em;
 	text-transform: lowercase;
 }
+
+/* Form chip (🔥 hot / 🧊 cold) — a small sticker pill beside the name. Hard
+   ink border + flat fill, no soft shadow, in keeping with the Panini stickers.
+   Shared by the desktop table and the mobile row's stat line. */
+.pn .streak {
+	display: inline-flex;
+	align-items: center;
+	gap: 1px;
+	vertical-align: middle;
+	margin-left: 6px;
+	padding: 0 5px;
+	height: 16px;
+	border: 1.5px solid var(--ink);
+	border-radius: 999px;
+	font-family: var(--mono);
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 1;
+	letter-spacing: 0.02em;
+	font-variant-numeric: tabular-nums;
+	text-transform: none;
+}
+.pn .streak.hot { background: var(--gold); color: var(--ink); }
+/* Cold reads as loudly as hot — it's the mockable one. Icy navy fill pairs
+   with the blue 🧊 (warm gold / cold navy duality). */
+.pn .streak.cold { background: var(--navy); color: var(--paper); }
+/* In the mobile stat line the chip sits inline between the · separators, so it
+   needs no left margin. */
+.pn .pn-m-lb-row .h .streak { margin-left: 0; }
 .pn .pn-lb-table td.c {
 	text-align: center;
 	font-family: var(--mono);

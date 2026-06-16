@@ -173,6 +173,12 @@ class LeaderboardEntry(BaseModel):
     correct_outcomes: int = 0
     exact_scores: int = 0
     movement: int = 0  # Position change since last update
+    # Current form: the TRAILING run of finished matches ending at the most
+    # recent result. Exactly one is ever non-zero — the last result was either
+    # a correct outcome (hot) or a miss (cold). Both 0 with no finished picks.
+    # Outcome-level (1/X/2), not exact score, so the streaks actually move.
+    hot_streak: int = 0
+    cold_streak: int = 0
     # Synthetic entrant (crowd consensus / Polymarket bot): interleaved by
     # points but unranked — position stays 0 and real users' positions are
     # assigned as if the ghost weren't there.

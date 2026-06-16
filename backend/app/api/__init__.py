@@ -6,6 +6,7 @@ from app.api import (
     admin,
     auth,
     competition,
+    daily_drop,
     fixtures,
     leaderboard,
     predictions,
@@ -24,4 +25,5 @@ api_router.include_router(scores.router, prefix="/scores", tags=["scores"])
 api_router.include_router(leaderboard.router, prefix="/leaderboard", tags=["leaderboard"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(push.router, prefix="/push", tags=["push"])
+api_router.include_router(daily_drop.router, prefix="/daily-drop", tags=["daily-drop"])
 api_router.include_router(admin.router, prefix="/admin", tags=["admin"])

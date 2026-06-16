@@ -43,6 +43,10 @@
 		await setPhase(phase);
 	}
 
+	// Show the form chip (🔥/🧊) only once a run reaches this length — a single
+	// result isn't a streak, and 2+ is the point where it's worth ribbing.
+	const STREAK_MIN = 2;
+
 	function ordinal(n: number): string {
 		if (n % 100 >= 11 && n % 100 <= 13) return 'th';
 		switch (n % 10) {
@@ -256,7 +260,7 @@
 									</td>
 									<td class="nm-cell">
 										<a href="/profile/{r.user_id}" style="color: inherit; text-decoration: none;" on:click|stopPropagation>
-											{r.user_name}
+											{r.user_name}{#if !r.is_ghost && r.hot_streak >= STREAK_MIN}<span class="streak hot" title="{r.hot_streak} correct outcomes in a row">🔥{r.hot_streak}</span>{:else if !r.is_ghost && r.cold_streak >= STREAK_MIN}<span class="streak cold" title="{r.cold_streak} wrong in a row">🧊{r.cold_streak}</span>{/if}
 											<span class="h">{isYou ? 'YOU' : r.is_ghost ? 'UNRANKED' : `@${r.user_name.split(' ')[0].toLowerCase()}`}</span>
 										</a>
 									</td>
@@ -381,7 +385,7 @@
 									{r.user_name}
 								</a>
 							</div>
-							<div class="h">{r.correct_outcomes} outc · {r.exact_scores} ex · <span class="chev">▾</span></div>
+							<div class="h">{r.correct_outcomes} outc · {r.exact_scores} ex{#if !r.is_ghost && r.hot_streak >= STREAK_MIN} · <span class="streak hot" title="{r.hot_streak} correct outcomes in a row">🔥{r.hot_streak}</span>{:else if !r.is_ghost && r.cold_streak >= STREAK_MIN} · <span class="streak cold" title="{r.cold_streak} wrong in a row">🧊{r.cold_streak}</span>{/if} · <span class="chev">▾</span></div>
 						</div>
 						<div class="pts">{r.total_points}</div>
 						<div class="mv">

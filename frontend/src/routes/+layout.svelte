@@ -6,6 +6,7 @@
 	import { fetchPhaseStatus, startPhaseStatusRefresh, uxPhaseOverride } from '$stores/phase';
 	import type { ComponentType } from 'svelte';
 	import type { UxPhase } from '$types';
+	import PnDropModal from '$components/panini/PnDropModal.svelte';
 
 	let hasLoadedPhase = false;
 
@@ -61,3 +62,8 @@
 {/if}
 
 <slot />
+
+<!-- The Daily Drop pops once per unseen drop (overlay; never affects page layout). -->
+{#if $isAuthenticated}
+	<PnDropModal />
+{/if}

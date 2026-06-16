@@ -58,6 +58,13 @@ services:
       - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
       - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
       - VAPID_SUBJECT=${VAPID_SUBJECT:-mailto:aarohiluke@gmail.com}
+      # Daily Drop morning broadcast (local hour + timezone for the 8am send).
+      - DAILY_DROP_HOUR=${DAILY_DROP_HOUR:-8}
+      - DAILY_DROP_TZ=${DAILY_DROP_TZ:-Europe/Malta}
+      # Phase C roast: the backend POSTs the day's prompt to the roaster sidecar
+      # (which holds the subscription token + runs the Claude CLI). Unreachable —
+      # e.g. prod, where the dev-only sidecar isn't running — → stand-in roast.
+      - ROASTER_URL=${ROASTER_URL:-http://roaster:8787}
     volumes:
       - ./backend/app:/app/app
       - ./backend/scripts:/app/scripts
@@ -81,6 +88,31 @@ services:
       db:
         condition: service_healthy
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Roaster sidecar: Node + the Claude Code CLI, run headless on the user's
+  # subscription to write the Back Page roast. The backend reaches it at
+  # http://roaster:8787 over the compose network — no host port.
+  roaster:
+    build:
+      context: ./roaster
+      dockerfile: Dockerfile
+    container_name: predictor-roaster
+    restart: unless-stopped
+    environment:
+      # The subscription token lives ONLY here. ANTHROPIC_API_KEY is deliberately
+      # not passed, so the OAuth token wins auth precedence inside the CLI.
+      # OPTIONAL on purpose: a missing token must never fail `compose up` (that
+      # would take the whole stack down). Tokenless → claude -p fails → the
+      # backend falls back to the deterministic placeholder roast. After setting
+      # the token in prod .env, restart just this service to activate roasts.
+      - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
+      # Optional model override (e.g. claude-haiku-4-5); blank = account default.
+      - ROAST_MODEL=${ROAST_MODEL:-}
+    # Runs in local dev (--profile dev) and prod (--profile prod); never in a
+    # bare `docker compose up` without a profile.
+    profiles:
+      - dev
+      - prod
 
   frontend:
     build:

@@ -2,6 +2,7 @@
 
 from app.models.bonus import BonusAnswer, BonusPrediction
 from app.models.competition import Competition
+from app.models.daily_drop import DailyDrop
 from app.models.email_send import EmailSend
 from app.models.fifa_ranking import FifaRanking
 from app.models.fixture import Fixture, MatchStatus
@@ -28,6 +29,7 @@ __all__ = [
     "BonusPrediction",
     "BonusPredictionHistory",
     "Competition",
+    "DailyDrop",
     "EmailSend",
     "FifaRanking",
     "Fixture",

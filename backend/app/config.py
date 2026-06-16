@@ -88,6 +88,25 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_subject: str = "mailto:aarohiluke@gmail.com"
 
+    # Daily Drop morning broadcast: once local time passes daily_drop_hour
+    # (interpreted in the daily_drop_tz timezone) the scheduler builds that day's
+    # Drop and pushes "it's in" to every subscriber — once per day (idempotent).
+    daily_drop_hour: int = 8
+    daily_drop_tz: str = "Europe/Malta"
+
+    # Claude Code subscription token for the LLM-written Daily Drop roast
+    # (Phase C). Mint with `claude setup-token`; set it in .env as
+    # CLAUDE_CODE_OAUTH_TOKEN. It is consumed by the `roaster` sidecar (not the
+    # backend) — the backend reaches the sidecar over HTTP. IMPORTANT: in the
+    # roaster, ANTHROPIC_API_KEY must be UNSET so the subscription token wins the
+    # auth precedence (else you'd be billed per-token to an API account).
+    claude_code_oauth_token: str = ""
+
+    # Roaster sidecar base URL. The Daily Drop build POSTs the assembled prompt
+    # here to get the savage roast. Blank (or unreachable, e.g. prod where the
+    # sidecar isn't running) → the roast falls back to the deterministic stand-in.
+    roaster_url: str = "http://roaster:8787"
+
     # Public-facing base URL for the frontend — used to construct
     # links in outbound emails (magic-link login etc.). No trailing
     # slash. Defaults to localhost dev so things work out of the box;

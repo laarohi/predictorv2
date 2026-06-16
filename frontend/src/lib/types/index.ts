@@ -281,6 +281,11 @@ export interface LeaderboardEntry {
 	correct_outcomes: number;
 	exact_scores: number;
 	movement: number;
+	/** Current form: trailing run of finished matches ending at the latest
+	 *  result. Exactly one is non-zero — last result was a correct outcome
+	 *  (hot) or a miss (cold). Outcome-level, not exact score. */
+	hot_streak: number;
+	cold_streak: number;
 	/** Synthetic entrant (crowd consensus / market bot) — interleaved by
 	 *  points but unranked (position stays 0). */
 	is_ghost: boolean;
@@ -291,6 +296,62 @@ export interface LeaderboardResponse {
 	last_calculated: string;
 	total_participants: number;
 	phase: string | null;
+}
+
+// ---- Daily Drop (the once-a-day broadcast banter card) ----
+// Every stat is nullable: when there isn't data yet, the row is omitted.
+// Broadcast stats carry the full tied set (`names`); the modal formats it with
+// overflow ("A", "A & B", "A, B & C", "A, B +N").
+export interface DropLeader { names: string[]; points: number; lead: number; }
+export interface DropMove { names: string[]; delta: number; }
+export interface DropPointsHaul { names: string[]; points_gained: number; }
+export interface DropSpoon { names: string[]; position: number; behind_leader: number; }
+export interface DropCalledIt {
+	names: string[]; home_team: string; away_team: string;
+	home_score: number; away_score: number;
+}
+export interface DropContrarian {
+	names: string[]; home_team: string; away_team: string;
+	outcome: string; total: number;
+}
+export interface DropBlunder {
+	names: string[]; home_team: string; away_team: string;
+	predicted: string; actual: string; swing: number;
+}
+export interface DropStreak { names: string[]; length: number; }
+export interface PointsCategory { label: string; points: number; }
+export interface PersonalStats {
+	user_name: string;
+	position: number;
+	movement: number;
+	points: number;
+	points_gained: number | null;
+	hot_streak: number;
+	cold_streak: number;
+	points_breakdown: PointsCategory[];
+}
+export interface DropPayload {
+	leader: DropLeader | null;
+	mover: DropMove | null;
+	faceplant: DropMove | null;
+	points_haul: DropPointsHaul | null;
+	wooden_spoon: DropSpoon | null;
+	called_it: DropCalledIt | null;
+	contrarian: DropContrarian | null;
+	blunder: DropBlunder | null;
+	hottest_streak: DropStreak | null;
+	coldest_streak: DropStreak | null;
+	match_count: number;
+	player_count: number;
+}
+export interface DailyDrop {
+	drop_date: string;
+	payload: DropPayload;
+	roast: string | null;
+	roast_is_placeholder: boolean;
+	roast_generated_at: string | null;
+	created_at: string;
+	personal: PersonalStats | null;
 }
 
 // Competition/Phase types

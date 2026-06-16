@@ -20,4 +20,14 @@ export type IconName =
 	| 'ghost'
 	| 'whistle'
 	| 'user'
-	| 'cog';
+	| 'cog'
+	| 'crown'
+	| 'flame'
+	| 'skull'
+	| 'snowflake'
+	| 'bolt'
+	| 'medal'
+	| 'chart'
+	| 'money'
+	| 'crystal-ball'
+	| 'glasses';

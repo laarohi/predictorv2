@@ -29,7 +29,8 @@
     "vitest": "^1.0.0"
   },
   "dependencies": {
-    "flag-icons": "^7.5.0"
+    "flag-icons": "^7.5.0",
+    "html-to-image": "^1.11.13"
   },
   "type": "module"
 }

@@ -146,6 +146,55 @@ async def get_user_match_stats(
     return correct_outcomes, exact_scores
 
 
+async def get_user_streaks(
+    session: AsyncSession, user_id: uuid.UUID
+) -> tuple[int, int]:
+    """Current hot/cold form for a user — the TRAILING run of finished matches.
+
+    Walks the user's finished match predictions ordered by kickoff and measures
+    the unbroken run ending at the *most recent* result:
+
+    - **hot**: consecutive correct outcomes (1/X/2) ending at the latest match
+    - **cold**: consecutive misses ending at the latest match
+
+    Exactly one is non-zero (the last result was either a hit or a miss); both
+    are 0 when the user has no finished predictions. Correctness is outcome-level
+    to match ``get_user_match_stats`` — exact-score streaks would read 0–1 and
+    never trigger the leaderboard's 🔥/🧊 chip.
+
+    Kept as a separate query (not folded into ``get_user_match_stats``) because
+    streaks need kickoff ordering that the count-only stats don't; at ~30 users
+    the extra pass is free, and the isolation makes it unit-testable.
+    """
+    result = await session.execute(
+        select(MatchPrediction, Score)
+        .join(Fixture, MatchPrediction.fixture_id == Fixture.id)
+        .join(Score, Score.fixture_id == Fixture.id)
+        .where(
+            MatchPrediction.user_id == user_id,
+            Fixture.status == MatchStatus.FINISHED,
+        )
+        # Fixture.id tiebreaker → deterministic order when matches share a kickoff
+        # (the group-stage final round is simultaneous); without it the trailing
+        # row — and thus hot-vs-cold — could flip between rebuilds.
+        .order_by(Fixture.kickoff.asc(), Fixture.id.asc())
+    )
+    rows = result.all()
+    if not rows:
+        return 0, 0
+
+    # Walk backwards from the latest result, counting how many consecutive
+    # matches share the latest match's hit/miss value.
+    latest_pred, latest_score = rows[-1]
+    latest_hit = latest_pred.predicted_outcome == latest_score.outcome
+    run = 0
+    for pred, score in reversed(rows):
+        if (pred.predicted_outcome == score.outcome) != latest_hit:
+            break
+        run += 1
+    return (run, 0) if latest_hit else (0, run)
+
+
 async def calculate_leaderboard(
     session: AsyncSession,
     force_refresh: bool = False,
@@ -224,6 +273,7 @@ async def calculate_leaderboard(
                 group_completion_cache=group_completion,
             )
             correct_outcomes, exact_scores = await get_user_match_stats(session, user.id)
+            hot_streak, cold_streak = await get_user_streaks(session, user.id)
 
             # Get points based on phase filter
             phase_points = _get_phase_points(breakdown, phase)
@@ -237,6 +287,8 @@ async def calculate_leaderboard(
                     breakdown=breakdown,  # Full breakdown (always includes all phases)
                     correct_outcomes=correct_outcomes,
                     exact_scores=exact_scores,
+                    hot_streak=hot_streak,
+                    cold_streak=cold_streak,
                     movement=0,  # Will be calculated after positioning
                     is_ghost=user.is_ghost,
                 )

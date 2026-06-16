@@ -24,13 +24,14 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select
 
-from app.config import get_lock_minutes
+from app.config import get_lock_minutes, get_settings
 from app.models._datetime import utc_now
 from app.models.bonus import BonusPrediction
 from app.models.competition import Competition
@@ -55,6 +56,7 @@ KIND_PHASE1_2H = "phase1_deadline_2h"
 KIND_KO_LOCK = "ko_lock_reminder"
 KIND_RESULT = "result"
 KIND_PHASE2 = "phase2_opened"
+KIND_DAILY_DROP = "daily_drop"
 
 # Full Phase-1 bracket: R32(32)+R16(16)+QF(8)+SF(4)+F(2)+winner(1).
 BRACKET_TOTAL_SLOTS = 63
@@ -400,3 +402,51 @@ async def send_phase2_opened(session: AsyncSession) -> None:
     if not competition or not competition.is_phase2_active:
         return
     await broadcast_phase2_opened(session, competition)
+
+
+# --------------------------------------------------------------------------- #
+# 5. Daily Drop morning broadcast (scheduler-driven, once per local morning)
+# --------------------------------------------------------------------------- #
+async def send_daily_drop_notification(session: AsyncSession) -> int:
+    """Build today's Drop once local time passes the configured morning hour, then
+    broadcast a single "it's in" push to every subscriber.
+
+    Idempotent two ways: ``build_daily_drop`` upserts one row per ``drop_date``,
+    and the push is keyed on (user, KIND_DAILY_DROP, drop.id) — so the first tick
+    after the morning hour fires it and every later tick that day is a no-op. The
+    drop's own id is the perfect per-day ref (no synthetic date→uuid needed).
+    """
+    # Local import: daily_drop pulls in leaderboard/scoring; importing it at module
+    # load would widen this module's import graph for every trigger.
+    from app.services.daily_drop import build_daily_drop
+
+    settings = get_settings()
+    try:
+        tz = ZoneInfo(settings.daily_drop_tz)
+    except Exception:  # noqa: BLE001 — bad/absent tz data → fall back to UTC
+        logger.warning("daily-drop: unknown tz %r, using UTC", settings.daily_drop_tz)
+        tz = ZoneInfo("UTC")
+    now_local = utc_now().astimezone(tz)
+    if now_local.hour < settings.daily_drop_hour:
+        return 0  # before the morning drop
+
+    drop = await build_daily_drop(session, drop_date=now_local.date())
+
+    subscribers = await _subscribed_user_ids(session)
+    if not subscribers:
+        return 0
+    already = await _already_sent(session, KIND_DAILY_DROP, drop.id)
+    if subscribers <= already:
+        return 0
+    payload = {
+        "title": "The Daily Drop is in \U0001f5de️",
+        "body": "Today's winners, bottlers and the roast — see where you stand.",
+        "url": "/",
+    }
+    sent = 0
+    for user_id in subscribers:
+        if await _notify_once(session, user_id, KIND_DAILY_DROP, drop.id, payload, already):
+            sent += 1
+    if sent:
+        logger.info("push: daily-drop broadcast sent=%d date=%s", sent, drop.drop_date)
+    return sent

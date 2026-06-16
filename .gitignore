@@ -80,6 +80,10 @@ htmlcov/
 *.key
 credentials.json
 
+# Private data — per-person roast dossiers (real friends' personal banter).
+# Never goes to GitHub; lives only locally + SCP'd to the VPS out-of-band.
+config/roasts.yml
+
 # Build artifacts
 *.tar.gz
 *.zip
