@@ -147,8 +147,12 @@ context:
 # Deploy: pull latest code on VPS, rebuild images, restart prod stack
 deploy:
 	@echo "→ Deploying to $(VPS_HOST):$(REMOTE_PATH)..."
-	ssh $(VPS_HOST) 'cd $(REMOTE_PATH) && git pull && docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build'
+	ssh $(VPS_HOST) 'cd $(REMOTE_PATH) && git pull && docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod up -d --build && sleep 3 && docker compose -f docker-compose.yml -f docker-compose.prod.yml --profile prod exec -T nginx nginx -s reload'
 	@echo "✓ Deploy complete. Tail logs with: make vps-logs"
+# nginx reload is REQUIRED after `up --build`: recreating backend/frontend gives
+# them NEW container IPs, but the long-running nginx caches the OLD upstream IPs
+# from its last config load and 502s every request until it re-resolves. The
+# graceful reload re-resolves the upstream hostnames with zero downtime.
 
 # Interactive SSH (use sparingly; most ops can use the targets below)
 vps-ssh:
