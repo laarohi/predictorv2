@@ -427,7 +427,7 @@ async def send_daily_drop_notification(session: AsyncSession) -> int:
         logger.warning("daily-drop: unknown tz %r, using UTC", settings.daily_drop_tz)
         tz = ZoneInfo("UTC")
     now_local = utc_now().astimezone(tz)
-    if now_local.hour < settings.daily_drop_hour:
+    if (now_local.hour, now_local.minute) < (settings.daily_drop_hour, settings.daily_drop_minute):
         return 0  # before the morning drop
 
     drop = await build_daily_drop(session, drop_date=now_local.date())
@@ -439,9 +439,9 @@ async def send_daily_drop_notification(session: AsyncSession) -> int:
     if subscribers <= already:
         return 0
     payload = {
-        "title": "The Daily Drop is in \U0001f5de️",
+        "title": "The Back Page is in \U0001f5de️",
         "body": "Today's winners, bottlers and the roast — see where you stand.",
-        "url": "/",
+        "url": "/",  # the dashboard; the drop modal overlays it on arrival
     }
     sent = 0
     for user_id in subscribers:

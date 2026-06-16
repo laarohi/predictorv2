@@ -88,10 +88,12 @@ class Settings(BaseSettings):
     vapid_private_key: str = ""
     vapid_subject: str = "mailto:aarohiluke@gmail.com"
 
-    # Daily Drop morning broadcast: once local time passes daily_drop_hour
+    # Daily Drop morning broadcast: once local time passes daily_drop_hour:minute
     # (interpreted in the daily_drop_tz timezone) the scheduler builds that day's
     # Drop and pushes "it's in" to every subscriber — once per day (idempotent).
+    # Set DAILY_DROP_HOUR=99 to pause the broadcast (the clock never reaches 99).
     daily_drop_hour: int = 8
+    daily_drop_minute: int = 30
     daily_drop_tz: str = "Europe/Malta"
 
     # Claude Code subscription token for the LLM-written Daily Drop roast
