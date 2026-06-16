@@ -26,6 +26,9 @@ class LeaderStat(BaseModel):
     names: list[str]
     points: int
     lead: int  # gap to the next distinct position (0 if everyone's level)
+    # Consecutive days this exact leader (set) has been top, per snapshots
+    # (1 = just took the lead). Lets the roast avoid re-roasting a static leader.
+    days_held: int = 1
 
 
 class MoveStat(BaseModel):
@@ -49,6 +52,9 @@ class SpoonStat(BaseModel):
     names: list[str]
     position: int
     behind_leader: int
+    # Consecutive days this exact bottom (set) has propped up the table, per
+    # snapshots (1 = first day down there). Roast uses it to avoid piling on.
+    days_held: int = 1
 
 
 class CalledItStat(BaseModel):

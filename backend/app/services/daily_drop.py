@@ -263,6 +263,47 @@ async def _pick_stats(
     return called_it, contrarian, blunder, len(by_fixture)
 
 
+async def _position_tenure(
+    session: AsyncSession, leader_ids: set[uuid.UUID], spoon_ids: set[uuid.UUID]
+) -> tuple[int, int]:
+    """How many consecutive recent snapshot days the current leader set / spoon
+    set has held top / bottom of the table. 1 = only today (or no matching
+    history). Lets the roast avoid re-roasting a long-standing first/last."""
+    rows = (
+        await session.execute(
+            select(
+                LeaderboardSnapshot.captured_date,
+                LeaderboardSnapshot.user_id,
+                LeaderboardSnapshot.position,
+            )
+        )
+    ).all()
+    by_day: dict[date, dict[uuid.UUID, int]] = defaultdict(dict)
+    for d, uid, pos in rows:
+        by_day[d][uid] = pos
+    days = sorted(by_day.keys(), reverse=True)
+
+    def _streak(target_ids: set[uuid.UUID], edge) -> int:
+        # Walk newest→oldest; count days whose top (edge=min) / bottom (edge=max)
+        # holders are EXACTLY today's set. Stop at the first day that differs.
+        if not target_ids:
+            return 1
+        count = 0
+        for d in days:
+            positions = by_day[d]
+            if not positions:
+                break
+            edge_pos = edge(positions.values())
+            holders = {u for u, p in positions.items() if p == edge_pos}
+            if holders == target_ids:
+                count += 1
+            else:
+                break
+        return max(1, count)
+
+    return _streak(leader_ids, min), _streak(spoon_ids, max)
+
+
 async def compute_drop_payload(
     session: AsyncSession, *, reference: datetime | None = None
 ) -> DropPayload:
@@ -296,6 +337,7 @@ async def compute_drop_payload(
         )
         last_pos = max(e.position for e in ranked)
         # Only a wooden spoon if there's more than one distinct position.
+        spooners: list = []
         if last_pos != top_pos:
             spooners = [e for e in ranked if e.position == last_pos]
             wooden_spoon = SpoonStat(
@@ -303,6 +345,17 @@ async def compute_drop_payload(
                 position=last_pos,
                 behind_leader=leaders[0].total_points - spooners[0].total_points,
             )
+
+        # How long the current top/bottom have been parked there — the roast
+        # uses this to stop piling on a static leader/last every single day.
+        leader_days, spoon_days = await _position_tenure(
+            session,
+            {e.user_id for e in leaders},
+            {e.user_id for e in spooners},
+        )
+        leader.days_held = leader_days
+        if wooden_spoon:
+            wooden_spoon.days_held = spoon_days
 
     # Peak streak lengths (board entries); the single winner is chosen BELOW,
     # after the picks awards, so the streaks share the least-featured spread.
@@ -352,6 +405,70 @@ async def compute_drop_payload(
     )
 
 
+async def _todays_match_returns(
+    session: AsyncSession, user_id: uuid.UUID, *, since: datetime
+) -> list[PointsCategory]:
+    """The viewer's points from matches that FINISHED in the drop window
+    (kickoff >= ``since``), split into Exact scores / Correct outcomes / Rarity
+    bonus — mirroring ``scoring._add_match_points_to_phase``.
+
+    This is "today's returns", deliberately NOT the season-to-date breakdown
+    (the bug this replaced showed cumulative ``entry.breakdown`` totals). It is
+    match-derived only: advancement / group-position / bonus-question payouts
+    aren't tied to a match finishing in the window, so they're excluded — during
+    the group stage the daily haul is match scoring anyway.
+    """
+    # Local import: scoring pulls in the config + bonus layers; importing at
+    # module load would widen this service's import graph.
+    from app.services.scoring import (
+        calculate_match_points,
+        get_outcome_counts,
+        get_scoring_config,
+    )
+
+    match_config = get_scoring_config().get("match", {})
+    base_outcome_points = match_config.get("correct_outcome", 5)
+    exact_score_points = match_config.get("exact_score", 10)
+
+    rows = (
+        await session.execute(
+            select(MatchPrediction, Score, Fixture)
+            .join(Fixture, MatchPrediction.fixture_id == Fixture.id)
+            .join(Score, Score.fixture_id == Fixture.id)
+            .where(
+                MatchPrediction.user_id == user_id,
+                Fixture.status == MatchStatus.FINISHED,
+                Fixture.kickoff >= since,
+            )
+        )
+    ).all()
+
+    outcome_pts = exact_pts = rarity_pts = 0
+    for prediction, score, fixture in rows:
+        counts = await get_outcome_counts(session, fixture.id)
+        total_predictors = sum(counts.values())
+        correct_predictors = counts.get(score.outcome, 0)
+        points, is_correct_outcome, is_exact_score = calculate_match_points(
+            prediction, score,
+            total_predictors=total_predictors,
+            correct_predictors=correct_predictors,
+        )
+        if is_correct_outcome:
+            outcome_pts += base_outcome_points
+            hybrid = points - base_outcome_points - (exact_score_points if is_exact_score else 0)
+            if hybrid > 0:
+                rarity_pts += hybrid
+        if is_exact_score:
+            exact_pts += exact_score_points
+
+    categories = [
+        ("Exact scores", exact_pts),
+        ("Correct outcomes", outcome_pts),
+        ("Rarity bonus", rarity_pts),
+    ]
+    return [PointsCategory(label=label, points=pts) for label, pts in categories if pts > 0]
+
+
 async def compute_personal_stats(
     session: AsyncSession, user_id: uuid.UUID, *, reference: datetime | None = None
 ) -> PersonalStats | None:
@@ -364,36 +481,13 @@ async def compute_personal_stats(
     if entry is None:
         return None
 
-    # Points banked vs yesterday's snapshot (if a baseline day exists).
-    points_gained: int | None = None
-    pair = await _snapshot_pair_dates(session)
-    if pair is not None:
-        latest_d, prev_d = pair
-        latest = await _positions_at(session, latest_d)
-        prev = await _positions_at(session, prev_d)
-        if user_id in latest and user_id in prev:
-            points_gained = latest[user_id][1] - prev[user_id][1]
-
-    # Points by category (season-to-date — per-category daily isn't tracked).
-    # Drop zero categories; bracket rounds surface only once they're awarded.
-    b = entry.breakdown
-    categories = [
-        ("Exact scores", b.exact_score_points),
-        ("Correct outcomes", b.match_outcome_points),
-        ("Rarity bonus", b.hybrid_bonus_points),
-        ("Bonus questions", b.bonus_question_points),
-        ("Group advance", b.group_advance_points),
-        ("Group position", b.group_position_points),
-        ("Round of 32", b.round_of_32_points),
-        ("Round of 16", b.round_of_16_points),
-        ("Quarter-finals", b.quarter_final_points),
-        ("Semi-finals", b.semi_final_points),
-        ("Final", b.final_points),
-        ("Winner", b.winner_points),
-    ]
-    points_breakdown = [
-        PointsCategory(label=label, points=pts) for label, pts in categories if pts > 0
-    ]
+    # "Today's returns": points from matches that finished in the drop window,
+    # split by category. The day's haul is the SUM of these — so the ledger rows
+    # always add up to the headline number (they used to disagree: the rows were
+    # season-to-date while the haul was a snapshot delta).
+    since = (reference or utc_now()) - timedelta(hours=PICKS_WINDOW_HOURS)
+    points_breakdown = await _todays_match_returns(session, user_id, since=since)
+    points_gained: int | None = sum(c.points for c in points_breakdown) or None
 
     return PersonalStats(
         user_name=entry.user_name,

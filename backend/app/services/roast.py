@@ -79,7 +79,13 @@ def _brief(p: DropPayload) -> list[str]:
     lines: list[str] = []
     if p.leader:
         gap = f", {p.leader.lead} clear" if p.leader.lead > 0 else " (level at the top)"
-        lines.append(f"- Top of the table: {_join(p.leader.names)} on {p.leader.points} pts{gap}.")
+        tenure = (
+            f" — and has led for {p.leader.days_held} days running"
+            if p.leader.days_held >= 2 else ""
+        )
+        lines.append(
+            f"- Top of the table: {_join(p.leader.names)} on {p.leader.points} pts{gap}{tenure}."
+        )
     if p.mover:
         lines.append(
             f"- Biggest climber overnight: {_join(p.mover.names)}, up {p.mover.delta} place(s)."
@@ -94,9 +100,13 @@ def _brief(p: DropPayload) -> list[str]:
             f"- Most points banked: {_join(p.points_haul.names)} (+{p.points_haul.points_gained})."
         )
     if p.wooden_spoon:
+        tenure = (
+            f", rooted to the bottom for {p.wooden_spoon.days_held} days now"
+            if p.wooden_spoon.days_held >= 2 else ""
+        )
         lines.append(
             f"- Dead last: {_join(p.wooden_spoon.names)}, "
-            f"{p.wooden_spoon.behind_leader} pts off the top."
+            f"{p.wooden_spoon.behind_leader} pts off the top{tenure}."
         )
     if p.called_it:
         c = p.called_it
@@ -135,9 +145,9 @@ def _length_guidance(p: DropPayload) -> str:
     long tournament and keeps the cadence from feeling formulaic."""
     present = sum(1 for f in _STAT_FIELDS if getattr(p, f) is not None)
     if p.match_count >= 3 or present >= 7:
-        return "4 to 5 sentences — it was a big day, so make it a proper roast"
+        return "5 to 6 sentences — it was a big day, so make it a proper roast"
     if present >= 4:
-        return "3 punchy sentences"
+        return "3 to 4 punchy sentences"
     return "just 2 sharp sentences — a quiet day, so keep it short and lethal"
 
 
@@ -179,16 +189,33 @@ def build_prompt(p: DropPayload, past_roasts: list[str] | None = None) -> str:
             "must not echo one already used):",
             *(f"[Day {i}] {r}" for i, r in enumerate(past_roasts, 1)),
         ]
+    # When the same player has sat top/bottom for several days, re-roasting them
+    # for it is stale — tell the model to leave them be unless it has a NEW hook.
+    stale = []
+    if p.leader and p.leader.days_held >= 3:
+        stale.append(f"{_join(p.leader.names)} (top {p.leader.days_held} days)")
+    if p.wooden_spoon and p.wooden_spoon.days_held >= 3:
+        stale.append(f"{_join(p.wooden_spoon.names)} (bottom {p.wooden_spoon.days_held} days)")
+
     parts += [
         "",
         f"Context: {p.match_count} match(es) settled, {p.player_count} players in the pool.",
         "",
         "INSTRUCTIONS:",
         f"- Length: {_length_guidance(p)}. One paragraph, plain text.",
-        "- HARD LIMIT: never exceed 5 sentences or ~75 words — the roast must fit on "
+        "- HARD LIMIT: never exceed 6 sentences or ~100 words — the roast must fit on "
         "a phone screen with no scrolling. If in doubt, cut it shorter; a tight roast "
         "that lands beats a long one that gets cut off.",
         "- Name and roast 2 to 4 of the people above, using their EXACT display name.",
+    ]
+    if stale:
+        parts.append(
+            "- OLD NEWS — " + "; ".join(stale) + ". Don't roast them just for being "
+            "top/bottom again; the group's heard it. Only feature them with a "
+            "genuinely fresh angle (a specific pick, a dossier detail), otherwise "
+            "lean on the day's movers, blunders and the chasing pack instead."
+        )
+    parts += [
         "- Mix it up day to day: you do NOT have to use the dossier notes. Some roasts "
         "should lean on personal details, others should roast purely on their "
         "predictions and table position, and you're encouraged to invent your own "
