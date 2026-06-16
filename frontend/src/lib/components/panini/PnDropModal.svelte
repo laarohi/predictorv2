@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount, onDestroy, tick } from 'svelte';
-	import { fly } from 'svelte/transition';
 	import { getLatestDrop } from '$lib/api/dailyDrop';
 	import PnIcon from '$components/panini/PnIcon.svelte';
 	import type { DailyDrop } from '$types';
@@ -24,7 +23,7 @@
 	let capturing = false; // hides chrome (×, arrows, button) during the snapshot
 	let busy = false; // share in flight — guards against double taps
 
-	type Row = { ic: IconName; lbl: string; name: string; rest: string };
+	type Row = { ic: IconName; lbl: string; name: string; stat: string };
 	type Theme = 'personal' | 'table' | 'picks' | 'roast';
 	type Page = { key: Theme; title: string; icon: IconName; light: boolean };
 
@@ -32,8 +31,17 @@
 		personal: { title: 'Your Day', icon: 'medal', light: true },
 		table: { title: 'The Table', icon: 'crown', light: false },
 		picks: { title: 'The Picks', icon: 'skull', light: false },
-		roast: { title: 'The Roast', icon: 'flame', light: true }
+		roast: { title: 'The Roast', icon: 'pen-nib', light: true }
 	};
+
+	// Edition number derived from the date (no backend field) — tournament
+	// opener = 11 Jun 2026, so opening day is "Ed. No. 1".
+	const TOURNAMENT_START = '2026-06-11';
+	function editionNo(iso: string): number {
+		const ms =
+			new Date(iso + 'T00:00:00').getTime() - new Date(TOURNAMENT_START + 'T00:00:00').getTime();
+		return Math.max(1, Math.round(ms / 86_400_000) + 1);
+	}
 
 	function seenDrops(): string[] {
 		try {
@@ -113,8 +121,7 @@
 	onMount(async () => {
 		reduced = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 		const forced =
-			import.meta.env.DEV &&
-			new URLSearchParams(window.location.search).get('drop') === 'force';
+			import.meta.env.DEV && new URLSearchParams(window.location.search).get('drop') === 'force';
 		try {
 			const d = await getLatestDrop();
 			if (d && (forced || !seenDrops().includes(d.drop_date))) {
@@ -140,9 +147,6 @@
 	function fmtDate(iso: string): string {
 		const d = new Date(iso + 'T00:00:00');
 		return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }).toUpperCase();
-	}
-	function dur(ms: number): number {
-		return reduced ? 0 : ms;
 	}
 	function ordinal(n: number): string {
 		if (n % 100 >= 11 && n % 100 <= 13) return 'TH';
@@ -182,10 +186,21 @@
 		// two RAFs so the hidden-chrome layout + fonts settle before the snapshot
 		await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))));
 
-		// html-to-image doesn't carry theme custom props (--accent/--fg/…) into its
-		// clone, so var()-based SVG glyph fills vanish. Pin them inline for the
-		// snapshot, then strip them so page-to-page theme switches stay live.
-		const themeVars = ['--accent', '--fg', '--seg', '--track', '--btn', '--btn-fg'];
+		// html-to-image doesn't carry theme custom props into its clone, so
+		// var()-based fills/rules vanish. Pin every theme var the redesign reads
+		// inline for the snapshot, then strip them so theme switches stay live.
+		const themeVars = [
+			'--bg',
+			'--accent',
+			'--fg',
+			'--seg',
+			'--track',
+			'--btn',
+			'--btn-fg',
+			'--rule',
+			'--rule-soft',
+			'--muted'
+		];
 		const cs = getComputedStyle(cardEl);
 		for (const v of themeVars) cardEl.style.setProperty(v, cs.getPropertyValue(v).trim());
 
@@ -235,20 +250,20 @@
 	$: tableSupport = (
 		p
 			? [
-					p.mover && { ic: 'chart' as IconName, lbl: 'On the Move', name: fmtNames(p.mover.names), rest: `climbed ${p.mover.delta} place${p.mover.delta === 1 ? '' : 's'}` },
-					p.faceplant && { ic: 'skull' as IconName, lbl: 'Shat the Bed', name: fmtNames(p.faceplant.names), rest: `dropped ${Math.abs(p.faceplant.delta)} place${Math.abs(p.faceplant.delta) === 1 ? '' : 's'}` },
-					p.points_haul && { ic: 'money' as IconName, lbl: 'Big Earner', name: fmtNames(p.points_haul.names), rest: `+${p.points_haul.points_gained} pts` },
-					p.wooden_spoon && { ic: 'trophy' as IconName, lbl: 'Why Bother?', name: fmtNames(p.wooden_spoon.names), rest: `${p.wooden_spoon.behind_leader} pts off the top` }
+					p.mover && { ic: 'chart' as IconName, lbl: 'On the Move', name: fmtNames(p.mover.names), stat: `+${p.mover.delta} place${p.mover.delta === 1 ? '' : 's'}` },
+					p.faceplant && { ic: 'skull' as IconName, lbl: 'Shat the Bed', name: fmtNames(p.faceplant.names), stat: `${p.faceplant.delta} place${Math.abs(p.faceplant.delta) === 1 ? '' : 's'}` },
+					p.points_haul && { ic: 'money' as IconName, lbl: 'Big Earner', name: fmtNames(p.points_haul.names), stat: `+${p.points_haul.points_gained} pts` },
+					p.wooden_spoon && { ic: 'trophy' as IconName, lbl: 'Why Bother?', name: fmtNames(p.wooden_spoon.names), stat: `−${p.wooden_spoon.behind_leader} pts` }
 				].filter((r): r is Row => !!r)
 			: []
 	);
 	$: picksSupport = (
 		p
 			? [
-					p.called_it && { ic: 'crystal-ball' as IconName, lbl: 'Nostradamus', name: fmtNames(p.called_it.names), rest: `${p.called_it.names.length === 1 ? 'SOLO' : 'nailed'} ${p.called_it.home_team} ${p.called_it.home_score}-${p.called_it.away_score} ${p.called_it.away_team}` },
-					p.contrarian && { ic: 'glasses' as IconName, lbl: 'The Hipster', name: fmtNames(p.contrarian.names), rest: `${p.contrarian.names.length} of ${p.contrarian.total} on ${p.contrarian.home_team} v ${p.contrarian.away_team}` },
-					p.coldest_streak && { ic: 'snowflake' as IconName, lbl: 'Coldest', name: fmtNames(p.coldest_streak.names), rest: `${p.coldest_streak.length} wrong on the bounce` },
-					p.hottest_streak && { ic: 'flame' as IconName, lbl: 'Hottest', name: fmtNames(p.hottest_streak.names), rest: `${p.hottest_streak.length} correct on the bounce` }
+					p.called_it && { ic: 'crystal-ball' as IconName, lbl: 'Nostradamus', name: fmtNames(p.called_it.names), stat: `${p.called_it.count === 1 ? 'SOLO ' : ''}${p.called_it.home_score}–${p.called_it.away_score}` },
+					p.contrarian && { ic: 'glasses' as IconName, lbl: 'The Hipster', name: fmtNames(p.contrarian.names), stat: `avg ${p.contrarian.avg_pct}% agreed` },
+					p.hottest_streak && { ic: 'flame' as IconName, lbl: 'Hottest', name: fmtNames(p.hottest_streak.names), stat: `${p.hottest_streak.length} in a row` },
+					p.coldest_streak && { ic: 'snowflake' as IconName, lbl: 'Coldest', name: fmtNames(p.coldest_streak.names), stat: `${p.coldest_streak.length} wrong in a row` }
 				].filter((r): r is Row => !!r)
 			: []
 	);
@@ -269,11 +284,12 @@
 	// (tap/arrows still skip instantly). Roast carries the most text.
 	$: pageMs = cur?.key === 'roast' ? 24000 : 20000;
 
-	function segWidth(i: number): number {
-		if (i < page) return 100;
-		if (i > page) return 0;
-		return autoAdvance ? Math.min(progress, 1) * 100 : 100;
-	}
+	// Segment fills, REACTIVE so the active bar grows as `progress` advances each
+	// RAF frame. (A `segWidth(i)` call in the template wouldn't re-run on `progress`
+	// changes — Svelte can't see the dep inside the function — so the bar froze.)
+	$: fills = pages.map((_, i) =>
+		i < page ? 100 : i > page ? 0 : autoAdvance ? Math.min(progress, 1) * 100 : 100
+	);
 	// Panini glyph for a points-breakdown category (bracket rounds → trophy fallback).
 	function catIcon(label: string): IconName {
 		const m: Record<string, IconName> = {
@@ -292,14 +308,41 @@
 	// whole roast shows both in the modal and in the rasterised PNG (a clipped
 	// roast is a dead roast). Re-fits on resize and whenever the text changes.
 	function fitText(node: HTMLElement, _deps?: unknown) {
-		const page = node.closest('.pn-drop-page') as HTMLElement | null;
+		const pageEl = node.closest('.pn-drop-page') as HTMLElement | null;
 		function fit(): void {
-			if (!page) return;
-			let size = 16;
+			if (!pageEl) return;
+			let size = 15; // new column base (was 16)
 			node.style.fontSize = `${size}px`;
 			let guard = 0;
-			while (size > 9.5 && page.scrollHeight > page.clientHeight && guard < 60) {
+			while (size > 9.5 && pageEl.scrollHeight > pageEl.clientHeight && guard < 60) {
 				size -= 0.5;
+				node.style.fontSize = `${size}px`;
+				guard += 1;
+			}
+		}
+		requestAnimationFrame(fit);
+		window.addEventListener('resize', fit);
+		return {
+			update(_d?: unknown): void {
+				requestAnimationFrame(fit);
+			},
+			destroy(): void {
+				window.removeEventListener('resize', fit);
+			}
+		};
+	}
+
+	// Shrink the award-hero screamer only when a long (often tied) name would wrap
+	// enough to overflow the honours page — normal names keep the full 33px.
+	function fitHeading(node: HTMLElement, _dep?: unknown) {
+		const pageEl = node.closest('.pn-drop-page') as HTMLElement | null;
+		function fit(): void {
+			if (!pageEl) return;
+			let size = 33;
+			node.style.fontSize = `${size}px`;
+			let guard = 0;
+			while (size > 17 && pageEl.scrollHeight > pageEl.clientHeight && guard < 30) {
+				size -= 1;
 				node.style.fontSize = `${size}px`;
 				guard += 1;
 			}
@@ -338,105 +381,111 @@
 			on:pointerup={onUp}
 			on:pointerleave={onUp}
 		>
-			<div class="pn-drop-wm" aria-hidden="true">
-				<PnIcon name={cur.icon} size={260} color="var(--fg)" stroke={1.5} />
-			</div>
+			<div class="pn-drop-half" aria-hidden="true"></div>
+			{#if cur.key !== 'roast'}
+				<div class="pn-drop-wm" aria-hidden="true">
+					<PnIcon name={cur.icon} size={250} color="var(--fg)" stroke={1.4} />
+				</div>
+			{/if}
 
 			<div class="pn-drop-top">
 				<div class="pn-drop-progress">
 					{#each pages as _, i}
-						<div class="seg"><div class="fill" style="width:{segWidth(i)}%"></div></div>
+						<div class="seg"><div class="fill" style="width:{fills[i]}%"></div></div>
 					{/each}
 				</div>
 				<div class="pn-drop-head">
-					<span class="brand">THE BACK PAGE · {fmtDate(drop.drop_date)}</span>
+					<span class="runhead"><span class="dot"></span>The Back Page · Ed. No. {editionNo(drop.drop_date)}</span>
 					<button class="x" on:click|stopPropagation={dismiss} aria-label="Dismiss">×</button>
 				</div>
 			</div>
 
 			<div class="pn-drop-body">
 				{#key page}
-					<div class="pn-drop-page">
-						<div class="kicker" in:fly={{ y: 8, duration: dur(220) }}>{cur.title}</div>
-
+					<div class="pn-drop-page enter">
 						{#if cur.key === 'personal' && me}
-							<div class="hero" in:fly={{ y: 14, duration: dur(300), delay: dur(60) }}>
-								<div class="big">{me.position}<span class="ord">{ordinal(me.position)}</span></div>
-								<div class="hero-sub"><b>{me.points}</b> pts{#if me.points_gained} · +{me.points_gained} today{/if}</div>
+							<div class="kicker-row">
+								<span class="kicker">Your Day</span><span class="kicker-rule"></span>
+								<span class="kicker-date">{fmtDate(drop.drop_date)}</span>
 							</div>
-							<div class="support">
-								<div class="s-row" in:fly={{ y: 10, duration: dur(240), delay: dur(140) }}>
-									{#if me.movement > 0}
-										<span class="ic"><PnIcon name="arrow-up" size={15} color="var(--accent)" /></span><span class="s-val">Up <b>{me.movement}</b> place{me.movement === 1 ? '' : 's'} overnight</span>
-									{:else if me.movement < 0}
-										<span class="ic"><PnIcon name="arrow-down" size={15} color="var(--accent)" /></span><span class="s-val">Down <b>{Math.abs(me.movement)}</b> place{Math.abs(me.movement) === 1 ? '' : 's'} overnight</span>
-									{:else}
-										<span class="ic"><PnIcon name="minus" size={15} color="var(--accent)" /></span><span class="s-val">Held your ground overnight</span>
-									{/if}
+							<div class="yd-hero">
+								<div class="yd-num screamer">{me.position}<span class="ord">{ordinal(me.position)}</span></div>
+								<div class="yd-side">
+									<span class="yd-of">Position · of {p?.player_count ?? ''}</span>
+									<span class="yd-flag">
+										<PnIcon name={me.movement > 0 ? 'arrow-up' : me.movement < 0 ? 'arrow-down' : 'minus'} size={13} color="var(--paper)" />
+										{me.movement > 0 ? `Up ${me.movement}` : me.movement < 0 ? `Down ${Math.abs(me.movement)}` : 'Steady'} overnight
+									</span>
+									<span class="yd-pts"><em>{me.points}</em> pts{#if me.points_gained} · +{me.points_gained} today{/if}</span>
 								</div>
-								{#if me.hot_streak >= 2 || me.cold_streak >= 2}
-									<div class="s-row" in:fly={{ y: 10, duration: dur(240), delay: dur(200) }}>
-										<span class="ic"><PnIcon name={me.hot_streak >= 2 ? 'flame' : 'snowflake'} size={15} color="var(--accent)" /></span>
-										<span class="s-val"><b>{me.hot_streak >= 2 ? me.hot_streak : me.cold_streak}</b> {me.hot_streak >= 2 ? 'correct' : 'wrong'} on the bounce</span>
-									</div>
-								{/if}
-								{#each me.points_breakdown as c, i (c.label)}
-									<div class="s-row" in:fly={{ y: 10, duration: dur(240), delay: dur(260 + i * 50) }}>
-										<span class="ic"><PnIcon name={catIcon(c.label)} size={15} color="var(--accent)" /></span>
-										<span class="s-val"><b>{c.points}</b> pts · {c.label}</span>
-									</div>
-								{/each}
-								{#if !me.points_breakdown.length}
-									<div class="s-row" in:fly={{ y: 10, duration: dur(240), delay: dur(260) }}>
-										<span class="ic"><PnIcon name="clock" size={15} color="var(--accent)" /></span><span class="s-val">No points on the board yet — early days.</span>
-									</div>
+							</div>
+							<div class="yd-formline">
+								{#if me.hot_streak >= 2}
+									<PnIcon name="flame" size={17} color="var(--accent)" /><span><b>{me.hot_streak}</b> correct on the bounce</span>
+								{:else if me.cold_streak >= 2}
+									<PnIcon name="snowflake" size={17} color="var(--accent)" /><span><b>{me.cold_streak}</b> wrong on the bounce</span>
+								{:else if me.movement !== 0}
+									<PnIcon name={me.movement > 0 ? 'arrow-up' : 'arrow-down'} size={17} color="var(--accent)" /><span>{me.movement > 0 ? 'Up' : 'Down'} <b>{Math.abs(me.movement)}</b> overnight</span>
+								{:else}
+									<PnIcon name="minus" size={17} color="var(--accent)" /><span>Held your ground</span>
 								{/if}
 							</div>
-
-						{:else if cur.key === 'table'}
-							{#if p?.leader}
-								<div class="hero" in:fly={{ y: 14, duration: dur(300), delay: dur(60) }}>
-									<div class="hero-ic"><PnIcon name={cur.icon} size={38} color="var(--accent)" /></div>
-									<div class="hero-lbl">Top Dog</div>
-									<div class="hero-name">{fmtNames(p.leader.names)}</div>
-									<div class="hero-sub"><b>{p.leader.points}</b> pts{#if p.leader.lead > 0} · +{p.leader.lead} clear{/if}</div>
+							{#if me.points_breakdown.length}
+								<div class="yd-ledger">
+									<div class="ledger-cap">Today's returns · {me.points_breakdown.length} ways</div>
+									{#each me.points_breakdown as c (c.label)}
+										<div class="ledger-row">
+											<span class="ic"><PnIcon name={catIcon(c.label)} size={14} color="var(--accent)" /></span>
+											<span class="lbl"><span>{c.label}</span></span>
+											<span class="val">{c.points}</span>
+										</div>
+									{/each}
+									<div class="ledger-total"><span class="l">Day's haul</span><span class="v">+{me.points_gained}</span></div>
 								</div>
 							{/if}
-							<div class="support">
-								{#each tableSupport as r, i (r.lbl)}
-									<div class="s-row" in:fly={{ y: 10, duration: dur(240), delay: dur(140 + i * 70) }}>
-										<span class="ic"><PnIcon name={r.ic} size={15} color="var(--accent)" /></span><span class="s-lbl">{r.lbl}</span>
-										<span class="s-val"><b>{r.name}</b> <span class="s-stat">{r.rest}</span></span>
-									</div>
-								{/each}
+
+						{:else if cur.key === 'table' || cur.key === 'picks'}
+							{@const isTable = cur.key === 'table'}
+							<div class="kicker-row">
+								<span class="kicker">{isTable ? 'The Table · Standings Drama' : 'The Picks · Hits & Howlers'}</span>
+								<span class="kicker-rule"></span>
 							</div>
-
-						{:else if cur.key === 'picks'}
-							{#if p?.blunder}
-								<div class="hero" in:fly={{ y: 14, duration: dur(300), delay: dur(60) }}>
-									<div class="hero-ic"><PnIcon name={cur.icon} size={38} color="var(--accent)" /></div>
-									<div class="hero-lbl">Dumbleflynn</div>
-									<div class="hero-name">{fmtNames(p.blunder.names)}</div>
-									<div class="hero-sub">said <b>{p.blunder.predicted}</b> · finished <b>{p.blunder.actual}</b><br />{p.blunder.home_team} v {p.blunder.away_team}</div>
-								</div>
-							{/if}
-							<div class="support">
-								{#each picksSupport as r, i (r.lbl)}
-									<div class="s-row" in:fly={{ y: 10, duration: dur(240), delay: dur(140 + i * 70) }}>
-										<span class="ic"><PnIcon name={r.ic} size={15} color="var(--accent)" /></span><span class="s-lbl">{r.lbl}</span>
-										<span class="s-val"><b>{r.name}</b> <span class="s-stat">{r.rest}</span></span>
+							<div class="award-hero">
+								<div class="glyph"><PnIcon name={isTable ? 'crown' : 'skull'} size={34} color="var(--accent)" /></div>
+								{#if isTable && p?.leader}
+									<div class="lbl">Top Dog</div>
+									<div class="name screamer" use:fitHeading={p.leader.names}>{fmtNames(p.leader.names)}</div>
+									<div class="sub"><b>{p.leader.points}</b> pts{#if p.leader.lead > 0} · <b>+{p.leader.lead}</b> clear at the summit{/if}</div>
+								{:else if !isTable && p?.blunder}
+									<div class="lbl">Dumbleflynn of the Day</div>
+									<div class="name screamer" use:fitHeading={p.blunder.names}>{fmtNames(p.blunder.names)}</div>
+									<div class="sub">Said <b>{p.blunder.predicted}</b> · finished <b>{p.blunder.actual}</b><span class="vs">{p.blunder.home_team} v {p.blunder.away_team}</span></div>
+								{/if}
+							</div>
+							<div class="honours">
+								<div class="h-cap">{isTable ? 'Today’s honours & horrors' : 'Crystal balls & cold spells'}</div>
+								{#each (isTable ? tableSupport : picksSupport) as r (r.lbl)}
+									<div class="h-row">
+										<span class="ic"><PnIcon name={r.ic} size={16} color="var(--accent)" /></span>
+										<span class="lbl">{r.lbl}</span>
+										<span class="who">{r.name}</span>
+										<span class="stat">{r.stat}</span>
 									</div>
 								{/each}
 							</div>
 
 						{:else if cur.key === 'roast'}
-							<div class="np-byline" in:fly={{ y: 8, duration: dur(220), delay: dur(70) }}>
-								<span>Our Man in the Group Chat</span>
-								{#if drop.roast_is_placeholder}<span class="sample">SAMPLE</span>{/if}
-							</div>
-							<p class="roast-body" use:fitText={drop.roast} in:fly={{ y: 12, duration: dur(320), delay: dur(100) }}>{drop.roast}</p>
-							<div class="roast-meta" in:fly={{ y: 8, duration: dur(240), delay: dur(200) }}>
-								from {drop.payload.match_count} matches · {drop.payload.player_count} players
+							<div class="np">
+								<div class="np-plate">
+									<div class="np-ears"><span>Late Edition</span><span>Back Page</span></div>
+									<div class="np-name">The Roast</div>
+								</div>
+								<div class="np-byline">
+									<span class="pen"><PnIcon name="pen-nib" size={12} color="var(--red)" /></span>
+									<span>{fmtDate(drop.drop_date)}</span>
+									{#if drop.roast_is_placeholder}<span class="sample ml">Sample</span>{/if}
+								</div>
+								<p class="roast-body" use:fitText={drop.roast}>{drop.roast}<span class="roast-end"></span></p>
 							</div>
 						{/if}
 					</div>
@@ -451,10 +500,15 @@
 			</div>
 
 			<div class="pn-drop-foot">
+				<span class="foot-brand"><span class="bp-logo bp-logo-sm"><span class="crest">CxF</span><span class="wm">Predict<span class="aa">aa</span></span></span></span>
 				<button class="share" on:click|stopPropagation={share} disabled={busy}>
-					{copied ? 'Saved ✓' : busy ? 'Building image…' : 'Share the Back Page'}
+					{#if !copied && !busy}<PnIcon name="quote" size={14} color="var(--btn-fg)" />{/if}
+					{copied ? 'Saved ✓' : busy ? 'Building image…' : 'Share the Scoop'}
 				</button>
-				<div class="caphint" aria-hidden="true">THE PREDICTOR · WC26</div>
+				<div class="caphint" aria-hidden="true">
+					<span class="lockup"><span class="bp-logo bp-logo-lg"><span class="crest">CxF</span><span class="wm">Predict<span class="aa">aa</span></span></span></span>
+					<span class="ed"><b>The Back Page</b><br />{fmtDate(drop.drop_date)} · Ed. No. {editionNo(drop.drop_date)}</span>
+				</div>
 			</div>
 		</div>
 	</div>
@@ -470,7 +524,6 @@
 		justify-content: center;
 		padding: 20px;
 		background: rgba(14, 29, 64, 0.62);
-		animation: drop-fade 180ms ease-out;
 	}
 	.pn-drop-card {
 		position: relative;
@@ -478,85 +531,101 @@
 		flex-direction: column;
 		width: 100%;
 		max-width: 360px;
-		height: min(74vh, 560px);
+		height: min(79vh, 650px);
 		border: 2px solid var(--ink);
-		box-shadow: 7px 7px 0 var(--ink);
+		box-shadow: 8px 8px 0 var(--ink);
 		overflow: hidden;
 		color: var(--fg);
+		background: var(--bg);
 		transition: background-color 320ms ease;
-		animation: drop-stamp 380ms cubic-bezier(0.16, 1.1, 0.3, 1);
-		/* default (dark) theme vars; overridden per theme below.
-		   --seg: the CONSTANT progress-spine + kicker colour (the Stories signature).
-		   --btn/--btn-fg: solid Share-button fill + its text. */
+		animation: drop-stamp 420ms cubic-bezier(0.16, 1.1, 0.3, 1);
+		--bg: var(--ink);
 		--fg: var(--paper);
 		--accent: var(--gold);
 		--seg: var(--gold);
 		--btn: var(--gold);
 		--btn-fg: var(--ink);
-		--track: rgba(241, 235, 222, 0.28);
+		--track: rgba(241, 235, 222, 0.26);
+		--rule: color-mix(in srgb, var(--fg) 22%, transparent);
+		--rule-soft: color-mix(in srgb, var(--fg) 13%, transparent);
+		--muted: color-mix(in srgb, var(--fg) 62%, transparent);
 	}
-	/* On-brand palette: alternating light/dark, no green, no repeated blue. */
 	.theme-personal {
-		background: var(--gold);
+		--bg: var(--gold);
 		--fg: var(--ink);
 		--accent: var(--red-deep);
-		--seg: var(--red-deep);
-		--btn: var(--red-deep);
+		--seg: var(--ink);
+		--btn: var(--ink);
 		--btn-fg: var(--paper);
-		--track: rgba(14, 29, 64, 0.3);
+		--track: rgba(14, 29, 64, 0.26);
+		--muted: color-mix(in srgb, var(--fg) 70%, transparent);
 	}
 	.theme-table {
-		background: var(--ink);
+		--bg: var(--ink);
 		--fg: var(--paper);
 		--accent: var(--gold);
 		--seg: var(--gold);
 		--btn: var(--gold);
 		--btn-fg: var(--ink);
-		--track: rgba(241, 235, 222, 0.28);
+		--track: rgba(241, 235, 222, 0.26);
 	}
 	.theme-picks {
-		background: var(--red-deep);
+		--bg: var(--red-deep);
 		--fg: var(--paper);
 		--accent: var(--gold);
 		--seg: var(--gold);
 		--btn: var(--gold);
 		--btn-fg: var(--ink);
-		--track: rgba(241, 235, 222, 0.28);
+		--track: rgba(241, 235, 222, 0.26);
 	}
-	/* The Roast is now a newspaper "back page": cream newsprint, navy ink, red
-	   masthead accents, justified column with a drop cap. */
 	.theme-roast {
-		background: var(--paper);
+		--bg: var(--paper);
 		--fg: var(--ink);
 		--accent: var(--red);
 		--seg: var(--ink);
 		--btn: var(--ink);
 		--btn-fg: var(--paper);
-		--track: rgba(14, 29, 64, 0.3);
+		--track: rgba(14, 29, 64, 0.26);
+		--muted: color-mix(in srgb, var(--fg) 60%, transparent);
 	}
 
-	/* Faded geometric watermark (PnIcon, not emoji) */
+	/* Halftone newsprint screen */
+	.pn-drop-half {
+		position: absolute;
+		inset: 0;
+		z-index: 0;
+		pointer-events: none;
+		color: var(--fg);
+		background-image: radial-gradient(currentColor 1px, transparent 1.5px);
+		background-size: 5px 5px;
+		opacity: 0.1;
+		mask-image: radial-gradient(120% 80% at 100% 0%, #000 0%, transparent 62%);
+		-webkit-mask-image: radial-gradient(120% 80% at 100% 0%, #000 0%, transparent 62%);
+	}
+	.theme-personal .pn-drop-half {
+		opacity: 0.13;
+	}
+	.theme-roast .pn-drop-half {
+		opacity: 0.08;
+		mask-image: radial-gradient(140% 60% at 0% 100%, #000 0%, transparent 55%);
+		-webkit-mask-image: radial-gradient(140% 60% at 0% 100%, #000 0%, transparent 55%);
+	}
+
 	.pn-drop-wm {
 		position: absolute;
-		right: -34px;
-		bottom: 60px;
-		opacity: 0.12;
+		right: -40px;
+		top: 64px;
+		opacity: 0.09;
 		pointer-events: none;
 		z-index: 0;
 		line-height: 0;
 	}
-	.theme-personal .pn-drop-wm {
-		opacity: 0.14;
-	}
-	/* Newspaper page is text + rules — no big faded icon. */
-	.theme-roast .pn-drop-wm {
-		display: none;
-	}
 
+	/* top / running head */
 	.pn-drop-top {
 		position: relative;
 		z-index: 3;
-		padding: 10px 14px 0;
+		padding: 10px 16px 0;
 	}
 	.pn-drop-progress {
 		display: flex;
@@ -564,36 +633,48 @@
 	}
 	.seg {
 		flex: 1;
-		height: 4px;
+		height: 3px;
 		background: var(--track);
 		overflow: hidden;
 	}
 	.seg .fill {
 		height: 100%;
 		background: var(--seg);
-		transition: none; /* RAF drives width every frame — a 90ms ease perpetually lags */
+		transition: none;
 	}
 	.pn-drop-head {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		padding: 8px 0 4px;
+		padding: 9px 0 7px;
+		margin-top: 2px;
+		border-bottom: 1.5px solid var(--rule);
 	}
-	.pn-drop-head .brand {
+	.pn-drop-head .runhead {
 		font-family: var(--mono);
-		font-size: 9.5px;
-		letter-spacing: 0.16em;
+		font-size: 9px;
+		letter-spacing: 0.22em;
 		text-transform: uppercase;
-		color: color-mix(in srgb, var(--fg) 65%, transparent);
+		color: var(--muted);
+		display: flex;
+		align-items: center;
+		gap: 7px;
+	}
+	.pn-drop-head .runhead .dot {
+		width: 5px;
+		height: 5px;
+		background: var(--accent);
+		border-radius: 50%;
 	}
 	.pn-drop-head .x {
 		background: none;
 		border: none;
-		font-size: 24px;
+		font-size: 22px;
 		line-height: 1;
 		color: var(--fg);
 		cursor: pointer;
 		padding: 0 2px;
+		opacity: 0.8;
 	}
 
 	.pn-drop-body {
@@ -602,251 +683,380 @@
 		flex: 1;
 		overflow: hidden;
 	}
-
-	/* Footer share CTA — sits below the tap zones so it's never a nav tap. */
-	.pn-drop-foot {
-		position: relative;
-		z-index: 3;
-		padding: 10px 16px 14px;
-		border-top: 1.5px solid color-mix(in srgb, var(--fg) 18%, transparent);
-	}
-	.pn-drop-foot .share {
-		width: 100%;
-		background: var(--btn);
-		border: 1.5px solid var(--ink);
-		color: var(--btn-fg);
-		font-family: var(--display2);
-		font-weight: 700;
-		font-size: 14px;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-		padding: 12px;
-		cursor: pointer;
-	}
-	.pn-drop-foot .share:active {
-		transform: translateY(1px);
-	}
-	.pn-drop-foot .share[disabled] {
-		opacity: 0.7;
-		cursor: default;
-	}
-	/* Brand line shown only inside the rasterised PNG (replaces the button). */
-	.caphint {
-		display: none;
-		text-align: center;
-		font-family: var(--mono);
-		font-size: 11px;
-		letter-spacing: 0.18em;
-		text-transform: uppercase;
-		color: color-mix(in srgb, var(--fg) 72%, transparent);
-		padding: 11px 0 3px;
-	}
-	/* Snapshot mode: strip interactive chrome so the shared image is a clean card. */
-	.capturing .pn-drop-head .x,
-	.capturing .tap,
-	.capturing .pn-drop-progress {
-		visibility: hidden;
-	}
-	.capturing .pn-drop-foot .share {
-		display: none;
-	}
-	.capturing .caphint {
-		display: block;
-	}
 	.pn-drop-page {
 		position: absolute;
 		inset: 0;
 		display: flex;
 		flex-direction: column;
-		justify-content: flex-start; /* was center — kills P1/P2 dead-gap + P3/P4 crowding */
-		padding: 14px 30px 16px; /* wide side gutters keep text clear of the nav arrows */
-		overflow: hidden; /* a story page must never scroll */
-	}
-	/* The roast NEVER scrolls — `use:fitText` shrinks it to fit so the whole thing
-	   is always visible (and never clipped in the exported PNG). */
-	.theme-roast .pn-drop-page {
+		justify-content: center;
+		padding: 13px 26px 14px;
 		overflow: hidden;
 	}
 
+	/* shared editorial furniture */
+	.kicker-row {
+		display: flex;
+		align-items: baseline;
+		gap: 9px;
+		margin-bottom: 9px;
+	}
 	.kicker {
-		font-family: var(--display);
-		font-size: 12px;
-		letter-spacing: 0.22em;
-		text-transform: uppercase;
-		color: var(--seg);
-		margin-bottom: 10px;
-	}
-
-	.hero {
-		margin-bottom: 14px;
-	}
-	.hero .big {
-		font-family: var(--display);
-		font-size: 58px;
-		line-height: 0.9;
-		color: var(--fg);
-	}
-	.hero .big .ord {
-		font-size: 24px;
-		vertical-align: super;
-		margin-left: 2px;
-	}
-	.hero .hero-ic {
-		line-height: 0;
-		margin-bottom: 6px;
-	}
-	.hero .hero-lbl {
 		font-family: var(--mono);
-		font-size: 12.5px;
+		font-size: 10px;
 		font-weight: 600;
+		letter-spacing: 0.2em;
+		text-transform: uppercase;
+		color: var(--accent);
+		white-space: nowrap;
+	}
+	.kicker-rule {
+		flex: 1;
+		height: 2px;
+		background: var(--accent);
+		align-self: center;
+	}
+	.kicker-date {
+		font-family: var(--mono);
+		font-size: 9px;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
-		color: var(--accent); /* the award name pops; the winner still leads by size */
-		margin-bottom: 6px;
+		color: var(--muted);
 	}
-	.hero .hero-name {
+	.screamer {
 		font-family: var(--display);
-		font-size: 25px;
-		line-height: 1.02;
-		color: var(--fg);
-		margin-bottom: 5px;
+		line-height: 0.82;
+		letter-spacing: -0.02em;
+		transform: scaleX(0.93);
+		transform-origin: left;
+		text-transform: uppercase;
 	}
-	.hero .hero-sub {
-		font-family: var(--body);
-		font-size: 14px;
-		color: color-mix(in srgb, var(--fg) 88%, transparent);
+
+	/* P1 Your Day */
+	.yd-hero {
+		display: grid;
+		grid-template-columns: auto 1fr;
+		column-gap: 14px;
+		align-items: center;
+		margin-bottom: 12px;
 	}
-	.hero .hero-sub b {
-		color: var(--fg);
+	.yd-num {
+		font-family: var(--display);
+		font-size: 104px;
+		line-height: 0.74;
+		letter-spacing: -0.04em;
+		transform: scaleX(0.9);
+		transform-origin: left;
+	}
+	.yd-num .ord {
+		font-size: 30px;
+		vertical-align: super;
+		margin-left: 1px;
+	}
+	.yd-side {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.yd-flag {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		align-self: flex-start;
+		background: var(--accent);
+		color: var(--paper);
+		font-family: var(--display2);
+		font-weight: 800;
+		font-size: 12.5px;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		padding: 4px 9px;
+		border: 1.5px solid var(--ink);
+	}
+	.yd-of {
+		font-family: var(--mono);
+		font-size: 10px;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+		color: var(--muted);
+	}
+	.yd-pts {
 		font-family: var(--display2);
 		font-weight: 700;
+		font-size: 15px;
 	}
-	.support {
-		border-top: 2px solid color-mix(in srgb, var(--fg) 22%, transparent);
+	.yd-pts em {
+		font-style: normal;
+		color: var(--accent);
 	}
-	.s-row {
-		display: grid;
-		grid-template-columns: 20px 1fr; /* icon gutter + content; no flex-wrap reflow */
-		align-items: start;
-		column-gap: 8px;
-		row-gap: 2px;
-		padding: 8px 0;
-		border-bottom: 1px solid color-mix(in srgb, var(--fg) 13%, transparent);
-	}
-	.s-row:last-child {
-		border-bottom: none;
-	}
-	.s-row .ic {
-		grid-row: 1 / span 2; /* glyph spans the label + value lines */
-		align-self: center;
+	.yd-formline {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		line-height: 0; /* inline SVG — no text baseline gap */
-	}
-	.s-row .s-lbl {
-		grid-column: 2;
-		font-family: var(--mono);
-		font-size: 10.5px;
-		font-weight: 600;
-		letter-spacing: 0.07em;
-		text-transform: uppercase;
-		color: var(--accent); /* award name reads as a bold coloured label */
-	}
-	.s-row .s-val {
-		grid-column: 2;
-		font-family: var(--body);
-		font-size: 12.5px;
-		line-height: 1.35;
-		color: var(--fg);
-	}
-	.s-row .s-val b {
+		gap: 8px;
 		font-family: var(--display2);
 		font-weight: 700;
+		font-size: 13.5px;
+		padding: 9px 0;
+		border-top: 2px solid var(--rule);
+		border-bottom: 2px solid var(--rule);
+		margin-bottom: 2px;
 	}
-	.s-row .s-stat {
-		color: color-mix(in srgb, var(--fg) 62%, transparent);
+	.yd-formline :global(svg) {
+		flex-shrink: 0;
+	}
+	.yd-ledger {
+		margin-top: 12px;
+		border: 2px solid var(--rule);
+		padding: 3px 14px 11px;
+	}
+	.ledger-cap {
+		font-family: var(--mono);
+		font-size: 9.5px;
+		font-weight: 600;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: var(--muted);
+		margin: 11px 0 3px;
+	}
+	.ledger-row {
+		display: grid;
+		grid-template-columns: 18px 1fr auto;
+		align-items: center;
+		column-gap: 9px;
+		padding: 8.5px 0;
+	}
+	.ledger-row .ic {
+		line-height: 0;
+	}
+	.ledger-row .lbl {
+		font-family: var(--body);
+		font-size: 13px;
+		position: relative;
+		overflow: hidden;
+		white-space: nowrap;
+	}
+	.ledger-row .lbl span {
+		background: var(--bg);
+		padding-right: 6px;
+		position: relative;
+		z-index: 1;
+	}
+	.ledger-row .lbl::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 5px;
+		border-bottom: 1.5px dotted var(--rule);
+		z-index: 0;
+	}
+	.ledger-row .val {
+		font-family: var(--display2);
+		font-weight: 800;
+		font-size: 16px;
+	}
+	.ledger-total {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		margin-top: 5px;
+		padding-top: 9px;
+		border-top: 3px double var(--rule);
+	}
+	.ledger-total .l {
+		font-family: var(--mono);
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.14em;
+		text-transform: uppercase;
+	}
+	.ledger-total .v {
+		font-family: var(--display);
+		font-size: 30px;
+		color: var(--accent);
+		transform: scaleX(0.93);
 	}
 
-	/* Light pages (gold/cream): floor muted text higher — 60–68% reads muddy on gold.
-	   (Award labels are now accent-coloured, so they're excluded here.) */
-	.light .hero .hero-sub {
-		color: color-mix(in srgb, var(--fg) 92%, transparent);
+	/* P2/P3 award hero + honours */
+	.award-hero {
+		margin-bottom: 9px;
 	}
-	.light .s-row .s-stat,
-	.light .roast-meta {
-		color: color-mix(in srgb, var(--fg) 72%, transparent);
+	.award-hero .glyph {
+		line-height: 0;
+		margin-bottom: 5px;
 	}
-	.light .pn-drop-head .brand {
-		color: color-mix(in srgb, var(--fg) 75%, transparent);
+	.award-hero .lbl {
+		font-family: var(--mono);
+		font-size: 11px;
+		font-weight: 600;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: var(--accent);
+		margin-bottom: 5px;
+	}
+	.award-hero .name {
+		font-size: 33px;
+		line-height: 0.86;
+		margin-bottom: 6px;
+	}
+	.award-hero .sub {
+		font-family: var(--body);
+		font-size: 13px;
+		line-height: 1.32;
+		color: color-mix(in srgb, var(--fg) 90%, transparent);
+	}
+	.award-hero .sub b {
+		font-family: var(--display2);
+		font-weight: 800;
+	}
+	.award-hero .sub .vs {
+		font-family: var(--mono);
+		font-size: 10.5px;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--muted);
+		display: block;
+		margin-top: 3px;
+	}
+	.honours {
+		border-top: 2px solid var(--rule);
+	}
+	.h-cap {
+		font-family: var(--mono);
+		font-size: 9.5px;
+		font-weight: 600;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: var(--muted);
+		padding: 8px 0 2px;
+	}
+	.h-row {
+		display: grid;
+		grid-template-columns: 19px 1fr auto;
+		align-items: center;
+		column-gap: 9px;
+		padding: 7px 0;
+		border-bottom: 1px solid var(--rule-soft);
+	}
+	.h-row:last-child {
+		border-bottom: none;
+	}
+	.h-row .ic {
+		grid-row: 1 / span 2;
+		align-self: center;
+		line-height: 0;
+		display: flex;
+	}
+	.h-row .lbl {
+		grid-column: 2;
+		font-family: var(--mono);
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--accent);
+	}
+	.h-row .who {
+		grid-column: 2;
+		font-family: var(--display2);
+		font-weight: 800;
+		font-size: 14.5px;
+		line-height: 1.12;
+	}
+	.h-row .stat {
+		grid-column: 3;
+		grid-row: 1 / span 2;
+		align-self: center;
+		text-align: right;
+		font-family: var(--mono);
+		font-size: 11px;
+		color: var(--muted);
+		white-space: nowrap;
+		padding-left: 8px;
 	}
 
-	/* ── Newspaper "back page" treatment for the Roast page ──────────────────
-	   THE ROAST headline (thick rule) + byline (thin rule) = a double-rule
-	   nameplate; the roast itself is a justified column with a red drop cap. */
-	.theme-roast .kicker {
-		font-size: 27px;
-		letter-spacing: 0.005em;
-		line-height: 1;
+	/* P4 Roast — newspaper */
+	.np {
+		display: flex;
+		flex-direction: column;
+		height: 100%;
+	}
+	.np-ears {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		font-family: var(--mono);
+		font-size: 7.5px;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--muted);
+		padding-bottom: 4px;
+	}
+	.np-name {
+		font-family: var(--display);
+		font-size: 44px;
+		line-height: 0.82;
+		letter-spacing: -0.015em;
+		text-transform: uppercase;
 		color: var(--ink);
-		margin-bottom: 0;
-		padding-bottom: 6px;
+		transform: scaleX(0.9);
+		transform-origin: left;
+		border-top: 3px solid var(--ink);
 		border-bottom: 3px solid var(--ink);
+		padding: 5px 0 6px;
 	}
 	.np-byline {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		font-family: var(--mono);
-		font-size: 9px;
+		font-size: 8.5px;
 		letter-spacing: 0.16em;
 		text-transform: uppercase;
 		color: var(--red);
-		padding: 6px 0 9px;
-		border-bottom: 1px solid color-mix(in srgb, var(--ink) 32%, transparent);
-		margin-bottom: 13px;
+		padding: 6px 0 8px;
+		border-bottom: 1px solid color-mix(in srgb, var(--ink) 30%, transparent);
+		margin-bottom: 11px;
+	}
+	.np-byline .pen {
+		line-height: 0;
 	}
 	.np-byline .sample {
-		font-size: 8.5px;
+		font-size: 8px;
 		background: var(--ink);
 		color: var(--paper);
 		padding: 1px 5px;
-		letter-spacing: 0.08em;
+		letter-spacing: 0.06em;
 	}
-	.theme-roast .roast-body {
-		text-align: justify;
-		hyphens: auto;
-	}
-	.theme-roast .roast-body::first-letter {
-		float: left;
-		font-family: var(--display);
-		font-size: 3.1em;
-		line-height: 0.7;
-		margin: 5px 7px 0 0;
-		color: var(--red);
-	}
-	.theme-roast .roast-meta {
-		margin-top: 13px;
-		padding-top: 8px;
-		border-top: 1px solid color-mix(in srgb, var(--ink) 25%, transparent);
-		color: color-mix(in srgb, var(--ink) 55%, transparent);
+	.np-byline .ml {
+		margin-left: auto;
 	}
 	.roast-body {
 		margin: 0;
 		font-family: var(--body);
 		font-size: 15px;
-		line-height: 1.5;
-		color: var(--fg);
+		line-height: 1.46;
+		color: var(--ink);
+		text-align: justify;
+		hyphens: auto;
 	}
-	.roast-meta {
-		margin-top: 14px;
-		font-family: var(--mono);
-		font-size: 9.5px;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-		color: color-mix(in srgb, var(--fg) 50%, transparent);
+	.roast-body::first-letter {
+		float: left;
+		font-family: var(--display);
+		font-size: 3.2em;
+		line-height: 0.66;
+		margin: 6px 7px 0 0;
+		color: var(--red);
+	}
+	.roast-end {
+		display: inline-block;
+		width: 9px;
+		height: 9px;
+		background: var(--red);
+		margin-left: 3px;
+		vertical-align: baseline;
 	}
 
+	/* tap zones + arrows */
 	.tap {
 		position: absolute;
 		top: 0;
@@ -856,88 +1066,233 @@
 		align-items: center;
 		background: none;
 		border: none;
-		padding: 0 4px;
+		padding: 0 6px;
 		cursor: pointer;
 		-webkit-tap-highlight-color: transparent;
 	}
 	.tap.left {
 		left: 0;
-		width: 32%;
+		width: 30%;
 		justify-content: flex-start;
 	}
 	.tap.right {
 		right: 0;
-		width: 68%;
+		width: 70%;
 		justify-content: flex-end;
 	}
-	/* Paging affordance — a subtle bare chevron at each edge (no pill). */
 	.navarrow {
+		display: flex;
+		line-height: 0;
+		opacity: 0.34;
+	}
+
+	/* footer + brand lockup */
+	.pn-drop-foot {
+		position: relative;
+		z-index: 3;
+		padding: 10px 14px 13px;
+		border-top: 1.5px solid var(--rule);
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	.bp-logo {
+		display: inline-flex;
+		align-items: center;
+		gap: 7px;
+	}
+	.bp-logo .crest {
+		background: var(--red);
+		color: var(--paper);
+		font-family: var(--display);
+		letter-spacing: 0.01em;
+		line-height: 1;
+		display: grid;
+		place-items: center;
+		transform: rotate(-4deg);
+		filter: drop-shadow(2px 2px 0 var(--fg));
+	}
+	.bp-logo .wm {
+		font-family: var(--display);
+		text-transform: uppercase;
+		letter-spacing: -0.01em;
+		line-height: 1;
+		color: var(--fg);
+	}
+	.bp-logo .wm .aa {
+		color: var(--accent);
+	}
+	.bp-logo-sm .crest {
+		font-size: 10px;
+		padding: 3px 5px;
+	}
+	.bp-logo-sm .wm {
+		font-size: 14px;
+	}
+	.bp-logo-lg .crest {
+		font-size: 13px;
+		padding: 4px 6px;
+	}
+	.bp-logo-lg .wm {
+		font-size: 20px;
+	}
+	.foot-brand {
+		flex: 1; /* take the space left of the button so the logo can centre in it */
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		line-height: 0;
-		opacity: 0.38;
+	}
+	.pn-drop-foot .share {
+		flex-shrink: 0;
+		background: var(--btn);
+		border: 1.5px solid var(--ink);
+		color: var(--btn-fg);
+		font-family: var(--display2);
+		font-weight: 800;
+		font-size: 12px;
+		letter-spacing: 0.03em;
+		text-transform: uppercase;
+		padding: 11px 10px;
+		cursor: pointer;
+		white-space: nowrap;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+	}
+	.pn-drop-foot .share:active {
+		transform: translateY(1px);
+	}
+	.pn-drop-foot .share[disabled] {
+		opacity: 0.7;
+		cursor: default;
 	}
 
-	/* Desktop: more room → a wider, bolder Drop. Mobile sizing untouched. */
-	@media (min-width: 720px) {
-		.pn-drop-card {
-			max-width: 560px;
-			height: min(82vh, 720px);
-		}
-		.pn-drop-page {
-			padding: 22px 44px 24px; /* wider card → roomier gutters, arrows still clear */
-		}
-		.kicker {
-			font-size: 13px;
-			margin-bottom: 14px;
-		}
-		.hero .big {
-			font-size: 80px;
-		}
-		.hero .big .ord {
-			font-size: 32px;
-		}
-		.hero .hero-name {
-			font-size: 33px;
-		}
-		.hero .hero-sub {
-			font-size: 16px;
-		}
-		.s-row .s-val {
-			font-size: 14px;
-		}
-		.roast-body {
-			font-size: 17px;
-			line-height: 1.55;
-		}
+	/* export lockup — only inside the PNG */
+	.caphint {
+		display: none;
+		width: 100%;
+		align-items: center;
+		gap: 10px;
+	}
+	.caphint .lockup {
+		display: flex;
+		align-items: center;
+	}
+	.caphint .ed {
+		margin-left: auto;
+		text-align: right;
+		font-family: var(--mono);
+		font-size: 9px;
+		letter-spacing: 0.16em;
+		text-transform: uppercase;
+		color: var(--muted);
+		line-height: 1.5;
+	}
+	.caphint .ed b {
+		color: var(--fg);
+		font-weight: 600;
 	}
 
-	@keyframes drop-fade {
-		from {
-			opacity: 0;
-		}
+	/* capture mode strips chrome */
+	.capturing .pn-drop-head .x,
+	.capturing .tap,
+	.capturing .pn-drop-progress {
+		visibility: hidden;
 	}
+	.capturing .pn-drop-foot .share,
+	.capturing .foot-brand {
+		display: none;
+	}
+	.capturing .caphint {
+		display: flex;
+	}
+	.pn-drop-card.capturing,
+	.capturing .pn-drop-page {
+		animation: none !important;
+		transform: none !important;
+		opacity: 1 !important;
+	}
+
+	/* Transform-only entrance — a paused animation timeline (background tab OR the
+	   html-to-image snapshot) must never freeze the card at opacity:0 → blank PNG. */
 	@keyframes drop-stamp {
 		0% {
-			opacity: 0;
-			transform: translateY(16px) scale(0.92);
-		}
-		60% {
-			opacity: 1;
+			transform: translateY(16px) scale(0.96);
 		}
 		100% {
 			transform: translateY(0) scale(1);
 		}
 	}
+	.pn-drop-page.enter {
+		animation: page-in 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+	}
+	@keyframes page-in {
+		from {
+			transform: translateY(12px);
+		}
+		to {
+			transform: translateY(0);
+		}
+	}
 	@media (prefers-reduced-motion: reduce) {
-		.pn-drop-scrim,
-		.pn-drop-card {
+		.pn-drop-card,
+		.pn-drop-page.enter {
 			animation: none;
 		}
-		.pn-drop-card,
-		.seg .fill {
-			transition: none;
+	}
+
+	/* Short screens (≈iPhone SE, ≤700px tall): the card falls to 79vh, so the
+	   only un-fitted page — Your Day (big position numeral + returns ledger) —
+	   can overrun its box. Tighten its vertical rhythm here; taller phones keep
+	   the generous sizing above. The table/picks/roast pages self-fit already. */
+	@media (max-height: 700px) {
+		.pn-drop-page {
+			padding: 10px 22px 11px;
+		}
+		.yd-num {
+			font-size: 76px;
+		}
+		.yd-num .ord {
+			font-size: 24px;
+		}
+		.yd-hero {
+			margin-bottom: 7px;
+		}
+		.yd-formline {
+			padding: 5px 0;
+		}
+		.yd-ledger {
+			margin-top: 6px;
+		}
+		.ledger-cap {
+			margin: 6px 0 2px;
+		}
+		.ledger-row {
+			padding: 5px 0;
+		}
+		.ledger-total {
+			padding-top: 5px;
+		}
+	}
+
+	/* Desktop: a wider, bolder back page; mobile values above are the source of truth. */
+	@media (min-width: 720px) {
+		.pn-drop-card {
+			max-width: 480px;
+			height: min(84vh, 720px);
+		}
+		.pn-drop-page {
+			padding: 15px 34px 16px;
+		}
+		.yd-num {
+			font-size: 128px;
+		}
+		.award-hero .name {
+			font-size: 42px;
+		}
+		.np-name {
+			font-size: 56px;
 		}
 	}
 </style>

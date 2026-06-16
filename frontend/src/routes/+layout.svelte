@@ -63,7 +63,9 @@
 
 <slot />
 
-<!-- The Daily Drop pops once per unseen drop (overlay; never affects page layout). -->
+<!-- The Back Page drop pops once per unseen drop on EVERY page (overlay; never
+     affects page layout). The push notification still deep-links to the dashboard. -->
 {#if $isAuthenticated}
 	<PnDropModal />
 {/if}
+

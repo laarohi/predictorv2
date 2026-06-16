@@ -185,6 +185,16 @@
 		/>
 		<circle cx="6.7" cy="13.3" r="2.1" fill="#fff" stroke="none" />
 		<circle cx="17.3" cy="13.3" r="2.1" fill="#fff" stroke="none" />
+	{:else if name === 'pen-nib'}
+		<path d="M12 2.5 16 6.5 8.5 19l-4 2.5 1.5-4.4z" fill={color} stroke="none" />
+		<path d="M12 2.5 16 6.5" stroke="#fff" stroke-width="1.4" />
+		<circle cx="9.4" cy="14.6" r="1.5" fill="#fff" stroke="none" />
+	{:else if name === 'quote'}
+		<path
+			d="M4 6h6v6q0 5-5 6v-3q2-.6 2-3H4zM14 6h6v6q0 5-5 6v-3q2-.6 2-3h-3z"
+			fill={color}
+			stroke="none"
+		/>
 	{:else}
 		<circle cx="12" cy="12" r="9" />
 	{/if}

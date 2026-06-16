@@ -307,12 +307,11 @@ export interface DropMove { names: string[]; delta: number; }
 export interface DropPointsHaul { names: string[]; points_gained: number; }
 export interface DropSpoon { names: string[]; position: number; behind_leader: number; }
 export interface DropCalledIt {
-	names: string[]; home_team: string; away_team: string;
+	names: string[]; count: number; home_team: string; away_team: string;
 	home_score: number; away_score: number;
 }
 export interface DropContrarian {
-	names: string[]; home_team: string; away_team: string;
-	outcome: string; total: number;
+	names: string[]; avg_pct: number;
 }
 export interface DropBlunder {
 	names: string[]; home_team: string; away_team: string;

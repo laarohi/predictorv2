@@ -30,4 +30,6 @@ export type IconName =
 	| 'chart'
 	| 'money'
 	| 'crystal-ball'
-	| 'glasses';
+	| 'glasses'
+	| 'pen-nib'
+	| 'quote';
