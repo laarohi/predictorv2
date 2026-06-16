@@ -32,4 +32,6 @@ export type IconName =
 	| 'crystal-ball'
 	| 'glasses'
 	| 'pen-nib'
-	| 'quote';
+	| 'quote'
+	| 'replay'
+	| 'close';

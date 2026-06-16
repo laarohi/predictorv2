@@ -319,6 +319,14 @@ export interface DropBlunder {
 }
 export interface DropStreak { names: string[]; length: number; }
 export interface PointsCategory { label: string; points: number; }
+export interface MatchResult {
+	home_team: string;
+	away_team: string;
+	predicted: string; // "3-0"
+	actual: string; // "0-0"
+	points: number;
+	result: 'exact' | 'outcome' | 'miss';
+}
 export interface PersonalStats {
 	user_name: string;
 	position: number;
@@ -327,7 +335,7 @@ export interface PersonalStats {
 	points_gained: number | null;
 	hot_streak: number;
 	cold_streak: number;
-	points_breakdown: PointsCategory[];
+	match_results: MatchResult[];
 }
 export interface DropPayload {
 	leader: DropLeader | null;

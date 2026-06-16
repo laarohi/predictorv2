@@ -2,6 +2,7 @@
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { getLatestDrop } from '$lib/api/dailyDrop';
 	import PnIcon from '$components/panini/PnIcon.svelte';
+	import { teamCode } from '$lib/utils/teamCodes';
 	import { latestDrop, dropSeen, replaySignal } from '$stores/backPage';
 	import type { DailyDrop } from '$types';
 	import type { IconName } from '$types/panini';
@@ -316,20 +317,6 @@
 	$: fills = pages.map((_, i) =>
 		i < page ? 100 : i > page ? 0 : autoAdvance ? Math.min(progress, 1) * 100 : 100
 	);
-	// Panini glyph for a points-breakdown category (bracket rounds → trophy fallback).
-	function catIcon(label: string): IconName {
-		const m: Record<string, IconName> = {
-			'Exact scores': 'target',
-			'Correct outcomes': 'predict',
-			'Rarity bonus': 'star',
-			'Bonus questions': 'medal',
-			'Group advance': 'flag',
-			'Group position': 'list',
-			Winner: 'crown'
-		};
-		return m[label] ?? 'trophy';
-	}
-
 	// Shrink the roast text until it fits the card with NO scroll — guarantees the
 	// whole roast shows both in the modal and in the rasterised PNG (a clipped
 	// roast is a dead roast). Re-fits on resize and whenever the text changes.
@@ -456,18 +443,32 @@
 									<PnIcon name="minus" size={17} color="var(--accent)" /><span>Held your ground</span>
 								{/if}
 							</div>
-							{#if me.points_breakdown.length}
+							{#if me.match_results.length}
 								<div class="yd-ledger">
-									<div class="ledger-cap">Today's returns · {me.points_breakdown.length} ways</div>
-									{#each me.points_breakdown as c (c.label)}
-										<div class="ledger-row">
-											<span class="ic"><PnIcon name={catIcon(c.label)} size={14} color="var(--accent)" /></span>
-											<span class="lbl"><span>{c.label}</span></span>
-											<span class="val">{c.points}</span>
+									<div class="ledger-cap">Your last 24h · {me.match_results.length} {me.match_results.length === 1 ? 'match' : 'matches'}</div>
+									{#each me.match_results.slice(0, 6) as m, i (i)}
+										<div class="mr-row mr-{m.result}">
+											<span class="mr-ic">
+												<PnIcon
+													name={m.result === 'exact' ? 'target' : m.result === 'outcome' ? 'predict' : 'minus'}
+													size={13}
+													color={m.result === 'miss' ? 'var(--muted)' : 'var(--accent)'}
+												/>
+											</span>
+											<span class="mr-match">
+												<b>{teamCode(m.home_team)} {m.actual} {teamCode(m.away_team)}</b>
+												<i>you {m.predicted}</i>
+											</span>
+											<span class="mr-pts">{m.points > 0 ? `+${m.points}` : '—'}</span>
 										</div>
 									{/each}
-									<div class="ledger-total"><span class="l">Day's haul</span><span class="v">+{me.points_gained}</span></div>
+									{#if me.match_results.length > 6}
+										<div class="mr-more">+{me.match_results.length - 6} more · all counted below</div>
+									{/if}
+									<div class="ledger-total"><span class="l">Day's haul</span><span class="v">{me.points_gained ? `+${me.points_gained}` : '0'}</span></div>
 								</div>
+							{:else}
+								<div class="yd-empty">No matches in your last 24 hours — sit tight.</div>
 							{/if}
 
 						{:else if cur.key === 'table' || cur.key === 'picks'}
@@ -843,42 +844,66 @@
 		color: var(--muted);
 		margin: 11px 0 3px;
 	}
-	.ledger-row {
+	.mr-row {
 		display: grid;
-		grid-template-columns: 18px 1fr auto;
+		grid-template-columns: 15px 1fr auto;
 		align-items: center;
 		column-gap: 9px;
-		padding: 8.5px 0;
+		padding: 4px 0;
+		border-bottom: 1.5px dotted var(--rule);
 	}
-	.ledger-row .ic {
+	.mr-row:last-of-type {
+		border-bottom: none;
+	}
+	.mr-ic {
 		line-height: 0;
 	}
-	.ledger-row .lbl {
-		font-family: var(--body);
-		font-size: 13px;
-		position: relative;
+	.mr-match {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
 		overflow: hidden;
 		white-space: nowrap;
 	}
-	.ledger-row .lbl span {
-		background: var(--bg);
-		padding-right: 6px;
-		position: relative;
-		z-index: 1;
+	.mr-match b {
+		font-family: var(--mono);
+		font-weight: 700;
+		font-size: 12.5px;
+		letter-spacing: 0.02em;
 	}
-	.ledger-row .lbl::after {
-		content: '';
-		position: absolute;
-		left: 0;
-		right: 0;
-		bottom: 5px;
-		border-bottom: 1.5px dotted var(--rule);
-		z-index: 0;
+	.mr-match i {
+		font-style: normal;
+		font-family: var(--mono);
+		font-size: 10.5px;
+		color: var(--muted);
+		flex-shrink: 0;
 	}
-	.ledger-row .val {
+	.mr-pts {
 		font-family: var(--display2);
 		font-weight: 800;
-		font-size: 16px;
+		font-size: 15px;
+		color: var(--accent);
+	}
+	.mr-miss .mr-match b,
+	.mr-miss .mr-pts {
+		color: var(--muted);
+	}
+	.mr-more {
+		font-family: var(--mono);
+		font-size: 9.5px;
+		letter-spacing: 0.08em;
+		color: var(--muted);
+		padding: 3px 0 0;
+	}
+	.yd-empty {
+		margin-top: 12px;
+		padding: 16px 0;
+		border-top: 2px solid var(--rule);
+		text-align: center;
+		font-family: var(--mono);
+		font-size: 11px;
+		letter-spacing: 0.04em;
+		color: var(--muted);
 	}
 	.ledger-total {
 		display: flex;
@@ -1277,16 +1302,16 @@
 			padding: 10px 22px 11px;
 		}
 		.yd-num {
-			font-size: 76px;
+			font-size: 64px;
 		}
 		.yd-num .ord {
-			font-size: 24px;
+			font-size: 22px;
 		}
 		.yd-hero {
-			margin-bottom: 7px;
+			margin-bottom: 6px;
 		}
 		.yd-formline {
-			padding: 5px 0;
+			padding: 4px 0;
 		}
 		.yd-ledger {
 			margin-top: 6px;
@@ -1294,11 +1319,11 @@
 		.ledger-cap {
 			margin: 6px 0 2px;
 		}
-		.ledger-row {
-			padding: 5px 0;
+		.mr-row {
+			padding: 2.5px 0;
 		}
 		.ledger-total {
-			padding-top: 5px;
+			padding-top: 4px;
 		}
 	}
 
