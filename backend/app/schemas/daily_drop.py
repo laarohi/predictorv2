@@ -105,6 +105,19 @@ class PointsCategory(BaseModel):
     points: int
 
 
+class MatchResult(BaseModel):
+    """One match from the drop's window and how the viewer did on it — their
+    pick vs the result, points won, and a coarse outcome flag. Powers the
+    per-match "Your Day" recap (informative even on a zero-point day)."""
+
+    home_team: str
+    away_team: str
+    predicted: str  # "3-0"
+    actual: str  # "0-0"
+    points: int
+    result: str  # "exact" | "outcome" | "miss"
+
+
 class PersonalStats(BaseModel):
     """The VIEWER's own day — computed per-request (not part of the broadcast
     payload). Powers the personalised "Your Day" story page."""
@@ -113,10 +126,12 @@ class PersonalStats(BaseModel):
     position: int
     movement: int  # day-over-day rank change (+ = climbed)
     points: int
-    points_gained: int | None  # vs yesterday's snapshot (None if no baseline)
+    points_gained: int | None  # points won in the drop window (None if zero / no window)
     hot_streak: int
     cold_streak: int
-    points_breakdown: list[PointsCategory] = []  # non-zero categories only
+    # The day's matches (drop window) with the viewer's pick vs result. Empty
+    # if they predicted none / there were none in the window.
+    match_results: list[MatchResult] = []
 
 
 class DropPayload(BaseModel):

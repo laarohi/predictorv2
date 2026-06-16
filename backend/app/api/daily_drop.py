@@ -55,7 +55,9 @@ async def get_latest_drop(
     ).scalar_one_or_none()
     if not drop:
         return None
-    personal = await compute_personal_stats(session, user.id)
+    # Anchor the personal "last 24h" window to the drop's morning build, so the
+    # recap is the same matches regardless of when the viewer opens it.
+    personal = await compute_personal_stats(session, user.id, reference=drop.created_at)
     return _to_response(drop, personal)
 
 

@@ -27,7 +27,7 @@ from app.services.daily_drop import (
     _fmt_names,
     _pick_stats,
     _position_tenure,
-    _todays_match_returns,
+    _todays_match_results,
 )
 
 SINCE = timedelta(hours=30)
@@ -141,17 +141,17 @@ async def test_blunder_lists_only_the_identical_worst_pick(session):
 
 
 @pytest.mark.asyncio
-async def test_todays_returns_excludes_out_of_window_matches(session):
-    """Today's Returns must reflect ONLY matches in the drop window — the bug it
-    replaced summed season-to-date category totals. An exact hit OUTSIDE the
-    window must not contribute; a hit INSIDE must."""
+async def test_todays_match_results_window_bounds_and_flags(session):
+    """The Your Day recap must cover ONLY the matches in the drop window
+    (kickoff in [since, until]) — anchored to the drop, not the viewer's clock —
+    and classify each as exact / outcome / miss. A 0-point miss is INCLUDED (the
+    bug it replaced hid the day entirely when nothing was banked)."""
     comp = Competition(name="WC", entry_fee=Decimal("0"), external_id="WC", is_active=True)
     session.add(comp)
     await session.commit()
     await session.refresh(comp)
 
-    # In-window match (kickoff −2h, via _fixture). Out-of-window match (−40h, well
-    # past the 30h window) added by hand.
+    # Recent match (kickoff −2h, via _fixture) and an older one (−40h).
     fx_now = await _fixture(session, comp, "Mexico", "South Africa", 2, 0, group="A")
     fx_old = Fixture(
         competition_id=comp.id, home_team="Brazil", away_team="Serbia",
@@ -163,23 +163,25 @@ async def test_todays_returns_excludes_out_of_window_matches(session):
     await session.commit()
     await session.refresh(fx_old)
 
-    # Alice: WRONG in-window (0 pts), EXACT out-of-window (would inflate a
-    # cumulative breakdown) → today's returns must be EMPTY.
     alice = await _user(session, "Alice", "alice@e.com")
-    await _pred(session, alice, fx_now, 0, 2)
-    await _pred(session, alice, fx_old, 3, 1)
-    # Bob: EXACT in-window → returns are non-empty and include the exact bonus.
-    bob = await _user(session, "Bob", "bob@e.com")
-    await _pred(session, bob, fx_now, 2, 0)
+    await _pred(session, alice, fx_now, 0, 2)  # WRONG outcome → miss, 0 pts
+    await _pred(session, alice, fx_old, 3, 1)  # EXACT
 
-    since = utc_now() - SINCE
-    alice_cats = await _todays_match_returns(session, alice.id, since=since)
-    bob_cats = await _todays_match_returns(session, bob.id, since=since)
+    now = utc_now()
+    # Window ending now → only the recent match; the −40h one is before `since`.
+    recent = await _todays_match_results(session, alice.id, since=now - SINCE, until=now)
+    assert len(recent) == 1
+    assert recent[0].home_team == "Mexico"
+    assert recent[0].result == "miss" and recent[0].points == 0  # a miss is shown
+    assert recent[0].predicted == "0-2" and recent[0].actual == "2-0"
 
-    assert alice_cats == []  # the out-of-window exact hit is excluded
-    labels = {c.label for c in bob_cats}
-    assert "Exact scores" in labels and "Correct outcomes" in labels
-    assert sum(c.points for c in bob_cats) > 0
+    # Window [−50h, −20h] → only the older match (the recent one is after `until`).
+    older = await _todays_match_results(
+        session, alice.id, since=now - timedelta(hours=50), until=now - timedelta(hours=20)
+    )
+    assert len(older) == 1
+    assert older[0].home_team == "Brazil"
+    assert older[0].result == "exact" and older[0].points > 0
 
 
 @pytest.mark.asyncio

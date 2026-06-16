@@ -41,9 +41,9 @@ from app.schemas.daily_drop import (
     ContrarianStat,
     DropPayload,
     LeaderStat,
+    MatchResult,
     MoveStat,
     PersonalStats,
-    PointsCategory,
     PointsHaulStat,
     SpoonStat,
     StreakStat,
@@ -55,6 +55,10 @@ from app.services.leaderboard import calculate_leaderboard
 # evening slate when the drop is built the next morning, without dragging in
 # matches already covered by an earlier drop.
 PICKS_WINDOW_HOURS = 30
+
+# The "Your Day" personal recap covers the 24h before the morning drop — "your
+# last 24 hours". Anchored to the drop's build time, not the viewer's clock.
+PERSONAL_WINDOW_HOURS = 24
 
 # A streak only earns a card slot once it's actually a streak (matches the
 # leaderboard chip's STREAK_MIN).
@@ -405,30 +409,23 @@ async def compute_drop_payload(
     )
 
 
-async def _todays_match_returns(
-    session: AsyncSession, user_id: uuid.UUID, *, since: datetime
-) -> list[PointsCategory]:
-    """The viewer's points from matches that FINISHED in the drop window
-    (kickoff >= ``since``), split into Exact scores / Correct outcomes / Rarity
-    bonus — mirroring ``scoring._add_match_points_to_phase``.
+async def _todays_match_results(
+    session: AsyncSession, user_id: uuid.UUID, *, since: datetime, until: datetime
+) -> list[MatchResult]:
+    """The viewer's performance on every match that FINISHED in the drop window
+    (kickoff in ``[since, until]``): their pick vs the result, points won, and a
+    coarse exact/outcome/miss flag.
 
-    This is "today's returns", deliberately NOT the season-to-date breakdown
-    (the bug this replaced showed cumulative ``entry.breakdown`` totals). It is
-    match-derived only: advancement / group-position / bonus-question payouts
-    aren't tied to a match finishing in the window, so they're excluded — during
-    the group stage the daily haul is match scoring anyway.
+    This powers the per-match "Your Day" recap — informative even on a 0-point
+    day (the bug this replaced showed cumulative season-to-date category totals,
+    then hid the row entirely when the day's haul was zero, so a rough day looked
+    like a broken page). Match-derived only: advancement / bonus payouts aren't
+    tied to a match finishing in the window. ``until`` anchors the window to the
+    drop (the 24h before the morning build), not the viewer's clock.
     """
     # Local import: scoring pulls in the config + bonus layers; importing at
     # module load would widen this service's import graph.
-    from app.services.scoring import (
-        calculate_match_points,
-        get_outcome_counts,
-        get_scoring_config,
-    )
-
-    match_config = get_scoring_config().get("match", {})
-    base_outcome_points = match_config.get("correct_outcome", 5)
-    exact_score_points = match_config.get("exact_score", 10)
+    from app.services.scoring import calculate_match_points, get_outcome_counts
 
     rows = (
         await session.execute(
@@ -439,11 +436,13 @@ async def _todays_match_returns(
                 MatchPrediction.user_id == user_id,
                 Fixture.status == MatchStatus.FINISHED,
                 Fixture.kickoff >= since,
+                Fixture.kickoff <= until,
             )
+            .order_by(Fixture.kickoff)
         )
     ).all()
 
-    outcome_pts = exact_pts = rarity_pts = 0
+    results: list[MatchResult] = []
     for prediction, score, fixture in rows:
         counts = await get_outcome_counts(session, fixture.id)
         total_predictors = sum(counts.values())
@@ -453,20 +452,15 @@ async def _todays_match_returns(
             total_predictors=total_predictors,
             correct_predictors=correct_predictors,
         )
-        if is_correct_outcome:
-            outcome_pts += base_outcome_points
-            hybrid = points - base_outcome_points - (exact_score_points if is_exact_score else 0)
-            if hybrid > 0:
-                rarity_pts += hybrid
-        if is_exact_score:
-            exact_pts += exact_score_points
-
-    categories = [
-        ("Exact scores", exact_pts),
-        ("Correct outcomes", outcome_pts),
-        ("Rarity bonus", rarity_pts),
-    ]
-    return [PointsCategory(label=label, points=pts) for label, pts in categories if pts > 0]
+        results.append(MatchResult(
+            home_team=fixture.home_team,
+            away_team=fixture.away_team,
+            predicted=f"{prediction.home_score}-{prediction.away_score}",
+            actual=f"{score.final_home_score}-{score.final_away_score}",
+            points=points,
+            result="exact" if is_exact_score else "outcome" if is_correct_outcome else "miss",
+        ))
+    return results
 
 
 async def compute_personal_stats(
@@ -481,13 +475,14 @@ async def compute_personal_stats(
     if entry is None:
         return None
 
-    # "Today's returns": points from matches that finished in the drop window,
-    # split by category. The day's haul is the SUM of these — so the ledger rows
-    # always add up to the headline number (they used to disagree: the rows were
-    # season-to-date while the haul was a snapshot delta).
-    since = (reference or utc_now()) - timedelta(hours=PICKS_WINDOW_HOURS)
-    points_breakdown = await _todays_match_returns(session, user_id, since=since)
-    points_gained: int | None = sum(c.points for c in points_breakdown) or None
+    # "Your Day" performance: the matches in the drop window and how the viewer
+    # did on each. The window is anchored to the drop (``reference`` = the morning
+    # build) and spans the 24h before it — "your last 24 hours" — NOT the viewer's
+    # clock at open-time. The day's haul is the sum of these match points.
+    until = reference or utc_now()
+    since = until - timedelta(hours=PERSONAL_WINDOW_HOURS)
+    match_results = await _todays_match_results(session, user_id, since=since, until=until)
+    points_gained: int | None = sum(m.points for m in match_results) or None
 
     return PersonalStats(
         user_name=entry.user_name,
@@ -497,7 +492,7 @@ async def compute_personal_stats(
         points_gained=points_gained,
         hot_streak=entry.hot_streak,
         cold_streak=entry.cold_streak,
-        points_breakdown=points_breakdown,
+        match_results=match_results,
     )
 
 
