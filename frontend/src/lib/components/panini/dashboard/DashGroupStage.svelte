@@ -19,6 +19,7 @@
 	import DwGroupSummaryStrip from './widgets/DwGroupSummaryStrip.svelte';
 	import DwMatchTable, { type MatchTableRow, type PtsVariant } from './widgets/DwMatchTable.svelte';
 	import DwTop5 from './widgets/DwTop5.svelte';
+	import DwBackPageReplay from './widgets/DwBackPageReplay.svelte';
 
 	import { user } from '$stores/auth';
 	import { fetchAllFixtures, fixtures } from '$stores/fixtures';
@@ -378,6 +379,8 @@
 
 <PnPageShell liveLabel={stripLive} lockLabel={stripLock} youLabel={stripYou}>
 	<div class="pn-dash-v4">
+		<DwBackPageReplay />
+
 		<DwKpiRow
 			{rank}
 			{rankOf}

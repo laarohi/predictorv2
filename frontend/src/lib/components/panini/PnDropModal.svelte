@@ -2,6 +2,7 @@
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { getLatestDrop } from '$lib/api/dailyDrop';
 	import PnIcon from '$components/panini/PnIcon.svelte';
+	import { latestDrop, dropSeen, replaySignal } from '$stores/backPage';
 	import type { DailyDrop } from '$types';
 	import type { IconName } from '$types/panini';
 
@@ -64,8 +65,28 @@
 	}
 	function dismiss(): void {
 		if (drop) markSeen(drop.drop_date);
+		dropSeen.set(true); // surfaces the dashboard "Replay" button
 		open = false;
 		stopRaf();
+	}
+
+	// Reopen the story on demand (the dashboard Replay button), bypassing the
+	// once-per-drop seen gate. Tracks the last signal value so the reactive
+	// block below only fires on an actual bump, not on unrelated re-renders.
+	function reopen(): void {
+		if (!drop) return;
+		page = 0;
+		progress = 0;
+		capturing = false;
+		lastTs = 0;
+		open = true;
+		stopRaf();
+		if (autoAdvance) rafId = requestAnimationFrame(frame);
+	}
+	let lastReplay = 0;
+	$: if ($replaySignal !== lastReplay) {
+		lastReplay = $replaySignal;
+		if ($replaySignal > 0) reopen();
 	}
 
 	$: autoAdvance = !reduced;
@@ -124,10 +145,15 @@
 			import.meta.env.DEV && new URLSearchParams(window.location.search).get('drop') === 'force';
 		try {
 			const d = await getLatestDrop();
-			if (d && (forced || !seenDrops().includes(d.drop_date))) {
+			if (d) {
 				drop = d;
-				open = true;
-				if (autoAdvance) rafId = requestAnimationFrame(frame);
+				latestDrop.set(d); // let the dashboard offer a Replay button
+				const alreadySeen = seenDrops().includes(d.drop_date);
+				if (alreadySeen) dropSeen.set(true);
+				if (forced || !alreadySeen) {
+					open = true;
+					if (autoAdvance) rafId = requestAnimationFrame(frame);
+				}
 			}
 		} catch {
 			/* silent — the Drop is a delight, never load-critical */

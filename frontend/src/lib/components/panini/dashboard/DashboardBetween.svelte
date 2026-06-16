@@ -14,6 +14,7 @@
 	import { onMount } from 'svelte';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import DwAlert from './widgets/DwAlert.svelte';
+	import DwBackPageReplay from './widgets/DwBackPageReplay.svelte';
 	import DwFunnelHero from './widgets/DwFunnelHero.svelte';
 	import DwKpiRow from './widgets/DwKpiRow.svelte';
 	import DwGroupSummaryTable from './widgets/DwGroupSummaryTable.svelte';
@@ -196,6 +197,8 @@
 
 <PnPageShell lockLabel={stripLock}>
 	<div class="pn-dash-v4">
+		<DwBackPageReplay />
+
 		{#if $hasUnsavedPhase2BracketChanges}
 			<DwAlert
 				variant="gold"

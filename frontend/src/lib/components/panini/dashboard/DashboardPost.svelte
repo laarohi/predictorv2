@@ -21,6 +21,7 @@
 	import { onMount } from 'svelte';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import DwChampionPodium from './widgets/DwChampionPodium.svelte';
+	import DwBackPageReplay from './widgets/DwBackPageReplay.svelte';
 	import DwPointsBySource, { type Source } from './widgets/DwPointsBySource.svelte';
 	import DwHighlights from './widgets/DwHighlights.svelte';
 
@@ -242,6 +243,8 @@
 
 <PnPageShell youLabel={stripYou} showStrip={true}>
 	<div class="pn-dash-v4">
+		<DwBackPageReplay />
+
 		<DwChampionPodium
 			title="It's a wrap."
 			titleEm="wrap"

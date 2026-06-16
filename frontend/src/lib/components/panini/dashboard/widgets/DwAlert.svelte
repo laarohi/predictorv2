@@ -24,9 +24,14 @@
 	/** When true and ctaHref is set, opens the link in a new tab. */
 	export let ctaExternal: boolean = false;
 	export let onCta: (() => void) | null = null;
+	/** When set, render a dismiss (×) button that calls this. */
+	export let onDismiss: (() => void) | null = null;
 </script>
 
-<div class="pn-alert-v4" class:red={variant === 'red'}>
+<div class="pn-alert-v4" class:red={variant === 'red'} class:dismissible={onDismiss}>
+	{#if onDismiss}
+		<button class="dismiss" on:click={() => onDismiss?.()} aria-label="Dismiss">×</button>
+	{/if}
 	<div class="ico">{icon}</div>
 	<div class="copy">
 		<div class="ttl">{title}</div>
@@ -51,3 +56,31 @@
 		{/if}
 	{/if}
 </div>
+
+<style>
+	/* Dismiss (×) — only present when onDismiss is wired (e.g. the Back Page
+	   replay banner). Reserve room on the right so it never overlaps the CTA. */
+	.pn-alert-v4.dismissible {
+		padding-right: 2.6rem;
+	}
+	.dismiss {
+		position: absolute;
+		top: 5px;
+		right: 8px;
+		width: 1.5rem;
+		height: 1.5rem;
+		display: grid;
+		place-items: center;
+		border: none;
+		background: transparent;
+		cursor: pointer;
+		font-size: 1.3rem;
+		line-height: 1;
+		color: var(--ink-3, #8a826f);
+		border-radius: 4px;
+	}
+	.dismiss:hover {
+		color: var(--ink, #0e1d40);
+		background: rgba(14, 29, 64, 0.06);
+	}
+</style>

@@ -22,6 +22,7 @@
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import DwKpiRow from './widgets/DwKpiRow.svelte';
 	import DwAlert from './widgets/DwAlert.svelte';
+	import DwBackPageReplay from './widgets/DwBackPageReplay.svelte';
 	import DwMatchTable, { type MatchTableRow, type PtsVariant } from './widgets/DwMatchTable.svelte';
 	import DwTop5 from './widgets/DwTop5.svelte';
 	import DwScoringJourney from './widgets/DwScoringJourney.svelte';
@@ -341,6 +342,8 @@
 
 <PnPageShell lockLabel={stripLock} youLabel={stripYou}>
 	<div class="pn-dash-v4">
+		<DwBackPageReplay />
+
 		{#if missingPicks.length > 0}
 			<DwAlert
 				variant="red"
