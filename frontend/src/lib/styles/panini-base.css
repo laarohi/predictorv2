@@ -34,6 +34,10 @@
 	min-height: 100vh; /* fallback for pre-15.4 Safari */
 	min-height: 100dvh; /* dynamic viewport — see PnPageShell .pn-shell */
 	position: relative;
+	/* App-like feel: kill double-tap-to-zoom + the legacy 300ms tap delay.
+	 * Complements the viewport meta's pinch-zoom lock and also improves tap
+	 * responsiveness in a plain Safari tab (where the meta lock is ignored). */
+	touch-action: manipulation;
 }
 .pn *,
 .pn *::before,

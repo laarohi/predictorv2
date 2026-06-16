@@ -7,8 +7,15 @@
 		<link rel="icon" type="image/png" sizes="48x48" href="%sveltekit.assets%/favicon-48.png" />
 		<!-- viewport-fit=cover lets the standalone PWA fill under the status bar /
 		     home indicator; the bottom nav reserves the home-indicator strip via
-		     padding-bottom: env(safe-area-inset-bottom) (panini-base .pn-mob-tab). -->
-		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		     padding-bottom: env(safe-area-inset-bottom) (panini-base .pn-mob-tab).
+		     maximum-scale=1 + user-scalable=no lock pinch-zoom and input focus-zoom
+		     so the installed PWA feels native. NOTE: iOS DELIBERATELY ignores these
+		     in a normal Safari tab (accessibility) but honours them in standalone
+		     (display:standalone) mode — so zoom stays available in the browser. -->
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no"
+		/>
 		<meta name="description" content="Football prediction competition for World Cup 2026" />
 		<meta name="robots" content="noindex, nofollow" />
 
