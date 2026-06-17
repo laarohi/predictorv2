@@ -16,9 +16,12 @@
 .pn .pn-ovswitch button {
 	/* Equal segments that always fill the strip — a stretched container
 	 * must never leave dead (unclickable) bordered space after the last
-	 * tab, and no tab may outgrow its siblings. */
+	 * tab, and no tab may outgrow its siblings. The max-content floor lets
+	 * each tab grow to an equal share when there's room, but stops the
+	 * longest label ("KNOCKOUT") being shrunk past its own padding and
+	 * clipped when the strip is space-constrained. */
 	flex: 1 1 0;
-	min-width: 0;
+	min-width: max-content;
 	background: var(--paper);
 	color: var(--ink);
 	border: 0;
@@ -159,6 +162,7 @@
 .pn .pn-ov-legend .sw.home, .pn .pn-ov-modal .sw.home { background: var(--navy); }
 .pn .pn-ov-legend .sw.draw, .pn .pn-ov-modal .sw.draw { background: var(--paper-3); }
 .pn .pn-ov-legend .sw.away, .pn .pn-ov-modal .sw.away { background: var(--red); }
+.pn .pn-ov-legend .sw.mine { background: var(--gold); }
 .pn .pn-ov-modal .sw.exact { background: var(--green); }
 .pn .pn-ov-modal .sw.outcome { background: var(--gold); }
 .pn .pn-ov-modal .sw.miss { background: #5a5446; }
@@ -514,6 +518,12 @@
 	margin-left: auto;
 	background: var(--navy);
 }
+/* "Your call" — gold the count + its bar wherever your own bracket is one
+ * of the backers, so you can spot your picks down the table at a glance.
+ * Beats .v.champ's red on specificity, so a champion you backed reads as
+ * yours (gold) rather than just popular (red). */
+.pn .pn-ov-table .pn-ov-cnt.mine .v { color: var(--gold); }
+.pn .pn-ov-table .pn-ov-cnt.mine .micro span { background: var(--gold); }
 
 /* --------------------------------- Modal --------------------------------- */
 .pn-ov-modal {

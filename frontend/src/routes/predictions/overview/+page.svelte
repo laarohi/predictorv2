@@ -95,6 +95,8 @@
 
 	$: phase2Viewable = $isPhase2Active && $isPhase2BracketLocked;
 	$: bracketData = bracketByPhase[bracketPhase] ?? null;
+	// Your own name, used to gold-flag the counts your bracket is part of.
+	$: youName = $user?.name ?? null;
 
 	async function loadGroups() {
 		if (!$isPhase1Locked || groupsData || groupsLoading) return;
@@ -630,7 +632,10 @@
 						The pool's forecast — players (of <b>{bracketData.total_predictors}</b>) backing each
 						team per round
 					</span>
-					<span class="key dim">click a column to sort</span>
+					<span class="key">
+						<i class="sw mine"></i> your call
+						<span class="dim">· click a column to sort</span>
+					</span>
 				</div>
 				<div class="pn-ov-tablewrap">
 					<table class="pn-ov-table">
@@ -664,10 +669,12 @@
 									</td>
 									{#each COLS as c (c.key)}
 										{@const cell = t[c.key]}
+										{@const mine = youName !== null && cell.users.includes(youName)}
 										<td class="num" class:sorted={sortKey === c.key}>
 											{#if cell.count > 0}
 												<button
 													class="pn-ov-cnt"
+													class:mine
 													on:click={(e) =>
 														openPop(
 															e,
