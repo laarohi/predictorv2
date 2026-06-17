@@ -57,6 +57,20 @@ class SpoonStat(BaseModel):
     days_held: int = 1
 
 
+class CluelessStat(BaseModel):
+    """❓ Fewest points in the day's 24h window — the worst DAILY performer, the
+    daily counterpart to the (cumulative, sticky) wooden spoon. ``names`` lists
+    every tied player when only a few share the floor; on a big tie (the common
+    mass zero-point day) it collapses to a single rotating representative and
+    ``tied_count`` carries the true total (the frontend renders "+N"). ``is_floor``
+    is true when the minimum was 0 — nobody troubled the scorers."""
+
+    names: list[str]
+    points: int
+    tied_count: int  # total players tied on the minimum (>= len(names))
+    is_floor: bool = False  # the worst score was zero
+
+
 class CalledItStat(BaseModel):
     """🎯 The rarest correct EXACT score in the window. ``names`` is a SINGLE
     winner (least-featured-of-the-tied); ``count`` is how many nailed it (1 = solo)."""
@@ -143,6 +157,7 @@ class DropPayload(BaseModel):
     faceplant: MoveStat | None = None
     points_haul: PointsHaulStat | None = None
     wooden_spoon: SpoonStat | None = None
+    clueless: CluelessStat | None = None
     # Picks
     called_it: CalledItStat | None = None
     contrarian: ContrarianStat | None = None

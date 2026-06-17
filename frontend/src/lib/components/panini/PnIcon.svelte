@@ -201,6 +201,17 @@
 		<path d="M3 3v5h5" fill="none" stroke={color} />
 	{:else if name === 'close'}
 		<path d="M6 6l12 12M18 6 6 18" fill="none" stroke={color} />
+	{:else if name === 'help'}
+		<!-- "Clueless": a bold filled disc with a white question mark (matches the
+		     filled-glyph family: clock, target, crystal-ball). -->
+		<circle cx="12" cy="12" r="9" fill={color} stroke="none" />
+		<path
+			d="M9.2 9.3a3 3 0 0 1 5.6 1.2c0 2-2.7 2.3-2.7 4"
+			fill="none"
+			stroke="#fff"
+			stroke-width="2.2"
+		/>
+		<circle cx="12" cy="17.2" r="1.3" fill="#fff" stroke="none" />
 	{:else}
 		<circle cx="12" cy="12" r="9" />
 	{/if}

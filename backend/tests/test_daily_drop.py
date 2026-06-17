@@ -24,6 +24,8 @@ from app.models.prediction import MatchPrediction, PredictionPhase
 from app.models.score import Score, ScoreSource
 from app.models.user import User
 from app.services.daily_drop import (
+    _clueless_stat,
+    _daily_points,
     _fmt_names,
     _pick_stats,
     _position_tenure,
@@ -102,7 +104,7 @@ async def test_picks_one_winner_spread_and_hipster(session):
     await _pred(session, dave, fx, 0, 1)
 
     called, contrarian, blunder, n = await _pick_stats(
-        session, since=utc_now() - SINCE, feature_count={}
+        session, since=utc_now() - SINCE, until=utc_now(), feature_count={}
     )
     assert n == 1
     # Single winner per award (NOT a tied list); called_it carries the tied count.
@@ -132,7 +134,7 @@ async def test_blunder_lists_only_the_identical_worst_pick(session):
     await _pred(session, cara, fx, 1, 2)
 
     _called, _contra, blunder, _n = await _pick_stats(
-        session, since=utc_now() - SINCE, feature_count={}
+        session, since=utc_now() - SINCE, until=utc_now(), feature_count={}
     )
     assert blunder is not None
     assert blunder.predicted == "0-3"
@@ -210,3 +212,103 @@ async def test_position_tenure_counts_consecutive_days(session):
     leader_days, spoon_days = await _position_tenure(session, {alice.id}, {dave.id})
     assert leader_days == 3
     assert spoon_days == 2
+
+
+@pytest.mark.asyncio
+async def test_daily_points_window_and_ghost_exclusion(session):
+    """_daily_points sums each REAL player's match points over [since, until] only.
+    A player who predicted an in-window match but scored nothing is a key with 0
+    (so Clueless can find them); a player's exact on an OUT-of-window match adds
+    nothing; ghosts never appear. This is the multi-user 'Your Day' — it shares the
+    same scoring, so Big Earner / Clueless / Your Day can't disagree."""
+    comp = Competition(name="WC", entry_fee=Decimal("0"), external_id="WC", is_active=True)
+    session.add(comp)
+    await session.commit()
+    await session.refresh(comp)
+
+    fx_in1 = await _fixture(session, comp, "Spain", "Japan", 2, 1, group="A")   # in window
+    fx_in2 = await _fixture(session, comp, "Italy", "Ghana", 1, 0, group="A")   # in window
+    fx_out = Fixture(
+        competition_id=comp.id, home_team="Peru", away_team="Qatar",
+        kickoff=utc_now() - timedelta(hours=50), stage="group", group="C",
+        status=MatchStatus.FINISHED,
+    )
+    session.add(fx_out)
+    session.add(Score(fixture=fx_out, home_score=3, away_score=3, source=ScoreSource.API))
+    await session.commit()
+    await session.refresh(fx_out)
+
+    alice = await _user(session, "Alice", "alice@e.com")  # nails fx_in1 exactly
+    bob = await _user(session, "Bob", "bob@e.com")         # misses in-window, exact OUT of window
+    ghost = User(email="crowd@e.com", name="The Crowd", is_ghost=True)
+    session.add(ghost)
+    await session.commit()
+    await session.refresh(ghost)
+
+    await _pred(session, alice, fx_in1, 2, 1)  # EXACT → points
+    await _pred(session, alice, fx_in2, 0, 2)  # wrong outcome → 0
+    await _pred(session, bob, fx_in1, 0, 0)    # wrong → 0
+    await _pred(session, bob, fx_out, 3, 3)    # exact but OUT of window → ignored
+    await _pred(session, ghost, fx_in1, 2, 1)  # ghost exact → excluded entirely
+
+    now = utc_now()
+    totals = await _daily_points(
+        session, since=now - SINCE, until=now, ghost_ids={ghost.id}
+    )
+
+    assert totals.get(alice.id, 0) > 0           # banked on the exact
+    assert bob.id in totals and totals[bob.id] == 0  # played in window, scored zero
+    assert ghost.id not in totals                # ghosts excluded
+
+
+def test_clueless_lists_all_when_few():
+    """A small tied set names everyone; tied_count == len(names); not a floor."""
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    ref = datetime(2026, 6, 17, 8, 30, tzinfo=timezone.utc)
+    ids = [_uuid.uuid4() for _ in range(4)]
+    names = {ids[0]: "Ann", ids[1]: "Bob", ids[2]: "Cy", ids[3]: "Dee"}
+    daily = {ids[0]: 1, ids[1]: 1, ids[2]: 5, ids[3]: 9}  # Ann & Bob tied worst on 1
+    fc: dict[str, int] = {}
+
+    c = _clueless_stat(daily, names, reference=ref, feature_count=fc)
+    assert c is not None
+    assert c.names == ["Ann", "Bob"]
+    assert c.tied_count == 2 and c.points == 1 and c.is_floor is False
+    assert fc["Ann"] == 1 and fc["Bob"] == 1  # both recorded as featured
+
+
+def test_clueless_collapses_big_zero_floor():
+    """A big tie (mass zero-point day) collapses to ONE representative + the true
+    tied_count, flagged as a floor. The pick is deterministic for a given drop."""
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    ref = datetime(2026, 6, 17, 8, 30, tzinfo=timezone.utc)
+    floor = [_uuid.uuid4() for _ in range(6)]
+    winner = _uuid.uuid4()
+    names = {u: f"P{i}" for i, u in enumerate(floor)}
+    names[winner] = "TopDog"
+    daily = {u: 0 for u in floor}
+    daily[winner] = 5
+
+    c = _clueless_stat(daily, names, reference=ref, feature_count={})
+    assert c is not None
+    assert len(c.names) == 1 and c.names[0] in [names[u] for u in floor]
+    assert c.tied_count == 6 and c.points == 0 and c.is_floor is True
+    # Same drop → same scapegoat (rotation is deterministic per date).
+    again = _clueless_stat(daily, names, reference=ref, feature_count={})
+    assert again.names == c.names
+
+
+def test_clueless_suppressed_when_no_dunce():
+    """No Clueless when everyone is level on a real score, or with <2 players."""
+    import uuid as _uuid
+    from datetime import datetime, timezone
+
+    ref = datetime(2026, 6, 17, 8, 30, tzinfo=timezone.utc)
+    a, b = _uuid.uuid4(), _uuid.uuid4()
+    names = {a: "Ann", b: "Bob"}
+    assert _clueless_stat({a: 5, b: 5}, names, reference=ref, feature_count={}) is None
+    assert _clueless_stat({a: 0}, names, reference=ref, feature_count={}) is None

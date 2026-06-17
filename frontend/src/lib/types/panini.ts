@@ -34,4 +34,5 @@ export type IconName =
 	| 'pen-nib'
 	| 'quote'
 	| 'replay'
-	| 'close';
+	| 'close'
+	| 'help';

@@ -4,7 +4,7 @@
 	import PnIcon from '$components/panini/PnIcon.svelte';
 	import { teamCode } from '$lib/utils/teamCodes';
 	import { latestDrop, dropSeen, replaySignal } from '$stores/backPage';
-	import type { DailyDrop } from '$types';
+	import type { DailyDrop, DropClueless } from '$types';
 	import type { IconName } from '$types/panini';
 
 	const SEEN_KEY = 'predictor_seen_drops';
@@ -208,6 +208,14 @@
 		return `${names[0]}, ${names[1]} +${n - 2}`;
 	}
 
+	// Clueless carries a separate tied_count: on a mass zero-point day the backend
+	// sends ONE representative name but the true count of the floor, so we append
+	// "+N" for everyone not shown.
+	function cluelessWho(c: DropClueless): string {
+		const extra = c.tied_count - c.names.length;
+		return extra > 0 ? `${fmtNames(c.names)} +${extra}` : fmtNames(c.names);
+	}
+
 	// A short text summary for sharing (the headline burns of the day).
 	function shareText(): string {
 		if (!drop) return '';
@@ -298,6 +306,7 @@
 					p.mover && { ic: 'chart' as IconName, lbl: 'On the Move', name: fmtNames(p.mover.names), stat: `+${p.mover.delta} place${p.mover.delta === 1 ? '' : 's'}` },
 					p.faceplant && { ic: 'skull' as IconName, lbl: 'Shat the Bed', name: fmtNames(p.faceplant.names), stat: `${p.faceplant.delta} place${Math.abs(p.faceplant.delta) === 1 ? '' : 's'}` },
 					p.points_haul && { ic: 'money' as IconName, lbl: 'Big Earner', name: fmtNames(p.points_haul.names), stat: `+${p.points_haul.points_gained} pts` },
+					p.clueless && { ic: 'help' as IconName, lbl: 'Clueless', name: cluelessWho(p.clueless), stat: `${p.clueless.points} pt${p.clueless.points === 1 ? '' : 's'} today` },
 					p.wooden_spoon && { ic: 'trophy' as IconName, lbl: 'Why Bother?', name: fmtNames(p.wooden_spoon.names), stat: `−${p.wooden_spoon.behind_leader} pts` }
 				].filter((r): r is Row => !!r)
 			: []

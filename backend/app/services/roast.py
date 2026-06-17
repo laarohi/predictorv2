@@ -29,6 +29,7 @@ _STAT_FIELDS = (
     "faceplant",
     "points_haul",
     "wooden_spoon",
+    "clueless",
     "called_it",
     "contrarian",
     "blunder",
@@ -108,6 +109,19 @@ def _brief(p: DropPayload) -> list[str]:
             f"- Dead last: {_join(p.wooden_spoon.names)}, "
             f"{p.wooden_spoon.behind_leader} pts off the top{tenure}."
         )
+    if p.clueless:
+        c = p.clueless
+        extra = c.tied_count - len(c.names)
+        others = (
+            f" — along with {extra} other{'s' if extra != 1 else ''} on the same"
+            if extra > 0 else ""
+        )
+        verb = (
+            "didn't trouble the scorers at all today"
+            if c.is_floor
+            else f"scraped just {c.points} pt{'s' if c.points != 1 else ''} today"
+        )
+        lines.append(f"- Clueless (worst on the day): {_join(c.names)} {verb}{others}.")
     if p.called_it:
         c = p.called_it
         lines.append(

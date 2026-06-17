@@ -306,6 +306,9 @@ export interface DropLeader { names: string[]; points: number; lead: number; }
 export interface DropMove { names: string[]; delta: number; }
 export interface DropPointsHaul { names: string[]; points_gained: number; }
 export interface DropSpoon { names: string[]; position: number; behind_leader: number; }
+// Daily worst performer. `names` lists all tied when few; on a big tie it shows
+// one rotating representative and `tied_count` carries the true total ("+N").
+export interface DropClueless { names: string[]; points: number; tied_count: number; is_floor: boolean; }
 export interface DropCalledIt {
 	names: string[]; count: number; home_team: string; away_team: string;
 	home_score: number; away_score: number;
@@ -343,6 +346,7 @@ export interface DropPayload {
 	faceplant: DropMove | null;
 	points_haul: DropPointsHaul | null;
 	wooden_spoon: DropSpoon | null;
+	clueless: DropClueless | null;
 	called_it: DropCalledIt | null;
 	contrarian: DropContrarian | null;
 	blunder: DropBlunder | null;

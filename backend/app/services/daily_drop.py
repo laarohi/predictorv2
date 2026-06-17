@@ -6,10 +6,21 @@ already exists:
 
 - **leader / wooden_spoon / hottest_streak / coldest_streak** — from the live
   ``calculate_leaderboard`` (which already carries hot/cold streaks).
-- **mover / faceplant / points_haul** — from the diff between the two most
-  recent ``LeaderboardSnapshot`` days (overnight movement).
+- **mover / faceplant** — from the live board's day-over-day rank movement
+  (``entry.movement``), i.e. the SAME number the leaderboard chip shows: live
+  position now vs the latest prior-day snapshot. (Previously a frozen
+  snapshot-to-snapshot diff, which could disagree in sign with the chip — the
+  bug this fixes.)
+- **points_haul / clueless** — best / worst points scored in the day's 24h
+  window, summed per player from the same match scoring as "Your Day", so the
+  three can never disagree.
 - **called_it / contrarian / blunder** — from predictions joined to scores for
   matches that finished in the recent window.
+
+Every delta and window here means ONE thing: the rolling 24h up to the drop's
+build time (``WINDOW_HOURS``). The drop is a static snapshot of that moment, so
+it agrees with the live leaderboard AT drop time and may legitimately drift as
+more of today's matches finish.
 
 Every stat is independently nullable: missing data → that row is omitted, which
 keeps the card honest early on and helps it fit one screen.
@@ -38,6 +49,7 @@ from app.services.roast import generate_roast
 from app.schemas.daily_drop import (
     BlunderStat,
     CalledItStat,
+    CluelessStat,
     ContrarianStat,
     DropPayload,
     LeaderStat,
@@ -50,19 +62,22 @@ from app.schemas.daily_drop import (
 )
 from app.services.leaderboard import calculate_leaderboard
 
-# A finished match counts toward the "picks" stats if it kicked off within this
-# many hours of the reference time. ~30h comfortably covers the prior day's
-# evening slate when the drop is built the next morning, without dragging in
-# matches already covered by an earlier drop.
-PICKS_WINDOW_HOURS = 30
-
-# The "Your Day" personal recap covers the 24h before the morning drop — "your
-# last 24 hours". Anchored to the drop's build time, not the viewer's clock.
-PERSONAL_WINDOW_HOURS = 24
+# THE canonical drop window: every match-derived stat (picks awards, points_haul,
+# clueless, "Your Day") counts matches that finished in the 24h before the drop's
+# build time. One window, one meaning of "today", anchored to the drop — never the
+# viewer's clock. A 24h window back from an ~08:30-Malta build spans exactly the
+# prior day's slate (which finishes well before midnight UTC) and nothing from the
+# current day, so "the last 24h" and "yesterday's games" are the same set.
+WINDOW_HOURS = 24
 
 # A streak only earns a card slot once it's actually a streak (matches the
 # leaderboard chip's STREAK_MIN).
 STREAK_MIN = 2
+
+# Clueless lists every tied player up to this many; beyond it (a mass zero-point
+# day) it collapses to one rotating representative + a "+N others" count, so the
+# card never prints fifteen names.
+CLUELESS_NAME_CAP = 3
 
 
 def _pick_one(candidates: list[str], feature_count: dict[str, int]) -> str:
@@ -74,85 +89,109 @@ def _pick_one(candidates: list[str], feature_count: dict[str, int]) -> str:
     return winner
 
 
-async def _snapshot_pair_dates(session: AsyncSession) -> tuple[date, date] | None:
-    """The two most recent distinct snapshot days (latest, previous), or None
-    if fewer than two days have been captured (→ no overnight movement yet)."""
-    result = await session.execute(
-        select(LeaderboardSnapshot.captured_date)
-        .distinct()
-        .order_by(LeaderboardSnapshot.captured_date.desc())
-    )
-    dates = [d for (d,) in result.all()]
-    if len(dates) < 2:
+def _clueless_stat(
+    daily_points: dict[uuid.UUID, int],
+    names: dict[uuid.UUID, str],
+    *,
+    reference: datetime,
+    feature_count: dict[str, int],
+) -> CluelessStat | None:
+    """The day's worst performer(s) — fewest points won in the drop window, over
+    players who predicted at least one window match (``daily_points`` keys).
+
+    Needs at least two players (someone has to be the *worst*), and is suppressed
+    when everyone is level on a non-zero score (no genuine dunce). A small tied
+    set lists everyone; a big one (the mass zero-point floor) collapses to a
+    single representative — rotated by the drop's date so it isn't the same name
+    every blank day — plus a ``tied_count`` the card shows as "+N"."""
+    if len(daily_points) < 2:
         return None
-    return dates[0], dates[1]
+    min_pts = min(daily_points.values())
+    max_pts = max(daily_points.values())
+    if min_pts == max_pts and min_pts != 0:
+        return None  # everyone level on a real score — nobody stands out as clueless
 
-
-async def _positions_at(
-    session: AsyncSession, captured: date
-) -> dict[uuid.UUID, tuple[int, int]]:
-    """user_id → (position, total_points) snapshot for one captured day."""
-    result = await session.execute(
-        select(
-            LeaderboardSnapshot.user_id,
-            LeaderboardSnapshot.position,
-            LeaderboardSnapshot.total_points,
-        ).where(LeaderboardSnapshot.captured_date == captured)
+    tied = sorted(names.get(u, "?") for u, v in daily_points.items() if v == min_pts)
+    tied_count = len(tied)
+    if tied_count <= CLUELESS_NAME_CAP:
+        shown = tied
+        for n in shown:
+            feature_count[n] = feature_count.get(n, 0) + 1
+    else:
+        # Rotate the named scapegoat across days so a mass-zero day doesn't keep
+        # singling out the alphabetically-first player. Deterministic per drop.
+        winner = tied[reference.toordinal() % tied_count]
+        feature_count[winner] = feature_count.get(winner, 0) + 1
+        shown = [winner]
+    return CluelessStat(
+        names=shown, points=min_pts, tied_count=tied_count, is_floor=(min_pts == 0)
     )
-    return {uid: (pos, pts) for uid, pos, pts in result.all()}
 
 
-async def _movement_stats(
-    session: AsyncSession, ghost_ids: set[uuid.UUID], names: dict[uuid.UUID, str]
-) -> tuple[MoveStat | None, MoveStat | None, PointsHaulStat | None]:
-    """mover / faceplant / points_haul from the last two snapshot days."""
-    pair = await _snapshot_pair_dates(session)
-    if pair is None:
-        return None, None, None
-    latest_d, prev_d = pair
-    latest = await _positions_at(session, latest_d)
-    prev = await _positions_at(session, prev_d)
+async def _daily_points(
+    session: AsyncSession,
+    *,
+    since: datetime,
+    until: datetime,
+    ghost_ids: set[uuid.UUID],
+) -> dict[uuid.UUID, int]:
+    """Per real player, the points they scored on matches that FINISHED in the
+    drop window (kickoff in ``[since, until]``). The multi-user generalisation of
+    the "Your Day" recap, computed with the SAME match scoring — so "Big Earner",
+    "Clueless" and "Your Day" can never disagree.
 
-    # Only users present on BOTH days and not ghosts can have "movement".
-    uids = [u for u in latest if u in prev and u not in ghost_ids]
-    if not uids:
-        return None, None, None
+    Only players who predicted at least one window match appear (a key with value
+    0 means "played and scored nothing"; absent means "didn't play" — not the same
+    as clueless). Ghosts (crowd / market) are excluded from the result, but the
+    pool-agreement counts that feed the rarity bonus are taken over everyone, exactly
+    as the live scoring does.
+    """
+    # Local import: scoring pulls in the config + bonus layers; importing at module
+    # load would widen this service's import graph.
+    from app.services.scoring import calculate_match_points, get_outcome_counts
 
-    def climb(u: uuid.UUID) -> int:
-        return prev[u][0] - latest[u][0]  # +ve = moved up the table
+    rows = (
+        await session.execute(
+            select(MatchPrediction, Score, Fixture)
+            .join(Fixture, MatchPrediction.fixture_id == Fixture.id)
+            .join(Score, Score.fixture_id == Fixture.id)
+            .where(
+                Fixture.status == MatchStatus.FINISHED,
+                Fixture.kickoff >= since,
+                Fixture.kickoff <= until,
+            )
+        )
+    ).all()
 
-    def gain(u: uuid.UUID) -> int:
-        return latest[u][1] - prev[u][1]
-
-    def names_where(value: int, fn) -> list[str]:
-        """All tied players whose metric equals ``value``, name-sorted."""
-        return sorted(names.get(u, "?") for u in uids if fn(u) == value)
-
-    max_climb = max(climb(u) for u in uids)
-    min_climb = min(climb(u) for u in uids)
-    max_gain = max(gain(u) for u in uids)
-
-    mover = (
-        MoveStat(names=names_where(max_climb, climb), delta=max_climb)
-        if max_climb > 0 else None
-    )
-    faceplant = (
-        MoveStat(names=names_where(min_climb, climb), delta=min_climb)
-        if min_climb < 0 else None
-    )
-    points_haul = (
-        PointsHaulStat(names=names_where(max_gain, gain), points_gained=max_gain)
-        if max_gain > 0 else None
-    )
-    return mover, faceplant, points_haul
+    counts_cache: dict[uuid.UUID, dict[str, int]] = {}
+    totals: dict[uuid.UUID, int] = {}
+    for prediction, score, fixture in rows:
+        if prediction.user_id in ghost_ids:
+            continue
+        counts = counts_cache.get(fixture.id)
+        if counts is None:
+            counts = await get_outcome_counts(session, fixture.id)
+            counts_cache[fixture.id] = counts
+        points, _, _ = calculate_match_points(
+            prediction, score,
+            total_predictors=sum(counts.values()),
+            correct_predictors=counts.get(score.outcome, 0),
+        )
+        totals[prediction.user_id] = totals.get(prediction.user_id, 0) + points
+    return totals
 
 
 async def _pick_stats(
-    session: AsyncSession, *, since: datetime, feature_count: dict[str, int]
+    session: AsyncSession,
+    *,
+    since: datetime,
+    until: datetime,
+    feature_count: dict[str, int],
 ) -> tuple[CalledItStat | None, ContrarianStat | None, BlunderStat | None, int]:
     """called_it / hipster / blunder over real players' picks on matches that
-    finished with kickoff >= ``since``. ONE winner per award (least-featured
-    tiebreak via ``feature_count``). Returns the stats + the match count."""
+    finished with kickoff in ``[since, until]`` (the canonical drop window). ONE
+    winner per award (least-featured tiebreak via ``feature_count``). Returns the
+    stats + the match count."""
     result = await session.execute(
         select(Fixture, Score, MatchPrediction, User)
         .join(Score, Score.fixture_id == Fixture.id)
@@ -160,6 +199,7 @@ async def _pick_stats(
         .join(User, User.id == MatchPrediction.user_id)
         .where(Fixture.status == MatchStatus.FINISHED)
         .where(Fixture.kickoff >= since)
+        .where(Fixture.kickoff <= until)
         .where(User.is_ghost == False)  # noqa: E712 — real players only
     )
     rows = list(result.all())
@@ -311,9 +351,10 @@ async def _position_tenure(
 async def compute_drop_payload(
     session: AsyncSession, *, reference: datetime | None = None
 ) -> DropPayload:
-    """Compute the full broadcast card from current standings, the snapshot
-    diff, and recent picks. Pure read — persists nothing."""
+    """Compute the full broadcast card from the live standings and the matches
+    that finished in the canonical 24h window. Pure read — persists nothing."""
     reference = reference or utc_now()
+    since = reference - timedelta(hours=WINDOW_HOURS)  # the one true window: [since, reference]
 
     # User name + ghost lookups (one pass).
     users = (await session.execute(select(User))).scalars().all()
@@ -366,15 +407,44 @@ async def compute_drop_payload(
     max_hot = max((e.hot_streak for e in ranked), default=0)
     max_cold = max((e.cold_streak for e in ranked), default=0)
 
-    # --- Movement (snapshot diff) ----------------------------------------
-    mover, faceplant, points_haul = await _movement_stats(session, ghost_ids, names)
+    # --- Movement (live board, day-over-day) -----------------------------
+    # mover/faceplant read the SAME ``entry.movement`` the leaderboard chip shows
+    # (live position now vs the latest prior-day snapshot), so the drop and the
+    # table agree at drop time. No movement yet (no prior snapshot) → all 0 → both
+    # None, just as before.
+    mover = faceplant = None
+    if ranked:
+        max_move = max(e.movement for e in ranked)
+        min_move = min(e.movement for e in ranked)
+        if max_move > 0:
+            mover = MoveStat(
+                names=sorted(e.user_name for e in ranked if e.movement == max_move),
+                delta=max_move,
+            )
+        if min_move < 0:
+            faceplant = MoveStat(
+                names=sorted(e.user_name for e in ranked if e.movement == min_move),
+                delta=min_move,
+            )
+
+    # --- Daily points (drives points_haul + clueless; mirrors "Your Day") -
+    daily_points = await _daily_points(
+        session, since=since, until=reference, ghost_ids=ghost_ids
+    )
+    points_haul = None
+    if daily_points:
+        max_gain = max(daily_points.values())
+        if max_gain > 0:
+            points_haul = PointsHaulStat(
+                names=sorted(names.get(u, "?") for u, v in daily_points.items() if v == max_gain),
+                points_gained=max_gain,
+            )
 
     # --- Picks (recent finished matches) — ONE winner per award, spread by
     # least-featured across blunder → called_it → hipster → hottest → coldest.
     feature_count: dict[str, int] = {}
-    since = reference - timedelta(hours=PICKS_WINDOW_HOURS)
     called_it, contrarian, blunder, match_count = await _pick_stats(
-        session, since=since, feature_count=feature_count
+        session, since=since, until=reference, feature_count=feature_count
     )
     hottest_streak = (
         StreakStat(
@@ -393,12 +463,19 @@ async def compute_drop_payload(
         else None
     )
 
+    # --- Clueless (worst on the day) — last, so its scapegoat spreads away from
+    # the picks/streak winners already recorded in ``feature_count``.
+    clueless = _clueless_stat(
+        daily_points, names, reference=reference, feature_count=feature_count
+    )
+
     return DropPayload(
         leader=leader,
         mover=mover,
         faceplant=faceplant,
         points_haul=points_haul,
         wooden_spoon=wooden_spoon,
+        clueless=clueless,
         called_it=called_it,
         contrarian=contrarian,
         blunder=blunder,
@@ -480,7 +557,7 @@ async def compute_personal_stats(
     # build) and spans the 24h before it — "your last 24 hours" — NOT the viewer's
     # clock at open-time. The day's haul is the sum of these match points.
     until = reference or utc_now()
-    since = until - timedelta(hours=PERSONAL_WINDOW_HOURS)
+    since = until - timedelta(hours=WINDOW_HOURS)
     match_results = await _todays_match_results(session, user_id, since=since, until=until)
     points_gained: int | None = sum(m.points for m in match_results) or None
 
