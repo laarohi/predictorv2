@@ -109,6 +109,11 @@ services:
       - CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_CODE_OAUTH_TOKEN:-}
       # Optional model override (e.g. claude-haiku-4-5); blank = account default.
       - ROAST_MODEL=${ROAST_MODEL:-}
+      # How long the sidecar waits on `claude -p` before killing it. A real
+      # roast generates in ~75-80s; the old 90s default left no slack for a slow
+      # API morning (one timeout → the whole drop fell back to the placeholder),
+      # so the default is 180s. Backend httpx (190s) sits just above this.
+      - ROAST_TIMEOUT_MS=${ROAST_TIMEOUT_MS:-180000}
     # Runs in local dev (--profile dev) and prod (--profile prod); never in a
     # bare `docker compose up` without a profile.
     profiles:

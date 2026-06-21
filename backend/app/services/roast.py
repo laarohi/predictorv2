@@ -159,10 +159,10 @@ def _length_guidance(p: DropPayload) -> str:
     long tournament and keeps the cadence from feeling formulaic."""
     present = sum(1 for f in _STAT_FIELDS if getattr(p, f) is not None)
     if p.match_count >= 3 or present >= 7:
-        return "5 to 6 sentences — it was a big day, so make it a proper roast"
+        return "7 to 9 sentences — it was a big day, so make it a proper roast"
     if present >= 4:
-        return "3 to 4 punchy sentences"
-    return "just 2 sharp sentences — a quiet day, so keep it short and lethal"
+        return "4 to 5 punchy sentences"
+    return "just 2 to 3 sharp sentences — a quiet day, so keep it short and lethal"
 
 
 def build_prompt(p: DropPayload, past_roasts: list[str] | None = None) -> str:
@@ -217,7 +217,7 @@ def build_prompt(p: DropPayload, past_roasts: list[str] | None = None) -> str:
         "",
         "INSTRUCTIONS:",
         f"- Length: {_length_guidance(p)}. One paragraph, plain text.",
-        "- HARD LIMIT: never exceed 6 sentences or ~100 words — the roast must fit on "
+        "- HARD LIMIT: never exceed 9 sentences or ~140 words — the roast must fit on "
         "a phone screen with no scrolling. If in doubt, cut it shorter; a tight roast "
         "that lands beats a long one that gets cut off.",
         "- Name and roast 2 to 4 of the people above, using their EXACT display name.",
@@ -253,7 +253,11 @@ async def generate_roast(p: DropPayload, past_roasts: list[str] | None = None) -
     # transient 500; a second attempt almost always lands it. All attempts
     # exhausted → None (caller keeps the deterministic placeholder).
     attempts = 3
-    async with httpx.AsyncClient(timeout=httpx.Timeout(95.0)) as client:
+    # 190s: comfortably above the roaster's own ROAST_TIMEOUT_MS (180s) so the
+    # sidecar's clean "claude timed out" reply wins over an httpx abort. A real
+    # roast generates in ~75-80s; the headroom absorbs a slow API morning that
+    # used to tip past the old 95s cap and fall back to the placeholder.
+    async with httpx.AsyncClient(timeout=httpx.Timeout(190.0)) as client:
         for attempt in range(1, attempts + 1):
             try:
                 resp = await client.post(f"{base}/roast", json={"prompt": prompt})

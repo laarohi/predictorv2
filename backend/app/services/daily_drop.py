@@ -637,7 +637,7 @@ def placeholder_roast(p: DropPayload) -> str:
 # fails soft, but a roaster that *hangs* (vs fast-fails) could otherwise hold the
 # single-threaded scheduler loop for minutes (3× the httpx timeout). This caps it:
 # once-daily call, so a generous bound is fine; on timeout → placeholder.
-_ROAST_BUILD_TIMEOUT_S = 120
+_ROAST_BUILD_TIMEOUT_S = 240
 
 
 async def _capped_roast(payload: DropPayload, past_roasts: list[str]) -> str | None:
