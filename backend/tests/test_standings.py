@@ -22,7 +22,10 @@ from sqlmodel import SQLModel
 
 from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
+from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.score import Score, ScoreSource
+from app.models.user import User
+from app.services.scoring import calculate_user_points, get_actual_advancement
 from app.services.standings import (
     get_actual_group_standings,
     get_actual_group_standings_with_warnings,
@@ -880,3 +883,134 @@ def test_apply_fifa_tiebreakers_defaults_to_alphabetical_when_rankings_omitted()
     )
     assert [t["team"] for t in sorted_teams] == ["Argentina", "Spain"]
     assert len(warnings) == 1
+
+
+# ── Advancement-from-groups scoring (the +10 round_of_32 base) ──────────────
+#
+# Qualifying from a group IS reaching the round of 32, so get_actual_advancement
+# must credit it the moment qualification is settled — NOT defer it until the
+# eventual R32 knockout match is played. Before this was fixed, a correct top-2
+# call scored only the +5/+5 position bonus (10) at group completion; the
+# +10/+10 advancement base waited for the knockout stage. These tests lock the
+# timing so the full 30 lands the instant the group completes — exactly when the
+# whole pool reads the Phase 1 → Phase 2 leaderboard.
+
+# Decisive results → SUI 9 (1st), CAN 6 (2nd), BOS 3 (3rd), QAT 0 (4th).
+# Distinct points, so the ranking never touches a tiebreaker.
+_GROUP_B_RESULTS = [
+    ("Switzerland", "Qatar", 1, 0),
+    ("Switzerland", "Bosnia-Herzegovina", 1, 0),
+    ("Switzerland", "Canada", 1, 0),
+    ("Canada", "Bosnia-Herzegovina", 1, 0),
+    ("Canada", "Qatar", 1, 0),
+    ("Bosnia-Herzegovina", "Qatar", 1, 0),
+]
+
+
+async def _seed_group_results(
+    session: AsyncSession,
+    competition_id: UUID,
+    group: str,
+    results: list[tuple[str, str, int, int]],
+    *,
+    status: MatchStatus = MatchStatus.FINISHED,
+) -> list[Fixture]:
+    """Seed a group's round-robin and return the committed fixtures (with ids)."""
+    fixtures = [
+        _add_match(
+            session, competition_id,
+            home=h, away=a, home_score=hs, away_score=as_,
+            group=group, status=status,
+        )
+        for (h, a, hs, as_) in results
+    ]
+    await session.commit()
+    for fx in fixtures:
+        await session.refresh(fx)
+    return fixtures
+
+
+async def test_top_two_credited_round_of_32_when_their_group_completes(
+    session: AsyncSession, competition: Competition
+) -> None:
+    """1st/2nd in a COMPLETED group reach round_of_32 immediately; 3rd is
+    gated (best-8 thirds undecidable until all groups finish) and 4th never
+    qualifies. No knockout fixture exists — qualification alone drives it."""
+    await _seed_group_results(session, competition.id, "B", _GROUP_B_RESULTS)
+    # A second, still-incomplete group keeps all_groups_complete False, so the
+    # third-place gate stays shut.
+    _add_match(
+        session, competition.id,
+        home="Mexico", away="South Korea", home_score=0, away_score=0,
+        group="A", status=MatchStatus.SCHEDULED,
+    )
+    await session.commit()
+
+    adv = await get_actual_advancement(session)
+
+    assert adv.get("Switzerland") == "round_of_32"  # 1st
+    assert adv.get("Canada") == "round_of_32"       # 2nd
+    assert "Bosnia-Herzegovina" not in adv          # 3rd — gate shut
+    assert "Qatar" not in adv                       # 4th — never
+    assert "Mexico" not in adv and "South Korea" not in adv  # group incomplete
+
+
+async def test_third_place_credited_only_once_all_groups_complete(
+    session: AsyncSession, competition: Competition
+) -> None:
+    """When every group is complete, a best-8 third-placed team reaches
+    round_of_32 too (here Group B is the only group, so its 3rd qualifies).
+    4th still never does."""
+    await _seed_group_results(session, competition.id, "B", _GROUP_B_RESULTS)
+
+    adv = await get_actual_advancement(session)
+
+    assert adv.get("Switzerland") == "round_of_32"
+    assert adv.get("Canada") == "round_of_32"
+    assert adv.get("Bosnia-Herzegovina") == "round_of_32"  # 3rd, gate open
+    assert "Qatar" not in adv                              # 4th — never
+
+
+async def test_correct_top_two_worth_full_30_before_any_knockout_match(
+    session: AsyncSession, competition: Competition
+) -> None:
+    """The reported bug: a user who correctly calls both top-2 teams should
+    see 30 bracket points (10 + 10 advancement base, 5 + 5 position bonus)
+    the moment the group completes — not 10. Mirrors Luke Aarohi / Group B."""
+    fixtures = await _seed_group_results(session, competition.id, "B", _GROUP_B_RESULTS)
+    # Group A left incomplete: no knockout stage could have started.
+    _add_match(
+        session, competition.id,
+        home="Mexico", away="South Korea", home_score=0, away_score=0,
+        group="A", status=MatchStatus.SCHEDULED,
+    )
+    await session.commit()
+
+    user = User(email="luke@example.com", name="Luke")
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+
+    # Predict every Group B score exactly → predicted table == actual table,
+    # so Switzerland(1) and Canada(2) land in their real positions.
+    for fx, (_h, _a, hs, as_) in zip(fixtures, _GROUP_B_RESULTS):
+        session.add(MatchPrediction(
+            user_id=user.id, fixture_id=fx.id,
+            home_score=hs, away_score=as_, phase=PredictionPhase.PHASE_1,
+        ))
+    # Bracket picks: both top-2 teams into the round of 32.
+    session.add(TeamPrediction(
+        user_id=user.id, team="Switzerland", stage="round_of_32",
+        phase=PredictionPhase.PHASE_1,
+    ))
+    session.add(TeamPrediction(
+        user_id=user.id, team="Canada", stage="round_of_32",
+        phase=PredictionPhase.PHASE_1,
+    ))
+    await session.commit()
+
+    breakdown = await calculate_user_points(session, user.id)
+
+    assert breakdown.phase1.round_of_32_points == 20     # 10 + 10 base
+    assert breakdown.phase1.group_position_points == 10  # 5 + 5 position
+    assert breakdown.bracket_total == 30

@@ -521,8 +521,20 @@ async def calculate_group_position_bonus(
 async def get_actual_advancement(session: AsyncSession) -> dict[str, str]:
     """Determine which teams advanced to each stage based on completed fixtures.
 
-    Queries finished knockout fixtures and determines the highest stage
-    reached by each team.
+    Two sources feed the result, layered lowest-stage-first:
+
+    1. **Group qualification → round_of_32.** Qualifying from a group *is*
+       reaching the round of 32 (the config rewards this via the
+       `round_of_32` advancement value — "predicting a team into R32 =
+       predicting they advanced from groups"). A team is credited the
+       moment its qualification is settled, NOT when its eventual R32 match
+       is played. Eligibility mirrors `calculate_group_position_bonus`
+       exactly so the +10 advancement base and +5 position bonus stay in
+       lockstep: positions 1/2 once their group completes, position 3 only
+       once ALL groups complete and the team is a best-8 third, position 4
+       never.
+    2. **Finished knockout fixtures → highest KO stage reached.** Layers on
+       top, bumping winners to deeper rounds via the `>` stage comparison.
 
     Args:
         session: Database session
@@ -531,6 +543,14 @@ async def get_actual_advancement(session: AsyncSession) -> dict[str, str]:
         Dict mapping team name -> highest stage reached
         e.g., {"France": "winner", "Germany": "semi_final", ...}
     """
+    # Imported here (not at module load) to avoid a circular import:
+    # standings imports MatchPrediction, which imports back through scoring.
+    from app.services.standings import (
+        get_actual_group_standings,
+        get_group_completion,
+        get_qualifying_third_place_teams,
+    )
+
     # Define stage progression for determining highest stage
     # Higher index = further in tournament
     stage_ranking = {
@@ -544,6 +564,33 @@ async def get_actual_advancement(session: AsyncSession) -> dict[str, str]:
     # Track highest stage reached by each team
     team_advancement: dict[str, str] = {}
 
+    # --- Source 1: group qualification counts as reaching round_of_32. ---
+    completed_groups, all_groups = await get_group_completion(session)
+    if completed_groups:
+        all_groups_complete = completed_groups == all_groups
+        actual_standings = await get_actual_group_standings(session)
+        # Third-place qualification is a cross-group comparison — undecidable
+        # (and unstable) until every group is complete, so only resolve it then.
+        qualifying_third_names: set[str] = set()
+        if all_groups_complete:
+            thirds = await get_qualifying_third_place_teams(session)
+            qualifying_third_names = {t["team"] for t in thirds}
+
+        for group, teams in actual_standings.items():
+            if group not in completed_groups:
+                continue
+            for i, team_row in enumerate(teams):
+                position = i + 1  # 1-indexed: standings are pre-ranked
+                team_name = team_row["team"]
+                qualifies = position in (1, 2) or (
+                    position == 3
+                    and all_groups_complete
+                    and team_name in qualifying_third_names
+                )
+                if qualifies:
+                    team_advancement[team_name] = "round_of_32"
+
+    # --- Source 2: finished knockout fixtures (highest stage reached). ---
     # Get all finished knockout fixtures with scores
     result = await session.execute(
         select(Fixture, Score)
