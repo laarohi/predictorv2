@@ -1698,7 +1698,14 @@
 	text-transform: uppercase;
 	color: var(--ink-3);
 }
-.pn .pn-summary table { width: 100%; border-collapse: collapse; }
+.pn .pn-summary table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+/* Fixed column widths so the two stacked half-tables (A–F / G–L) line up on
+ * mobile even when one half's Qual column is all "—" — with auto layout each
+ * table sizes its columns independently and they drift out of alignment. */
+.pn .pn-summary th:nth-child(1), .pn .pn-summary td:nth-child(1) { width: 37%; }
+.pn .pn-summary th:nth-child(2), .pn .pn-summary td:nth-child(2) { width: 21%; }
+.pn .pn-summary th:nth-child(3), .pn .pn-summary td:nth-child(3) { width: 21%; }
+.pn .pn-summary th:nth-child(4), .pn .pn-summary td:nth-child(4) { width: 21%; }
 /* Two side-by-side 6-row halves (A–F | G–L); stacked under 700px. NO grid
  * gap — a gap would cut a paper-coloured channel through the header band
  * and the row backgrounds. The halves touch and the dashed border on the
@@ -1913,6 +1920,7 @@
 	color: var(--ink-3);
 	border-top: 2px solid var(--ink);
 }
+.pn .pn-summary .foot .fl { line-height: 1.5; }
 .pn .pn-summary .foot a {
 	color: var(--ink);
 	border-bottom: 1px solid var(--ink);

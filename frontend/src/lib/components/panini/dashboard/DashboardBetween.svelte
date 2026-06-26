@@ -125,10 +125,6 @@
 		return rows;
 	})();
 
-	$: qualPts =
-		($currentUserPosition?.breakdown?.phase1?.group_advance_points ?? 0) +
-		($currentUserPosition?.breakdown?.phase1?.group_position_points ?? 0);
-
 	$: groupMatchTotal = groupRows.reduce((acc, r) => acc + r.match, 0);
 	$: bonusPts = $currentUserPosition?.breakdown?.bonus_question_points ?? 0;
 	$: phaseTotal = $currentUserPosition?.breakdown?.phase1?.total ?? (groupMatchTotal + bonusPts);
@@ -254,7 +250,6 @@
 				<DwGroupSummaryTable
 					rows={groupRows}
 					bonusPoints={bonusPts}
-					qualPoints={qualPts}
 					phaseTotal={phaseTotal}
 					title="Group stage"
 					titleEm="summary"

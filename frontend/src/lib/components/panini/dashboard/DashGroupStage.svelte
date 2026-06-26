@@ -283,11 +283,7 @@
 		}));
 		return { ...r, qual, qualTeams, total: r.match + qual };
 	});
-	// Group-stage advancement haul (qualification + correct-position bonus) and
-	// the running Phase-1 total, for the summary table's totline.
-	$: qualPts =
-		($currentUserPosition?.breakdown?.phase1?.group_advance_points ?? 0) +
-		($currentUserPosition?.breakdown?.phase1?.group_position_points ?? 0);
+	// Running Phase-1 total + bonus haul for the summary table's totline.
 	$: bonusPts = $currentUserPosition?.breakdown?.bonus_question_points ?? 0;
 	$: phase1Total = $currentUserPosition?.breakdown?.phase1?.total ?? 0;
 	$: finishedGroupCount = $fixtures.filter(
@@ -465,13 +461,13 @@
 		{#if ready}
 			<DwGroupSummaryTable
 				rows={groupRows}
-				qualPoints={qualPts}
 				bonusPoints={bonusPts}
 				phaseTotal={phase1Total}
 				title="Group stage"
 				titleEm="so far"
 				meta={`${finishedGroupCount} matches played`}
-				footLeft="Total incl. rarity · tap a total for the games"
+				footLeft="Total incl. rarity"
+				footLeftSub="tap a total for the games"
 				footRight="Per-match breakdown →"
 				footRightHref="/predictions"
 			/>

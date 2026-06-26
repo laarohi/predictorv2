@@ -43,12 +43,12 @@
 	 */
 	export let rows: GroupSummaryRow[] = [];
 	export let bonusPoints: number = 0;
-	export let qualPoints: number | null = null;
 	export let phaseTotal: number = 0;
 	export let title: string = 'Group stage';
 	export let titleEm: string = 'summary';
 	export let meta: string = 'final · all matches played';
-	export let footLeft: string = 'Match incl. rarity · tap Match / Qual for detail';
+	export let footLeft: string = 'Match incl. rarity';
+	export let footLeftSub: string = '';
 	export let footRight: string = 'Per-match breakdown →';
 	export let footRightHref: string = '/predictions';
 
@@ -130,13 +130,12 @@
 	</div>
 	<div class="totline">
 		<span class="adds">
-			{#if qualPoints !== null}<span>+ qualification <b>{qualPoints}</b></span>{/if}
 			{#if bonusPoints > 0}<span>+ bonus questions <b>{bonusPoints}</b></span>{/if}
 		</span>
 		<span class="grand">Phase 1 total <b>{phaseTotal}</b></span>
 	</div>
 	<div class="foot">
-		<span>{footLeft}</span>
+		<span class="fl">{footLeft}{#if footLeftSub}<br />{footLeftSub}{/if}</span>
 		<a href={footRightHref}>{footRight}</a>
 	</div>
 </div>

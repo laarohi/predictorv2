@@ -907,6 +907,14 @@
 	color: var(--ink);
 	border-color: var(--ink);
 }
+/* Mobile: country codes instead of full names — the names + qual badge made
+ * the standings table too wide (and "Ivory Coast" wrapped). Desktop keeps the
+ * full names where there's room. */
+.pn .pn-stnd-table .nm-code { display: none; }
+@media (max-width: 799px) {
+	.pn .pn-stnd-table .nm-full { display: none; }
+	.pn .pn-stnd-table .nm-code { display: inline; }
+}
 /* Points a FINISHED group match scored — a pill in the footer, to the right of
  * the Locked tag (the .save-row is space-between, so it sits flush right).
  * Colour-coded like the results tab: exact = green, correct outcome = gold,

@@ -1440,7 +1440,7 @@
 										<td>
 											<span class="team">
 												<PnFlag code={teamCode(t.team)} w={20} h={14} />
-												<span class="nm-text">{displayTeamName(t.team)}</span>
+												<span class="nm-text"><span class="nm-full">{displayTeamName(t.team)}</span><span class="nm-code">{teamCode(t.team)}</span></span>
 												{#if teamQual}
 													<span
 														class="qual-badge"
