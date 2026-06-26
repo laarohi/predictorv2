@@ -153,6 +153,33 @@
 		);
 	}
 
+	// Bracket sub-stages shown in the expander, in tournament order. group_advance
+	// is intentionally omitted (always 0 — group qualification is scored as
+	// round_of_32_points). 'Qual' = got out of the group; 'Pos' = correct group
+	// position bonus (Phase 1 only).
+	const STAGE_DEFS: Array<{ key: string; label: string; get: (p: PhaseBreakdown) => number }> = [
+		{ key: 'qual', label: 'Qual', get: (p) => p.round_of_32_points },
+		{ key: 'pos', label: 'Pos', get: (p) => p.group_position_points },
+		{ key: 'r16', label: 'R16', get: (p) => p.round_of_16_points },
+		{ key: 'qf', label: 'QF', get: (p) => p.quarter_final_points },
+		{ key: 'sf', label: 'SF', get: (p) => p.semi_final_points },
+		{ key: 'final', label: 'Final', get: (p) => p.final_points },
+		{ key: 'champ', label: 'Champ', get: (p) => p.winner_points }
+	];
+
+	// Auto-hide: a phase card / bracket stage chip is shown only if SOMEONE on the
+	// board has non-zero points there. So "no Phase II yet" or "no R16 yet" simply
+	// vanish instead of showing a wall of zeros. Because a stage is hidden only
+	// when it's zero for everyone, the visible chips still sum to the Bracket total.
+	$: phaseVisible = {
+		phase1: $leaderboard.some((r) => phaseTotal(r.breakdown.phase1) > 0),
+		phase2: $leaderboard.some((r) => phaseTotal(r.breakdown.phase2) > 0)
+	};
+	$: stageVisible = {
+		phase1: STAGE_DEFS.filter((s) => $leaderboard.some((r) => s.get(r.breakdown.phase1) > 0)),
+		phase2: STAGE_DEFS.filter((s) => $leaderboard.some((r) => s.get(r.breakdown.phase2) > 0))
+	};
+
 	$: yourRank = $currentUserPosition?.position ?? 0;
 	$: yourPoints = $currentUserPosition?.total_points ?? 0;
 	$: leaderPoints = $leaderboard[0]?.total_points ?? 0;
@@ -281,19 +308,30 @@
 										<td colspan="9">
 											<div class="pn-lb-detail">
 												{#each DETAIL_PHASES as ph (ph.k)}
-													{@const p = r.breakdown[ph.k]}
-													<div class="phase">
-														<div class="ph-h">
-															<span>{ph.name}</span>
-															<b>{phaseTotal(p)} pts</b>
+													{#if phaseVisible[ph.k]}
+														{@const p = r.breakdown[ph.k]}
+														<div class="phase">
+															<div class="ph-h">
+																<span>{ph.name}</span>
+																<b>{phaseTotal(p)} pts</b>
+															</div>
+															<div class="grid">
+																<div class="cell"><div class="l">Outcome</div><div class="v">{p.match_outcome_points}</div></div>
+																<div class="cell"><div class="l">Exact</div><div class="v exact">{p.exact_score_points}</div></div>
+																<div class="cell"><div class="l">Bonus</div><div class="v bonus">{p.hybrid_bonus_points}</div></div>
+															</div>
+															{#if stageVisible[ph.k].length}
+																<div class="brk">
+																	<div class="brk-h"><span>Bracket</span><b>{phaseBracketSum(p)}</b></div>
+																	<div class="brk-strip">
+																		{#each stageVisible[ph.k] as s (s.key)}
+																			<div class="chip"><div class="cl">{s.label}</div><div class="cv">{s.get(p)}</div></div>
+																		{/each}
+																	</div>
+																</div>
+															{/if}
 														</div>
-														<div class="grid">
-															<div class="cell"><div class="l">Outcome</div><div class="v">{p.match_outcome_points}</div></div>
-															<div class="cell"><div class="l">Exact</div><div class="v exact">{p.exact_score_points}</div></div>
-															<div class="cell"><div class="l">Bonus</div><div class="v bonus">{p.hybrid_bonus_points}</div></div>
-															<div class="cell"><div class="l">Bracket</div><div class="v bracket">{phaseBracketSum(p)}</div></div>
-														</div>
-													</div>
+													{/if}
 												{/each}
 											</div>
 										</td>
@@ -397,19 +435,30 @@
 					{#if isOpen}
 						<div class="pn-m-lb-detail">
 							{#each DETAIL_PHASES as ph (ph.k)}
-								{@const p = r.breakdown[ph.k]}
-								<div class="phase">
-									<div class="ph-h">
-										<span>{ph.name}</span>
-										<b>{phaseTotal(p)} pts</b>
+								{#if phaseVisible[ph.k]}
+									{@const p = r.breakdown[ph.k]}
+									<div class="phase">
+										<div class="ph-h">
+											<span>{ph.name}</span>
+											<b>{phaseTotal(p)} pts</b>
+										</div>
+										<div class="grid">
+											<div class="cell"><div class="l">Out</div><div class="v">{p.match_outcome_points}</div></div>
+											<div class="cell"><div class="l">Exact</div><div class="v exact">{p.exact_score_points}</div></div>
+											<div class="cell"><div class="l">Bonus</div><div class="v bonus">{p.hybrid_bonus_points}</div></div>
+										</div>
+										{#if stageVisible[ph.k].length}
+											<div class="brk">
+												<div class="brk-h"><span>Bracket</span><b>{phaseBracketSum(p)}</b></div>
+												<div class="brk-strip">
+													{#each stageVisible[ph.k] as s (s.key)}
+														<div class="chip"><div class="cl">{s.label}</div><div class="cv">{s.get(p)}</div></div>
+													{/each}
+												</div>
+											</div>
+										{/if}
 									</div>
-									<div class="grid">
-										<div class="cell"><div class="l">Out</div><div class="v">{p.match_outcome_points}</div></div>
-										<div class="cell"><div class="l">Exact</div><div class="v exact">{p.exact_score_points}</div></div>
-										<div class="cell"><div class="l">Bonus</div><div class="v bonus">{p.hybrid_bonus_points}</div></div>
-										<div class="cell"><div class="l">Brkt</div><div class="v bracket">{phaseBracketSum(p)}</div></div>
-									</div>
-								</div>
+								{/if}
 							{/each}
 						</div>
 					{/if}
