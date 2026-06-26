@@ -26,14 +26,18 @@
 
 	import DashboardPre from '$components/panini/dashboard/DashboardPre.svelte';
 	import DashGroupStage from '$components/panini/dashboard/DashGroupStage.svelte';
-	import DashboardBetween from '$components/panini/dashboard/DashboardBetween.svelte';
 	import DashboardKO from '$components/panini/dashboard/DashboardKO.svelte';
 	import DashboardPost from '$components/panini/dashboard/DashboardPost.svelte';
 
+	// `between_phases` (groups done, Phase 2 open, bracket not yet locked)
+	// deliberately renders the GROUP-STAGE dashboard, not the re-pick funnel:
+	// the group→KO window is only ~15h, so we keep players on the expanded
+	// group summary instead of flashing a separate funnel screen. (Funnel
+	// component DashboardBetween is retained in the tree for easy revert.)
 	const DASHBOARDS: Record<UxPhase, ConstructorOfATypedSvelteComponent> = {
 		pre_tournament: DashboardPre,
 		group_stage: DashGroupStage,
-		between_phases: DashboardBetween,
+		between_phases: DashGroupStage,
 		knockout_stage: DashboardKO,
 		post_competition: DashboardPost
 	};

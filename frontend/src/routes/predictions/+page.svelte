@@ -65,6 +65,14 @@
 	import { teamCode } from '$lib/utils/teamCodes';
 	import { displayTeamName } from '$lib/utils/teamName';
 	import type { Fixture, MatchPrediction, BracketPrediction, TeamAdvancementPrediction } from '$types';
+	import {
+		getMyGroupQualification,
+		getAgreements,
+		type GroupQualEntry,
+		type FixtureAgreement
+	} from '$api/predictions';
+	import { getScoringConfig, type ScoringConfig } from '$api/competition';
+	import { computeMatchPoints } from '$lib/utils/matchBreakdown';
 
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import PnFlag from '$components/panini/PnFlag.svelte';
@@ -209,6 +217,48 @@
 		};
 	}
 
+	// Per-group qualification ledger (drives the +15/+10 standings stickers) +
+	// per-match scoring inputs (drive the +pts sticker on finished matches).
+	let qualLedger: GroupQualEntry[] = [];
+	let wizAgreements: FixtureAgreement[] = [];
+	let wizScoringConfig: ScoringConfig | null = null;
+	// Gates the group section so its standings + stickers reveal complete instead
+	// of flashing in after the per-match + qualification data loads.
+	let pointsReady = false;
+	// team name -> qualification points earned (got-out-of-group + position).
+	$: qualByTeam = (() => {
+		const m = new Map<string, { pts: number; correctPos: boolean }>();
+		for (const e of qualLedger) {
+			for (const t of e.teams) {
+				m.set(t.team, { pts: t.base_points + t.position_points, correctPos: t.position_points > 0 });
+			}
+		}
+		return m;
+	})();
+	$: wizAgreementMap = new Map(wizAgreements.map((a) => [a.fixture_id, a]));
+	// Points a FINISHED group match scored the user (incl. rarity), for the +pts
+	// sticker; null when not finished or unpicked. Mirrors the dashboard math.
+	function matchPts(f: Fixture): { pts: number; kind: 'exact' | 'outc' | 'miss' } | null {
+		if (f.status !== 'finished' || !f.score) return null;
+		const p = $predictionsByFixture.get(f.id);
+		if (!p) return null;
+		const ag = wizAgreementMap.get(f.id);
+		const res = computeMatchPoints({
+			mode: wizScoringConfig?.mode ?? 'fixed',
+			predictedHome: p.home_score,
+			predictedAway: p.away_score,
+			actualHome: f.score.home_score,
+			actualAway: f.score.away_score,
+			totalPredictors: ag?.total ?? 0,
+			correctPredictors: ag?.agrees_outcome ?? 0,
+			outcomePoints: wizScoringConfig?.outcome_points ?? 5,
+			exactPoints: wizScoringConfig?.exact_points ?? 10,
+			cap: wizScoringConfig?.rarity_cap ?? 10
+		});
+		const kind = res.exactScore ? 'exact' : res.correctOutcome ? 'outc' : 'miss';
+		return { pts: res.points, kind };
+	}
+
 	onMount(async () => {
 		if ($isAuthenticated) {
 			await Promise.all([
@@ -225,6 +275,20 @@
 				]);
 			}
 			fetchesDone = true;
+			try {
+				const [led, agg, cfg] = await Promise.all([
+					getMyGroupQualification(),
+					getAgreements(),
+					getScoringConfig()
+				]);
+				qualLedger = led;
+				wizAgreements = agg;
+				wizScoringConfig = cfg;
+			} catch {
+				/* stickers stay hidden until/unless these load */
+			} finally {
+				pointsReady = true;
+			}
 		}
 		window.addEventListener('beforeunload', handleBeforeUnload);
 	});
@@ -1317,7 +1381,7 @@
 			<!-- Group view (the 'thirdplace' sub-view was removed — that content
 			     now lives in the modal at the bottom of this page; see <dialog
 			     class="pn-3rd-modal"> below). -->
-			{#if activeSection === 'groups' && selectedGroup}
+			{#if activeSection === 'groups' && selectedGroup && pointsReady}
 				{@const group = selectedGroup}
 				{@const standings = standingsMap[group.group] ?? []}
 				{@const groupWarnings = groupStandingsWarnings.filter((w) => w.group === group.group)}
@@ -1368,6 +1432,7 @@
 									{@const tentative = isThirdSlot && !allGroupsComplete}
 									{@const qualified = directQual || thirdQual}
 									{@const isOut = !qualified && !tentative}
+									{@const teamQual = qualByTeam.get(t.team)}
 									<tr class:qualifies={qualified}>
 										<td>
 											<span class="pos" class:adv={qualified} class:maybe={tentative} class:out={isOut}>{i + 1}</span>
@@ -1376,6 +1441,15 @@
 											<span class="team">
 												<PnFlag code={teamCode(t.team)} w={20} h={14} />
 												<span class="nm-text">{displayTeamName(t.team)}</span>
+												{#if teamQual}
+													<span
+														class="qual-badge"
+														class:exact={teamQual.correctPos}
+														class:outc={!teamQual.correctPos}
+														title={teamQual.correctPos
+															? 'Qualified + correct position: +10 advance, +5 position'
+															: 'Qualified, wrong position: +10 advance'}>+{teamQual.pts}</span>
+												{/if}
 											</span>
 										</td>
 										<td class="stat">{t.played}</td>
@@ -1403,6 +1477,7 @@
 					<div class="pn-wiz-matches">
 						{#each group.fixtures as f (f.id)}
 							{@const state = predictionState(f)}
+							{@const mp = matchPts(f)}
 							<div
 								class="pn-mcard"
 								class:locked={state === 'locked'}
@@ -1467,7 +1542,11 @@
 								<div class="save-row">
 									{#if state === 'locked'}
 										<span class="save-tag locked">Locked</span>
-										<span>No edits</span>
+										{#if mp}
+											<span class="match-pts {mp.kind}">{mp.pts > 0 ? `+${mp.pts}` : '0'}</span>
+										{:else}
+											<span>No edits</span>
+										{/if}
 									{:else if state === 'draft'}
 										<span class="save-tag draft">Draft</span>
 										<span>Click Save Phase I to commit</span>
@@ -1482,6 +1561,10 @@
 							</div>
 						{/each}
 					</div>
+				</section>
+			{:else if activeSection === 'groups' && selectedGroup}
+				<section class="pn-wiz-group">
+					<div class="pn-wiz-loading">Loading group points…</div>
 				</section>
 			{:else if activeSection === 'knockout'}
 				{#if phase1BracketGated}

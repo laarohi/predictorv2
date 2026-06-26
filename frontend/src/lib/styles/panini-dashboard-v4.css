@@ -1678,6 +1678,26 @@
 	display: flex;
 	flex-direction: column;
 }
+/* When the summary card sits directly in the dashboard flow (group-stage
+ * dashboard) it needs the same inter-section gap the skinny strip carried —
+ * .pn-dash-v4 adds no gap of its own, so without this the card's shadow
+ * collides with the section below. (In the .between grid column it's a flex
+ * child and must NOT carry this margin, hence the direct-child scope.) */
+.pn .pn-dash-v4 > .pn-summary { margin-bottom: 26px; }
+/* Loading state for the group summary — holds a card-sized box (so the layout
+ * doesn't jump on reveal) with a centered label until all points data is in. */
+.pn .pn-summary.pn-summary-loading {
+	min-height: 240px;
+	align-items: center;
+	justify-content: center;
+}
+.pn .pn-summary.pn-summary-loading .ld {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
 .pn .pn-summary table { width: 100%; border-collapse: collapse; }
 /* Two side-by-side 6-row halves (A–F | G–L); stacked under 700px. NO grid
  * gap — a gap would cut a paper-coloured channel through the header band
@@ -1753,6 +1773,78 @@
 	padding-left: 16px;
 }
 .pn .pn-summary th:last-child { padding-right: 16px; }
+
+/* Per-group "which games" tooltip on the Total cell — same ink popover as
+ * the group strip (.gss-tip), anchored to the right-aligned total. Revealed
+ * on hover (mouse) and focus (keyboard + tap). */
+.pn .pn-summary td.total { position: relative; }
+.pn .pn-summary .gpts {
+	position: relative;
+	display: inline-block;
+	cursor: help;
+	outline: none;
+}
+.pn .pn-summary .gpts:focus-visible { text-decoration: underline dotted; text-underline-offset: 3px; }
+.pn .pn-summary .gtip {
+	position: absolute;
+	left: 50%;
+	top: calc(100% + 8px);
+	min-width: 152px;
+	background: var(--ink);
+	color: var(--paper);
+	border: 2px solid var(--ink);
+	box-shadow: 4px 4px 0 rgba(14, 29, 64, 0.3);
+	padding: 7px 9px 8px;
+	z-index: 60;
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+	transition: opacity 0.12s ease, transform 0.12s ease;
+	transform: translateX(-50%) translateY(-4px);
+	text-align: left;
+	white-space: nowrap;
+}
+.pn .pn-summary .gpts:hover .gtip,
+.pn .pn-summary .gpts:focus .gtip {
+	opacity: 1;
+	visibility: visible;
+	transform: translateX(-50%) translateY(0);
+}
+.pn .pn-summary .gtip .tip-h {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 14px;
+	font-family: var(--display);
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	padding-bottom: 5px;
+	margin-bottom: 5px;
+	border-bottom: 1px solid rgba(241, 235, 222, 0.22);
+}
+.pn .pn-summary .gtip .tip-h b { color: var(--gold); }
+.pn .pn-summary .gtip ul {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+.pn .pn-summary .gtip li {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	font-family: var(--mono);
+	font-size: 10.5px;
+	letter-spacing: 0.02em;
+}
+.pn .pn-summary .gtip li span:first-child { color: var(--paper-3); text-transform: uppercase; }
+.pn .pn-summary .gtip li span:last-child { font-family: var(--display); font-size: 12px; color: var(--paper); }
+.pn .pn-summary .gtip li.exact span:last-child { color: var(--green); }
+.pn .pn-summary .gtip li.miss span:last-child { color: var(--paper-3); }
 .pn .pn-summary td {
 	padding: 5px 12px;
 	border-bottom: 1px dashed var(--paper-3);

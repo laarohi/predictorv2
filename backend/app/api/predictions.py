@@ -29,6 +29,8 @@ from app.schemas.prediction import (
     BracketPredictionUpdate,
     CommunityPrediction,
     CommunityPredictionsResponse,
+    GroupQualEntry,
+    GroupQualTeam,
     GroupsOverviewResponse,
     MatchPredictionCreate,
     MatchPredictionRead,
@@ -49,6 +51,7 @@ from app.services.bonus import (
 )
 from app.services.bracket_consistency import validate_phase1_bracket
 from app.services.bracket_exposure import compute_bracket_exposure
+from app.services.scoring import get_group_qualification_ledger
 from app.services.locking import (
     check_fixture_locked,
     get_current_phase,
@@ -1245,6 +1248,29 @@ async def save_bonus_predictions(
     return [
         BonusPredictionResponse(question_id=p.question_id, answer=p.answer)
         for p in refreshed
+    ]
+
+
+@router.get("/me/group-qualification", response_model=list[GroupQualEntry])
+async def get_my_group_qualification(
+    session: DbSession,
+    current_user: CurrentUser,
+) -> list[GroupQualEntry]:
+    """Per-group Phase-1 qualification breakdown for the calling user.
+
+    Powers the group-summary table's qualification column + per-team tooltip:
+    which teams earned the +10 (got out of the group) and +5 (correct finishing
+    position) points, grouped by completed group. Reconciles with the
+    leaderboard exactly (same scoring engine). Empty until a group completes.
+    """
+    ledger = await get_group_qualification_ledger(session, current_user.id)
+    return [
+        GroupQualEntry(
+            group=e["group"],
+            total=e["total"],
+            teams=[GroupQualTeam(**t) for t in e["teams"]],
+        )
+        for e in ledger
     ]
 
 

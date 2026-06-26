@@ -424,6 +424,18 @@
 	margin-left: 6px;
 	opacity: 0.6;
 }
+/* Points banked at this bracket stage (navy chip beside the stage label). The
+ * R32 row folds in the group-position bonus, matching the dashboard's Qual. */
+.pn .pn-pf-bracket .lbl .pts {
+	margin-left: 7px;
+	padding: 1px 6px;
+	background: var(--navy);
+	color: var(--paper);
+	font-family: var(--display);
+	font-size: 11px;
+	letter-spacing: 0;
+	border: 1.5px solid var(--ink);
+}
 .pn .pn-pf-bracket .tags {
 	display: flex;
 	flex-wrap: wrap;
@@ -441,6 +453,11 @@
 	border-color: var(--red);
 	opacity: 0.6;
 }
+/* Scoring fill (subtle) — how this pick scored, per team. Green = points
+   banked (R32: qualified + correct position; deeper rounds: reached). Yellow =
+   R32 qualified but in the wrong position (advance only, no position bonus). */
+.pn .pn-pf-bracket .pick-tag.sc-green { background: rgba(27, 108, 62, 0.3); }
+.pn .pn-pf-bracket .pick-tag.sc-yellow { background: rgba(212, 154, 46, 0.36); }
 
 @media (max-width: 700px) {
 	.pn .pn-pf-predgrid { grid-template-columns: 1fr; }

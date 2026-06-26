@@ -752,6 +752,19 @@
  * The threshold is 1000px deliberately (not 700px): an iPad-portrait
  * viewport (~768-810px) would still be cramped with two columns plus a
  * 2-col match grid inside the right column. Below 1000px we stack. */
+/* Loading state for a group while its points/stickers data finishes loading —
+ * holds a stable box so the section reveals complete instead of flashing in. */
+.pn .pn-wiz-loading {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 200px;
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+}
 .pn .pn-wiz-group {
 	display: grid;
 	grid-template-columns: 1fr;
@@ -870,6 +883,60 @@
 	align-items: center;
 	gap: 8px;
 	min-width: 0;
+}
+/* Qualification points banked by this team (navy pill beside the name):
+ * +15 = qualified AND correct position, +10 = qualified, wrong position. */
+.pn .pn-stnd-table .team .qual-badge {
+	flex: 0 0 auto;
+	font-family: var(--display);
+	font-size: 10px;
+	letter-spacing: 0;
+	padding: 1px 5px;
+	background: var(--navy);
+	color: var(--paper);
+	border: 1.5px solid var(--ink);
+}
+/* Green = qualified AND correct position (+15); gold = qualified, wrong
+ * position (+10) — same scheme as the match-points pills. */
+.pn .pn-stnd-table .team .qual-badge.exact {
+	background: var(--green);
+	border-color: var(--green);
+}
+.pn .pn-stnd-table .team .qual-badge.outc {
+	background: var(--gold);
+	color: var(--ink);
+	border-color: var(--ink);
+}
+/* Points a FINISHED group match scored — a pill in the footer, to the right of
+ * the Locked tag (the .save-row is space-between, so it sits flush right).
+ * Colour-coded like the results tab: exact = green, correct outcome = gold,
+ * miss = red. */
+.pn .pn-mcard .save-row .match-pts {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 30px;
+	padding: 1px 8px;
+	font-family: var(--display);
+	font-size: 12px;
+	letter-spacing: 0.02em;
+	background: var(--paper);
+	color: var(--ink);
+	border: 1.5px solid var(--ink);
+}
+.pn .pn-mcard .save-row .match-pts.exact {
+	background: var(--green);
+	color: var(--paper);
+	border-color: var(--green);
+}
+.pn .pn-mcard .save-row .match-pts.outc {
+	background: var(--gold);
+	color: var(--ink);
+}
+.pn .pn-mcard .save-row .match-pts.miss {
+	background: var(--paper);
+	color: var(--red);
+	border-color: var(--red);
 }
 .pn .pn-stnd-table .team .nm-text {
 	overflow: hidden;
@@ -1003,7 +1070,8 @@
 	gap: 10px;
 	position: relative;
 }
-.pn .pn-mcard.locked { opacity: 0.6; }
+/* Locked games are NOT faded — the "Locked" tag in the save-row is signal
+ * enough, and fading buried the points sticker on finished matches. */
 /* Empty / unfilled match prediction card.
  * Previously: dashed perimeter (dominated the page when many were unfilled).
  * Now: same solid silhouette as a filled card — the "needs input" signal

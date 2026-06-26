@@ -1014,3 +1014,62 @@ async def test_correct_top_two_worth_full_30_before_any_knockout_match(
     assert breakdown.phase1.round_of_32_points == 20     # 10 + 10 base
     assert breakdown.phase1.group_position_points == 10  # 5 + 5 position
     assert breakdown.bracket_total == 30
+
+
+async def test_group_qualification_ledger_attributes_per_team_and_reconciles(
+    session: AsyncSession, competition: Competition
+) -> None:
+    """The per-group qualification ledger attributes each team's +10 base and
+    +5 position points, and its totals reconcile EXACTLY with the canonical
+    scoring engine (round_of_32_points + group_position_points)."""
+    from app.services.scoring import get_group_qualification_ledger
+
+    fixtures = await _seed_group_results(session, competition.id, "B", _GROUP_B_RESULTS)
+    _add_match(
+        session, competition.id,
+        home="Mexico", away="South Korea", home_score=0, away_score=0,
+        group="A", status=MatchStatus.SCHEDULED,
+    )
+    await session.commit()
+
+    user = User(email="luke@example.com", name="Luke")
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+
+    for fx, (_h, _a, hs, as_) in zip(fixtures, _GROUP_B_RESULTS):
+        session.add(MatchPrediction(
+            user_id=user.id, fixture_id=fx.id,
+            home_score=hs, away_score=as_, phase=PredictionPhase.PHASE_1,
+        ))
+    session.add(TeamPrediction(
+        user_id=user.id, team="Switzerland", stage="round_of_32",
+        phase=PredictionPhase.PHASE_1,
+    ))
+    session.add(TeamPrediction(
+        user_id=user.id, team="Canada", stage="round_of_32",
+        phase=PredictionPhase.PHASE_1,
+    ))
+    await session.commit()
+
+    ledger = await get_group_qualification_ledger(session, user.id)
+
+    # Only Group B has completed; Group A is still scheduled.
+    assert [e["group"] for e in ledger] == ["B"]
+    entry = ledger[0]
+    assert entry["total"] == 30
+    by_team = {t["team"]: t for t in entry["teams"]}
+    assert by_team["Switzerland"]["base_points"] == 10
+    assert by_team["Switzerland"]["position_points"] == 5  # predicted 1st, finished 1st
+    assert by_team["Canada"]["base_points"] == 10
+    assert by_team["Canada"]["position_points"] == 5
+    # 3rd/4th never appear (Bosnia-Herzegovina 3rd is gated until all groups done).
+    assert "Bosnia-Herzegovina" not in by_team
+    assert "Qatar" not in by_team
+
+    # Reconcile with the canonical engine — the ledger must never disagree.
+    bd = await calculate_user_points(session, user.id)
+    total_base = sum(t["base_points"] for e in ledger for t in e["teams"])
+    total_pos = sum(t["position_points"] for e in ledger for t in e["teams"])
+    assert total_base == bd.phase1.round_of_32_points
+    assert total_pos == bd.phase1.group_position_points

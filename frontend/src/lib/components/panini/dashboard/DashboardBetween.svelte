@@ -119,12 +119,8 @@
 		}
 		const rows: GroupSummaryRow[] = groups.map((g) => {
 			const b = map.get(g)!;
-			return {
-				group: g,
-				outcome: b.outcome,
-				exact: b.exact,
-				total: b.outcome + b.exact
-			};
+			const match = b.outcome + b.exact;
+			return { group: g, match, qual: 0, total: match };
 		});
 		return rows;
 	})();
@@ -133,10 +129,9 @@
 		($currentUserPosition?.breakdown?.phase1?.group_advance_points ?? 0) +
 		($currentUserPosition?.breakdown?.phase1?.group_position_points ?? 0);
 
-	$: groupOutcomeTotal = groupRows.reduce((acc, r) => acc + r.outcome, 0);
-	$: groupExactTotal = groupRows.reduce((acc, r) => acc + r.exact, 0);
+	$: groupMatchTotal = groupRows.reduce((acc, r) => acc + r.match, 0);
 	$: bonusPts = $currentUserPosition?.breakdown?.bonus_question_points ?? 0;
-	$: phaseTotal = $currentUserPosition?.breakdown?.phase1?.total ?? (groupOutcomeTotal + groupExactTotal + bonusPts);
+	$: phaseTotal = $currentUserPosition?.breakdown?.phase1?.total ?? (groupMatchTotal + bonusPts);
 
 	// ---- KPI values --------------------------------------------------------
 	$: rank = $currentUserPosition?.position ?? null;

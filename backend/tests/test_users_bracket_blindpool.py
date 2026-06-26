@@ -15,6 +15,18 @@ from app.api.users import get_user_predictions
 from app.models.prediction import PredictionPhase, TeamPrediction
 
 
+@pytest.fixture(autouse=True)
+def _stub_qual_ledger():
+    """When the Phase-1 bracket is visible the endpoint also computes a per-group
+    qualification ledger (several DB reads). These tests mock the session at a
+    fixed depth and only assert blind-pool gating, so stub the ledger out."""
+    with patch(
+        "app.api.users.get_group_qualification_ledger",
+        new=AsyncMock(return_value=[]),
+    ):
+        yield
+
+
 def _user_obj(uid: uuid.UUID, name: str = "Player") -> MagicMock:
     u = MagicMock()
     u.id = uid

@@ -139,6 +139,31 @@
 		return 'tbd';
 	}
 
+	/** team -> did this user bank the +5 position bonus (correct finishing spot)
+	 *  for this R32 qualifier. Absent = the team didn't score them qualification. */
+	$: qualMap = (() => {
+		const m = new Map<string, boolean>();
+		for (const e of predictions?.group_qualification ?? []) {
+			for (const t of e.teams) m.set(t.team, t.position_points > 0);
+		}
+		return m;
+	})();
+
+	/** Per-team scoring colour for a bracket pick (subtle fill):
+	 *  - R32 (Phase 1): green = qualified + correct position (+15), yellow =
+	 *    qualified but wrong position (+10), none = didn't qualify.
+	 *  - Deeper KO rounds: green when the team actually reached that stage.
+	 *  Phase-2 R32 scores nothing, so it stays uncoloured. */
+	function scoreClass(team: string, stage: string, phaseKey: 'phase1' | 'phase2' | null): string {
+		if (stage === 'round_of_32') {
+			if (phaseKey !== 'phase1') return '';
+			const q = qualMap.get(team);
+			if (q === undefined) return '';
+			return q ? 'sc-green' : 'sc-yellow';
+		}
+		return tagFate(team, stage) === 'in' ? 'sc-green' : '';
+	}
+
 	// Knockout rounds in play order — drives both the KO predictions tables
 	// and the per-phase bracket tag sections.
 	const KO_ROUNDS: Array<[string, string]> = [
@@ -196,19 +221,36 @@
 	$: bracketPhases = (() => {
 		const bs = predictions?.bracket_summary;
 		if (!bs) return [];
-		const out: Array<{ label: string; sub: string; stages: Record<string, string[]> }> = [];
+		type Ph = 'phase1' | 'phase2' | null;
+		const out: Array<{ label: string; sub: string; stages: Record<string, string[]>; phaseKey: Ph }> = [];
 		if (bs.phase1_stages && Object.keys(bs.phase1_stages).length > 0) {
-			out.push({ label: 'Bracket picks · Phase I', sub: 'Pre-tournament', stages: bs.phase1_stages });
+			out.push({ label: 'Bracket picks · Phase I', sub: 'Pre-tournament', stages: bs.phase1_stages, phaseKey: 'phase1' });
 		}
 		if (bs.phase2_stages && Object.keys(bs.phase2_stages).length > 0) {
-			out.push({ label: 'Bracket picks · Phase II', sub: 'Knockout re-pick', stages: bs.phase2_stages });
+			out.push({ label: 'Bracket picks · Phase II', sub: 'Knockout re-pick', stages: bs.phase2_stages, phaseKey: 'phase2' });
 		}
 		// Legacy fallback: phase-tagged maps empty but the merged map isn't.
 		if (out.length === 0 && Object.keys(bs.stages).length > 0) {
-			out.push({ label: 'Bracket picks', sub: 'Locked predictions', stages: bs.stages });
+			out.push({ label: 'Bracket picks', sub: 'Locked predictions', stages: bs.stages, phaseKey: null });
 		}
 		return out;
 	})();
+
+	/**
+	 * Points the user banked at a bracket stage, for the per-row chip. The R32
+	 * row folds in the group-position bonus so it reads as the full "got out of
+	 * the group" haul (matches the dashboard's Qual column). Picks are already
+	 * lock-gated, so this only ever renders for revealed phases.
+	 */
+	function stagePts(phaseKey: 'phase1' | 'phase2' | null, stageKey: string): number {
+		if (!phaseKey || !profile) return 0;
+		const b = profile.stats.breakdown[phaseKey] as unknown as Record<string, number>;
+		if (!b) return 0;
+		if (stageKey === 'round_of_32') {
+			return (b.round_of_32_points ?? 0) + (b.group_position_points ?? 0);
+		}
+		return b[`${stageKey}_points`] ?? 0;
+	}
 
 	$: groupPickCount = groupBlocks.reduce((n, [, preds]) => n + preds.length, 0);
 </script>
@@ -286,12 +328,14 @@
 						<div class="pn-pf-bracket">
 							{#each BRACKET_ROWS as [stageKey, label] (stageKey)}
 								{#if bp.stages[stageKey] && bp.stages[stageKey].length > 0}
+									{@const stPts = stagePts(bp.phaseKey, stageKey)}
 									<div class="strow">
-										<div class="lbl">{label}<span class="n">{bp.stages[stageKey].length}</span></div>
+										<div class="lbl">{label}<span class="n">{bp.stages[stageKey].length}</span>{#if stPts > 0}<span class="pts">+{stPts}</span>{/if}</div>
 										<div class="tags">
 											{#each bp.stages[stageKey] as team}
 												{@const fate = tagFate(team, stageKey)}
-												<span class="pn-tag pick-tag {stageKey === 'winner' ? 'gold' : ''} fate-{fate}">
+												{@const sc = scoreClass(team, stageKey, bp.phaseKey)}
+												<span class="pn-tag pick-tag {stageKey === 'winner' ? 'gold' : ''} fate-{fate} {sc}">
 													<PnFlag code={teamCode(team)} w={12} h={9} />{teamCode(team)}
 												</span>
 											{/each}

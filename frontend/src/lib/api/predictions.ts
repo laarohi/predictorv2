@@ -75,6 +75,27 @@ export async function getBracketExposure(
 	return api.get<BracketExposureResponse>(`/predictions/bracket-exposure?phase=${phase}`);
 }
 
+export interface GroupQualTeam {
+	team: string;
+	predicted_position: number | null;
+	actual_position: number;
+	base_points: number; // +round_of_32 for getting out of the group
+	position_points: number; // +group_position for the correct finishing spot
+}
+
+export interface GroupQualEntry {
+	group: string;
+	total: number;
+	teams: GroupQualTeam[];
+}
+
+/** Per-group Phase-1 qualification breakdown for the calling user (completed
+ *  groups only). Powers the group summary table's Qual column + per-team
+ *  tooltip; reconciles with the leaderboard (same scoring engine). */
+export async function getMyGroupQualification(): Promise<GroupQualEntry[]> {
+	return api.get<GroupQualEntry[]>('/predictions/me/group-qualification');
+}
+
 export async function updateMatchPrediction(
 	fixtureId: string,
 	data: MatchPredictionUpdate

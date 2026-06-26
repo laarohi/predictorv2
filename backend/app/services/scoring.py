@@ -518,6 +518,100 @@ async def calculate_group_position_bonus(
     return total
 
 
+async def get_group_qualification_ledger(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+) -> list[dict]:
+    """Per-group Phase-1 qualification attribution for one user.
+
+    For each COMPLETED group, lists which of the user's teams earned the
+    +``round_of_32`` base (got out of the group) and the +``group_position``
+    bonus (correct finishing position) — so the dashboard/profile can show
+    WHERE the qualification points came from instead of one aggregate number.
+
+    Mirrors the scoring engine exactly so it reconciles with the leaderboard:
+    the base is paid only for teams the user carried into R32 (their
+    ``TeamPrediction`` round_of_32 rows) that actually qualified; the position
+    bonus for teams whose predicted position matches their actual position.
+    Third-place qualification waits for ALL groups to complete (best-8-thirds
+    is cross-group), matching ``get_actual_advancement`` and
+    ``calculate_group_position_bonus``. Returns ``[]`` until the first group
+    completes. Phase 1 only (Phase 2 has no group score predictions).
+
+    Returns a list of ``{group, total, teams: [{team, predicted_position,
+    actual_position, base_points, position_points}]}`` for completed groups.
+    """
+    from app.services.standings import (
+        get_actual_group_standings,
+        get_group_completion,
+        get_predicted_group_standings,
+        get_qualifying_third_place_teams,
+    )
+
+    config = get_scoring_config()
+    adv = config.get("advancement", {})
+    base_value = int(adv.get("round_of_32", 0))
+    pos_value = int(adv.get("group_position", 0))
+
+    completed_groups, all_groups = await get_group_completion(session)
+    if not completed_groups:
+        return []
+    all_groups_complete = completed_groups == all_groups
+
+    actual = await get_actual_group_standings(session)
+    predicted, _ = await get_predicted_group_standings(session, user_id)
+    qualifying_third_names: set[str] = set()
+    if all_groups_complete:
+        thirds = await get_qualifying_third_place_teams(session)
+        qualifying_third_names = {t["team"] for t in thirds}
+
+    # Teams the user carried into the R32 — the base (+10) is paid only for these
+    # (exactly what calculate_advancement_points scores against round_of_32).
+    res = await session.execute(
+        select(TeamPrediction.team).where(
+            TeamPrediction.user_id == user_id,
+            TeamPrediction.stage == "round_of_32",
+            TeamPrediction.phase == PredictionPhase.PHASE_1,
+        )
+    )
+    r32_picks = {row[0] for row in res.all()}
+
+    ledger: list[dict] = []
+    for group in sorted(completed_groups):
+        actual_teams = actual.get(group, [])
+        predicted_pos = {t["team"]: i + 1 for i, t in enumerate(predicted.get(group, []))}
+        teams: list[dict] = []
+        group_total = 0
+        for i, t in enumerate(actual_teams):
+            actual_position = i + 1
+            team = t["team"]
+            qualified = actual_position in (1, 2) or (
+                actual_position == 3
+                and all_groups_complete
+                and team in qualifying_third_names
+            )
+            if not qualified:
+                continue
+            predicted_position = predicted_pos.get(team)
+            base = base_value if team in r32_picks else 0
+            position = pos_value if predicted_position == actual_position else 0
+            if base == 0 and position == 0:
+                continue
+            teams.append(
+                {
+                    "team": team,
+                    "predicted_position": predicted_position,
+                    "actual_position": actual_position,
+                    "base_points": base,
+                    "position_points": position,
+                }
+            )
+            group_total += base + position
+        if teams:
+            ledger.append({"group": group, "total": group_total, "teams": teams})
+    return ledger
+
+
 async def get_actual_advancement(session: AsyncSession) -> dict[str, str]:
     """Determine which teams advanced to each stage based on completed fixtures.
 

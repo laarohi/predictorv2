@@ -239,3 +239,22 @@ class BonusOverviewQuestion(BaseModel):
 class BonusOverviewResponse(BaseModel):
     total_predictors: int
     questions: list[BonusOverviewQuestion]
+
+
+# ── Group qualification ledger (per-group Phase-1 advancement attribution) ──
+class GroupQualTeam(BaseModel):
+    """One team's qualification contribution within a completed group."""
+
+    team: str
+    predicted_position: int | None
+    actual_position: int
+    base_points: int  # +round_of_32 for getting out of the group
+    position_points: int  # +group_position for the correct finishing spot
+
+
+class GroupQualEntry(BaseModel):
+    """A completed group and the teams that earned the calling user points."""
+
+    group: str
+    total: int
+    teams: list[GroupQualTeam]

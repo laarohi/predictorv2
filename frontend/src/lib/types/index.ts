@@ -548,6 +548,19 @@ export interface UserBonusPredictionView {
 	is_correct: boolean | null;
 }
 
+export interface ProfileQualTeam {
+	team: string;
+	predicted_position: number | null;
+	actual_position: number;
+	base_points: number; // +round_of_32 for getting out of the group
+	position_points: number; // +group_position for the correct finishing spot
+}
+export interface ProfileQualEntry {
+	group: string;
+	total: number;
+	teams: ProfileQualTeam[];
+}
+
 export interface UserPredictionsResponse {
 	user_id: string;
 	user_name: string;
@@ -555,6 +568,9 @@ export interface UserPredictionsResponse {
 	bracket_summary: BracketSummary;
 	/** Bonus-question picks — empty before Phase 1 locks (blind pool). */
 	bonus_predictions: UserBonusPredictionView[];
+	/** Per-group Phase-1 qualification ledger — empty until the Phase-1 bracket
+	 *  is visible. Drives the per-team R32 scoring colour on the profile. */
+	group_qualification: ProfileQualEntry[];
 }
 
 // API Response types

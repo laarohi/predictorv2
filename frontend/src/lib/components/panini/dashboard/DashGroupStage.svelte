@@ -16,7 +16,9 @@
 	import { onMount } from 'svelte';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import DwKpiRow from './widgets/DwKpiRow.svelte';
-	import DwGroupSummaryStrip from './widgets/DwGroupSummaryStrip.svelte';
+	import DwGroupSummaryTable, {
+		type GroupMatchPts
+	} from './widgets/DwGroupSummaryTable.svelte';
 	import DwMatchTable, { type MatchTableRow, type PtsVariant } from './widgets/DwMatchTable.svelte';
 	import DwTop5 from './widgets/DwTop5.svelte';
 	import DwBackPageReplay from './widgets/DwBackPageReplay.svelte';
@@ -32,7 +34,12 @@
 	import { humanEntries } from '$lib/utils/ghosts';
 	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
 	import { getMyRankTrajectory, type RankTrajectoryResponse } from '$api/leaderboard';
-	import { getAgreements, type FixtureAgreement } from '$api/predictions';
+	import {
+		getAgreements,
+		getMyGroupQualification,
+		type FixtureAgreement,
+		type GroupQualEntry
+	} from '$api/predictions';
 	import { getScoringConfig, type ScoringConfig } from '$api/competition';
 	import { teamCode } from '$lib/utils/teamCodes';
 	import { goto } from '$app/navigation';
@@ -44,11 +51,18 @@
 	// rarity (hybrid) bonus into the group totals, matching the leaderboard.
 	let agreements: FixtureAgreement[] = [];
 	let scoringConfig: ScoringConfig | null = null;
+	// Per-group qualification breakdown (who got the +10/+5), from the backend
+	// ledger so it reconciles with the leaderboard. Empty until a group completes.
+	let qualLedger: GroupQualEntry[] = [];
+	// Gates the group-summary widget: it stays in a loading state until ALL its
+	// inputs (fixtures, predictions, agreements, scoring config, qual ledger)
+	// have loaded, so it reveals complete instead of flashing zeros / no stickers.
+	let ready = false;
 
 	onMount(async () => {
-		fetchAllFixtures();
+		const fixturesP = fetchAllFixtures();
 		fetchLeaderboard();
-		fetchMatchPredictions();
+		const predsP = fetchMatchPredictions();
 		try {
 			trajectoryData = await getMyRankTrajectory(5);
 		} catch {
@@ -63,6 +77,19 @@
 		} catch {
 			/* keep the flat fallback */
 		}
+		try {
+			qualLedger = await getMyGroupQualification();
+		} catch {
+			/* no qualification breakdown yet (no group complete) */
+		}
+		// Group points + stickers also depend on fixtures + predictions — wait for
+		// them so the summary reveals complete rather than mid-populate.
+		try {
+			await Promise.all([fixturesP, predsP]);
+		} catch {
+			/* render with whatever's in the stores */
+		}
+		ready = true;
 	});
 
 	// ---- Scoring constants (kept in sync with config/worldcup2026.yml) ----
@@ -236,12 +263,36 @@
 	// group total then equals the user's real leaderboard contribution from
 	// the group stage, not a flat outcome+exact approximation.
 	$: agreementMap = new Map(agreements.map((a) => [a.fixture_id, a]));
-	$: groupBreakdown = buildGroupBreakdown(
+	// Match points per group (incl. rarity) + the per-match detail for the tooltip.
+	$: matchRows = buildMatchRows(
 		$fixtures,
 		$predictionsByFixture,
 		scoringConfig,
 		agreementMap
 	);
+	// Merge the authoritative qualification ledger onto each group row: Qual
+	// column + per-team detail, and Total = Match + Qual.
+	$: qualByGroup = new Map(qualLedger.map((e) => [e.group, e]));
+	$: groupRows = matchRows.map((r) => {
+		const e = qualByGroup.get(r.group);
+		const qual = e?.total ?? 0;
+		const qualTeams = (e?.teams ?? []).map((t) => ({
+			team: teamCode(t.team),
+			position: t.actual_position,
+			pts: t.base_points + t.position_points
+		}));
+		return { ...r, qual, qualTeams, total: r.match + qual };
+	});
+	// Group-stage advancement haul (qualification + correct-position bonus) and
+	// the running Phase-1 total, for the summary table's totline.
+	$: qualPts =
+		($currentUserPosition?.breakdown?.phase1?.group_advance_points ?? 0) +
+		($currentUserPosition?.breakdown?.phase1?.group_position_points ?? 0);
+	$: bonusPts = $currentUserPosition?.breakdown?.bonus_question_points ?? 0;
+	$: phase1Total = $currentUserPosition?.breakdown?.phase1?.total ?? 0;
+	$: finishedGroupCount = $fixtures.filter(
+		(f) => f.stage === 'group' && f.status === 'finished'
+	).length;
 
 	function matchSplit(
 		f: Fixture,
@@ -275,27 +326,37 @@
 		return { outcome, exact, bonus: res.points - outcome - exact };
 	}
 
-	function buildGroupBreakdown(
+	function buildMatchRows(
 		allFixtures: Fixture[],
 		preds: Map<string, MatchPrediction>,
 		cfg: ScoringConfig | null,
 		agMap: Map<string, FixtureAgreement>
-	): Array<{ group: string; outcome: number; exact: number; bonus: number }> {
-		const map = new Map<string, { outcome: number; exact: number; bonus: number }>();
+	): Array<{ group: string; match: number; matches: GroupMatchPts[] }> {
+		type Acc = { match: number; matches: GroupMatchPts[] };
+		const map = new Map<string, Acc>();
 		for (const f of allFixtures) {
 			if (f.stage !== 'group' || !f.group) continue;
 			if (f.status !== 'finished') continue;
 			const part = matchSplit(f, preds.get(f.id), cfg, agMap.get(f.id));
-			const cur = map.get(f.group) ?? { outcome: 0, exact: 0, bonus: 0 };
-			cur.outcome += part.outcome;
-			cur.exact += part.exact;
-			cur.bonus += part.bonus;
+			// pts includes the rarity bonus, so the per-match tooltip sums back
+			// to the Match total (= the user's real leaderboard contribution).
+			const pts = part.outcome + part.exact + part.bonus;
+			const kind = (classifyPick(scoreTuple(f), pickTuple(f)) ?? 'miss') as
+				| 'exact'
+				| 'outc'
+				| 'miss';
+			const cur = map.get(f.group) ?? { match: 0, matches: [] };
+			cur.match += pts;
+			cur.matches.push({ home: teamCode(f.home_team), away: teamCode(f.away_team), pts, kind });
 			map.set(f.group, cur);
 		}
 		const groups = Array.from({ length: 12 }, (_, i) =>
 			String.fromCharCode('A'.charCodeAt(0) + i)
 		);
-		return groups.map((g) => ({ group: g, ...(map.get(g) ?? { outcome: 0, exact: 0, bonus: 0 }) }));
+		return groups.map((g) => {
+			const b = map.get(g) ?? { match: 0, matches: [] };
+			return { group: g, match: b.match, matches: b.matches };
+		});
 	}
 
 	// ---- KPI values (real backend data) -----------------------------------
@@ -401,7 +462,28 @@
 			trajectoryNowLabel={`Last ${PAST_SHOW}`}
 		/>
 
-		<DwGroupSummaryStrip groups={groupBreakdown} />
+		{#if ready}
+			<DwGroupSummaryTable
+				rows={groupRows}
+				qualPoints={qualPts}
+				bonusPoints={bonusPts}
+				phaseTotal={phase1Total}
+				title="Group stage"
+				titleEm="so far"
+				meta={`${finishedGroupCount} matches played`}
+				footLeft="Total incl. rarity · tap a total for the games"
+				footRight="Per-match breakdown →"
+				footRightHref="/predictions"
+			/>
+		{:else}
+			<div class="pn-sec-h">
+				<span class="ttl"><span class="pip"></span> Group stage <em>so far</em></span>
+				<span class="meta">loading…</span>
+			</div>
+			<div class="pn-summary pn-summary-loading">
+				<span class="ld">Loading group points…</span>
+			</div>
+		{/if}
 
 		<section class="pn-dash-cols spectator">
 			<div class="col">

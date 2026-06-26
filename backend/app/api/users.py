@@ -16,12 +16,14 @@ from app.models.prediction import MatchPrediction, PredictionPhase, TeamPredicti
 from app.models.score import Score
 from app.models.user import User
 from app.schemas.auth import UserStats
+from app.schemas.prediction import GroupQualEntry, GroupQualTeam
 from app.services.locking import (
     get_fixture_lock_view,
     is_phase1_locked,
     is_phase2_bracket_locked,
 )
 from app.services.profile import calculate_user_stats
+from app.services.scoring import get_group_qualification_ledger
 from app.services.audit_log import build_user_history
 from sqlmodel import func
 
@@ -92,6 +94,10 @@ class UserPredictionsResponse(BaseModel):
     match_predictions: list[UserMatchPredictionView]
     bracket_summary: BracketSummary
     bonus_predictions: list[UserBonusPredictionView] = []
+    # Per-group Phase-1 qualification ledger (who earned +10/+5), so the profile
+    # can colour each R32 pick by how it scored. Same blind-pool gate as the
+    # Phase-1 bracket; empty when that bracket isn't visible.
+    group_qualification: list[GroupQualEntry] = []
 
 
 # Endpoints
@@ -382,6 +388,19 @@ async def get_user_predictions(
                     )
                 )
 
+    # Per-team qualification attribution (gated like the Phase-1 bracket above).
+    group_qualification: list[GroupQualEntry] = []
+    if phase1_bracket_visible:
+        ledger = await get_group_qualification_ledger(session, user_id)
+        group_qualification = [
+            GroupQualEntry(
+                group=e["group"],
+                total=e["total"],
+                teams=[GroupQualTeam(**t) for t in e["teams"]],
+            )
+            for e in ledger
+        ]
+
     return UserPredictionsResponse(
         user_id=user.id,
         user_name=user.name,
@@ -392,4 +411,5 @@ async def get_user_predictions(
             phase2_stages=phase2_stages,
         ),
         bonus_predictions=bonus_predictions,
+        group_qualification=group_qualification,
     )
