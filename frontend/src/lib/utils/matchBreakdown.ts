@@ -137,6 +137,15 @@ export function computeMatchPoints(p: {
  * scheduled-but-inside-the-lock-window (default 15 min before kickoff); open
  * is scheduled-and-not-yet-locked.
  */
+/** Where an OPEN (still-predictable) fixture should link to in the prediction
+ *  wizard: group matches → the Groups section + that group; knockout matches →
+ *  the Matches tab + that round. `?view=picks` stops the wizard redirecting to
+ *  the pool overview. */
+export function wizardHref(f: Fixture): string {
+	if (f.group) return `/predictions?view=picks&group=${encodeURIComponent(f.group)}`;
+	return `/predictions?view=picks&section=matches&stage=${encodeURIComponent(f.stage)}`;
+}
+
 export function matchState(fixture: Fixture): MatchState {
 	if (fixture.status === 'finished') return 'finished';
 	if (fixture.status === 'live' || fixture.status === 'halftime') return 'live';

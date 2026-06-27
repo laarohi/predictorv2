@@ -10,6 +10,7 @@
 	import {
 		computeBreakdown,
 		matchState,
+		wizardHref,
 		stageLabel,
 		stageShort,
 		type MatchState,
@@ -481,7 +482,7 @@
 						<div class="pn-rs-grid">
 							{#each day.items as f (f.id)}
 								{#if matchState(f) === 'open'}
-									<div class="pn-md-card-blocked" aria-disabled="true" title="Predictions are blind until 15 minutes before kickoff">
+									<a class="pn-md-card-link" href={wizardHref(f)} title="Make your prediction →">
 										<PnResultsCard
 											fixture={f}
 											prediction={predFor(f)}
@@ -489,7 +490,7 @@
 											config={scoringConfig}
 											metaRight={(f.group ? 'GROUPS' : 'KO') + ' · ' + fmtTime(f.kickoff)}
 										/>
-									</div>
+									</a>
 								{:else}
 									<a class="pn-md-card-link" href={`/results/${f.id}`}>
 										<PnResultsCard
@@ -542,7 +543,7 @@
 						<div class="pn-rs-grid">
 							{#each grp.items as f (f.id)}
 								{#if matchState(f) === 'open'}
-									<div class="pn-md-card-blocked" aria-disabled="true" title="Predictions are blind until 15 minutes before kickoff">
+									<a class="pn-md-card-link" href={wizardHref(f)} title="Make your prediction →">
 										<PnResultsCard
 											fixture={f}
 											prediction={predFor(f)}
@@ -550,7 +551,7 @@
 											config={scoringConfig}
 											metaRight={dateMetaShort(f.kickoff)}
 										/>
-									</div>
+									</a>
 								{:else}
 									<a class="pn-md-card-link" href={`/results/${f.id}`}>
 										<PnResultsCard
@@ -661,7 +662,7 @@
 						<div class="pn-rm-list">
 							{#each day.items as f (f.id)}
 								{#if matchState(f) === 'open'}
-									<div class="pn-md-card-blocked" aria-disabled="true">
+									<a class="pn-md-card-link" href={wizardHref(f)} title="Make your prediction →">
 										<PnResultsCardMobile
 											fixture={f}
 											prediction={predFor(f)}
@@ -669,7 +670,7 @@
 											config={scoringConfig}
 											metaRight={fmtTime(f.kickoff)}
 										/>
-									</div>
+									</a>
 								{:else}
 									<a class="pn-md-card-link" href={`/results/${f.id}`}>
 										<PnResultsCardMobile
@@ -709,7 +710,7 @@
 						<div class="pn-rm-list">
 							{#each grp.items as f (f.id)}
 								{#if matchState(f) === 'open'}
-									<div class="pn-md-card-blocked" aria-disabled="true">
+									<a class="pn-md-card-link" href={wizardHref(f)} title="Make your prediction →">
 										<PnResultsCardMobile
 											fixture={f}
 											prediction={predFor(f)}
@@ -717,7 +718,7 @@
 											config={scoringConfig}
 											metaRight={dateMetaShort(f.kickoff)}
 										/>
-									</div>
+									</a>
 								{:else}
 									<a class="pn-md-card-link" href={`/results/${f.id}`}>
 										<PnResultsCardMobile

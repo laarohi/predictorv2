@@ -43,7 +43,7 @@
 	import { getScoringConfig, type ScoringConfig } from '$api/competition';
 	import { teamCode } from '$lib/utils/teamCodes';
 	import { goto } from '$app/navigation';
-	import { koChipLabel, computeMatchPoints } from '$lib/utils/matchBreakdown';
+	import { koChipLabel, computeMatchPoints, wizardHref } from '$lib/utils/matchBreakdown';
 	import type { Fixture, MatchPrediction } from '$types';
 
 	let trajectoryData: RankTrajectoryResponse | null = null;
@@ -211,8 +211,8 @@
 			pointsText: cta ? null : '—',
 			pointsVariant: 'dash',
 			cta,
-			ctaHref: '/predictions',
-			onClick: navigate
+			ctaHref: wizardHref(f),
+			onClick: lockedNow ? navigate : () => void goto(wizardHref(f))
 		};
 	}
 

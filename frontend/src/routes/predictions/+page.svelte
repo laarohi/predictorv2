@@ -45,7 +45,8 @@
 		isPhase1Locked,
 		phase1Countdown,
 		phase2Countdown,
-		phaseStatus
+		phaseStatus,
+		currentTime
 	} from '$stores/phase';
 	import {
 		applyFifaTiebreakers,
@@ -96,6 +97,27 @@
 	$: if (!initialPhaseSet && $phaseStatus) {
 		activePhase = $isPhase2Active ? 'phase2' : 'phase1';
 		initialPhaseSet = true;
+	}
+
+	// Deep-link targeting from "make your prediction" links (results page +
+	// dashboard upcoming rows): land on the right section / round. Runs once,
+	// after phaseStatus has loaded so isPhase2Active is real.
+	let deepLinkApplied = false;
+	$: if (browser && !deepLinkApplied && $phaseStatus && initialPhaseSet) {
+		deepLinkApplied = true;
+		const sp = $page.url.searchParams;
+		const grp = sp.get('group');
+		const section = sp.get('section');
+		const stage = sp.get('stage');
+		if (grp) {
+			activeSection = 'groups';
+			activeGroupPill = grp;
+		}
+		if ($isPhase2Active && section === 'matches') {
+			activePhase = 'phase2';
+			phase2Section = 'matches';
+		}
+		if ($isPhase2Active && stage) activeKoStage = stage;
 	}
 
 	// Section toggle controls the outer mode (Groups / Knockout / Bonus).
@@ -701,6 +723,30 @@
 	function selectKoStage(key: string) {
 		activeKoStage = key;
 		koStageDropdownOpen = false;
+	}
+
+	// Per-match lock countdown for the Phase 2 score cards. Each knockout
+	// match locks 15 min before its own kickoff; combined with the 1 Hz
+	// `currentTime` clock this ticks live. `soon` (< 1h to lock) drives the
+	// urgent red styling.
+	const MATCH_LOCK_LEAD_MS = 15 * 60 * 1000;
+	function koLockCountdown(
+		kickoff: string,
+		now: Date
+	): { text: string; soon: boolean; locked: boolean } {
+		const diff = new Date(kickoff).getTime() - MATCH_LOCK_LEAD_MS - now.getTime();
+		if (diff <= 0) return { text: 'Locked', soon: false, locked: true };
+		const d = Math.floor(diff / 86_400_000);
+		const h = Math.floor((diff % 86_400_000) / 3_600_000);
+		const m = Math.floor((diff % 3_600_000) / 60_000);
+		const s = Math.floor((diff % 60_000) / 1000);
+		const text =
+			d > 0
+				? `${d}d ${h}h`
+				: h > 0
+					? `${h}h ${String(m).padStart(2, '0')}m`
+					: `${m}m ${String(s).padStart(2, '0')}s`;
+		return { text, soon: diff < 3_600_000, locked: false };
 	}
 
 	// Real-team knockout fixtures grouped by stage (TBD/slot rows excluded —
@@ -1864,13 +1910,20 @@
 				</section>
 
 				<!-- Knockout score cards for the selected stage -->
-				<section class="pn-wiz-group">
-					<h2 style="font-family: var(--display); font-size: 22px; text-transform: uppercase; margin: 0 0 12px;">
+				<section class="pn-wiz-group pn-ko-scores">
+					<h2 style="font-family: var(--display); font-size: 22px; text-transform: uppercase; margin: 0 auto 12px; max-width: 720px;">
 						{activeKoStageMeta.label} <em style="color: var(--red); font-style: normal;">scores</em>
 					</h2>
+					<!-- Knockout SCORES are graded on the 90-minute result; who
+					     advances (ET/pens) is scored in the Bracket tab. -->
+					<div class="pn-ko-90warn" role="note">
+						<span class="ic" aria-hidden="true">⏱</span>
+						<span class="tx"><b>Scores are judged on the result after 90 minutes.</b> Extra time &amp; penalties don't count here — predict who goes through in the <strong>Bracket</strong> tab.</span>
+					</div>
 					<div class="pn-wiz-matches">
 						{#each activeKoStageFixtures as f (f.id)}
 							{@const state = predictionState(f)}
+							{@const cd = koLockCountdown(f.kickoff, $currentTime)}
 							<div
 								class="pn-mcard"
 								class:locked={state === 'locked'}
@@ -1886,6 +1939,7 @@
 								{/if}
 								<div class="meta">
 									<span>{new Date(f.kickoff).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} · {new Date(f.kickoff).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
+									<span class="lock-cd" class:soon={cd.soon} class:locked={cd.locked}>{cd.locked ? '🔒 Locked' : `Locks in ${cd.text}`}</span>
 								</div>
 								<div class="row">
 									<div class="team" title={f.home_team}>

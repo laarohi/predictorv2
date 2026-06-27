@@ -73,7 +73,10 @@ _P1_EARLY_HOURS = 24.0
 _P1_LAST_HOURS = 2.0
 # KO per-match reminder lead: fire while the lock is within this many minutes
 # (lock is at kickoff - lock_minutes, so ~lock_minutes + lead before kickoff).
-_KO_REMINDER_LEAD_MIN = 15
+# 60 → up to ~1 hour's warning before a knockout match locks; the wide window
+# is also robust to a missed scheduler tick (a tight 15-min window could be
+# skipped entirely if the scheduler blipped during it).
+_KO_REMINDER_LEAD_MIN = 60
 
 
 # --------------------------------------------------------------------------- #
@@ -270,6 +273,7 @@ async def send_knockout_lock_reminders(session: AsyncSession) -> None:
             select(Fixture).where(
                 Fixture.status == MatchStatus.SCHEDULED,
                 Fixture.stage != "group",  # knockout fixtures
+                Fixture.home_team.not_like("slot:%"),  # skip unresolved placeholders
                 Fixture.kickoff >= window_start,
                 Fixture.kickoff <= window_end,
             )

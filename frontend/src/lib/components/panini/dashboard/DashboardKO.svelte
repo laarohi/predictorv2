@@ -42,7 +42,7 @@
 	import { getBracketExposure, type BracketExposureResponse } from '$api/predictions';
 	import { teamCode } from '$lib/utils/teamCodes';
 	import { goto } from '$app/navigation';
-	import { koChipLabel } from '$lib/utils/matchBreakdown';
+	import { koChipLabel, wizardHref } from '$lib/utils/matchBreakdown';
 	import type { Fixture } from '$types';
 
 	let trajectoryData: RankTrajectoryResponse | null = null;
@@ -192,8 +192,8 @@
 			pointsText: cta ? null : '—',
 			pointsVariant: 'dash',
 			cta,
-			ctaHref: '/predictions',
-			onClick: navigate
+			ctaHref: wizardHref(f),
+			onClick: lockedNow ? navigate : () => void goto(wizardHref(f))
 		};
 	}
 

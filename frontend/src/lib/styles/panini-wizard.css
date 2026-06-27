@@ -1067,6 +1067,47 @@
 	}
 }
 
+/* ===== Phase 2 "Matches" tab (knockout scores) ===== *
+ * No standings table here, so the :has(.pn-wiz-matches) 2-col rule above
+ * would reserve an empty standings column (dead half-screen). Collapse to a
+ * single block and centre the cards. */
+@media (min-width: 1000px) {
+	.pn .pn-wiz-group.pn-ko-scores {
+		display: block;
+	}
+}
+.pn .pn-wiz-group.pn-ko-scores .pn-wiz-matches {
+	max-width: 720px;
+	margin-inline: auto;
+}
+/* 90-minute scoring warning banner — gold sticker, sits above the cards. */
+.pn .pn-ko-90warn {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	max-width: 720px;
+	margin: 0 auto 16px;
+	padding: 11px 14px;
+	background: var(--paper);
+	border: 2.5px solid var(--gold);
+	border-left-width: 7px;
+	box-shadow: 4px 4px 0 var(--ink);
+	font-family: var(--body);
+	font-size: 13px;
+	line-height: 1.45;
+	color: var(--ink-2);
+}
+.pn .pn-ko-90warn .ic { font-size: 18px; line-height: 1.15; }
+.pn .pn-ko-90warn b { color: var(--ink); font-weight: 800; }
+.pn .pn-ko-90warn strong { color: var(--red); font-weight: 800; }
+/* Per-match lock countdown on each KO score card (date left, countdown right). */
+.pn .pn-ko-scores .pn-mcard .meta {
+	justify-content: space-between;
+	gap: 8px;
+}
+.pn .pn-mcard .meta .lock-cd { color: var(--ink-3); white-space: nowrap; }
+.pn .pn-mcard .meta .lock-cd.soon { color: var(--red); font-weight: 700; }
+
 /* ==== Match card ==== */
 .pn .pn-mcard {
 	background: var(--paper);
