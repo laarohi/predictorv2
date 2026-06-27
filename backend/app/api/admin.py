@@ -25,6 +25,10 @@ from app.services.bonus import (
 )
 from app.services.email import EmailSendError, send_email
 from app.services.external_scores import get_score_provider, ExternalScore
+from app.services.knockout_resolver import (
+    ResolutionReport,
+    apply_knockout_resolution,
+)
 from app.services.leaderboard import invalidate_cache
 from app.services.receipts import build_phase1_receipt
 from app.services.score_sync import sync_scores_once
@@ -777,3 +781,116 @@ async def send_phase1_test_receipt(
         sent_to=admin.email,
         subject=receipt.subject,
     )
+
+
+# ---------------------------------------------------------------------------
+# Knockout bracket resolution
+# ---------------------------------------------------------------------------
+
+
+class KnockoutMatchupView(BaseModel):
+    """One computed knockout matchup (FIFA match number → teams)."""
+
+    match_number: int
+    home_team: str
+    away_team: str
+
+
+class KnockoutStampChangeView(BaseModel):
+    """One knockout fixture row that was (or would be) stamped."""
+
+    external_id: str
+    match_number: int
+    stage: str
+    old_home: str
+    old_away: str
+    new_home: str
+    new_away: str
+    old_match_number: int | None
+
+
+class ResolveKnockoutResponse(BaseModel):
+    """Result of POST /fixtures/resolve-knockout.
+
+    In dry-run/preview mode nothing is committed; `changes` still lists every
+    row that WOULD be stamped, and `matchups` is the full computed table for
+    human verification against the official bracket.
+    """
+
+    dry_run: bool
+    groups_complete: bool
+    r32_resolved: bool
+    changed_count: int
+    matchups: list[KnockoutMatchupView]
+    changes: list[KnockoutStampChangeView]
+    unresolved: list[int]
+    notes: list[str]
+
+
+def _resolution_to_response(report: ResolutionReport) -> ResolveKnockoutResponse:
+    return ResolveKnockoutResponse(
+        dry_run=report.dry_run,
+        groups_complete=report.groups_complete,
+        r32_resolved=report.r32_resolved,
+        changed_count=report.changed_count,
+        matchups=[
+            KnockoutMatchupView(match_number=mn, home_team=h, away_team=a)
+            for mn, (h, a) in report.matchups.items()
+        ],
+        changes=[
+            KnockoutStampChangeView(
+                external_id=c.external_id,
+                match_number=c.match_number,
+                stage=c.stage,
+                old_home=c.old_home,
+                old_away=c.old_away,
+                new_home=c.new_home,
+                new_away=c.new_away,
+                old_match_number=c.old_match_number,
+            )
+            for c in report.changes
+        ],
+        unresolved=report.unresolved,
+        notes=report.notes,
+    )
+
+
+@router.post("/fixtures/resolve-knockout", response_model=ResolveKnockoutResponse)
+async def resolve_knockout_fixtures(
+    session: DbSession,
+    _admin: AdminUser,
+    dry_run: bool = True,
+) -> ResolveKnockoutResponse:
+    """Stamp real team names + FIFA match_number onto the knockout fixtures.
+
+    Computes the real knockout matchups from ACTUAL group standings (R32) and
+    actual prior-round results (R16→Final) using the official FIFA 2026 bracket
+    routing, then stamps them onto the existing knockout Fixture rows (matched
+    by Football-Data external_id). Preserves each row's kickoff/external_id and
+    never deletes rows.
+
+    `dry_run` defaults to True (preview): returns the computed matchups and the
+    list of rows that WOULD change, committing nothing. Pass `dry_run=false`
+    (query param) to apply and commit. Idempotent: re-applying the same results
+    is a no-op.
+    """
+    result = await session.execute(
+        select(Competition).where(Competition.is_active == True)
+    )
+    competition = result.scalar_one_or_none()
+    if not competition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active competition found",
+        )
+
+    report = await apply_knockout_resolution(
+        session, competition, dry_run=dry_run
+    )
+
+    if not dry_run and report.changed_count:
+        # Stamped team names feed the bracket / advancement scoring views; drop
+        # the cached leaderboard so the change is reflected immediately.
+        invalidate_cache()
+
+    return _resolution_to_response(report)

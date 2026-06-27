@@ -505,6 +505,19 @@ export interface BracketOverviewResponse {
 	teams: BracketOverviewTeamRow[];
 }
 
+/** One knockout fixture's pool-wide score-pick split (1/X/2). Same shape as
+ *  OverviewFixtureRow plus the knockout `stage` label. Only present for
+ *  fixtures that are individually locked or finished (per-match blind pool). */
+export interface KnockoutScoreFixtureRow extends OverviewFixtureRow {
+	stage: string;
+}
+
+export interface KnockoutScoresOverviewResponse {
+	total_predictors: number;
+	/** Ordered by round (round_of_32 → final) then kickoff. */
+	fixtures: KnockoutScoreFixtureRow[];
+}
+
 // Public user profile types
 export interface PublicProfile {
 	id: string;

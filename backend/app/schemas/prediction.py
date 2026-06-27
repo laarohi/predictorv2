@@ -192,6 +192,32 @@ class GroupsOverviewResponse(BaseModel):
     groups: list[OverviewGroup]
 
 
+class KnockoutScoreFixtureRow(OverviewFixtureRow):
+    """A single knockout fixture's pool-wide score-pick distribution.
+
+    Same shape as a group fixture row plus the knockout `stage` label
+    (``round_of_32`` .. ``final``) so the overview can group rows by round.
+    Only fixtures that are individually locked or finished appear — the
+    per-match blind-pool gate (``get_fixture_lock_view``) is applied before
+    a row is built, so unlocked knockout picks never leak.
+    """
+
+    stage: str
+
+
+class KnockoutScoresOverviewResponse(BaseModel):
+    """Pool-wide distribution of Phase 2 knockout match-score picks.
+
+    `total_predictors` counts the distinct (non-ghost) players whose picks
+    appear across the *visible* fixtures only. `fixtures` is ordered by
+    round (round_of_32 → final) then kickoff. A round that has no
+    locked/finished fixtures yet simply contributes no rows.
+    """
+
+    total_predictors: int
+    fixtures: list[KnockoutScoreFixtureRow]
+
+
 class BracketOverviewTeamRow(BaseModel):
     """Who (and how many) predicted this team to reach each knockout stage."""
 

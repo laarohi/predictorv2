@@ -190,8 +190,15 @@ export function computeBreakdown(
 		const exact =
 			prediction.home_score === fixture.score.home_score &&
 			prediction.away_score === fixture.score.away_score;
+		// Match SCORES are graded on the 90-minute (regulation) result — the
+		// `home_score`/`away_score` line — for groups AND knockouts, mirroring
+		// backend `Score.regulation_outcome`. Deliberately NOT `fixture.score.outcome`
+		// (which folds in ET/penalties): for an ET knockout the displayed result
+		// must match the points actually awarded by `computeMatchPoints` below,
+		// which already keys off the regulation scoreline.
 		const sameOutcome =
-			outcomeSign(prediction.home_score, prediction.away_score) === fixture.score.outcome;
+			outcomeSign(prediction.home_score, prediction.away_score) ===
+			outcomeSign(fixture.score.home_score, fixture.score.away_score);
 		const result = exact ? 'exact' : sameOutcome ? 'outcome' : 'miss';
 		if (isFinished) finishedResult = result;
 		else if (isLive) liveResult = result;

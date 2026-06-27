@@ -32,6 +32,8 @@ from app.schemas.prediction import (
     GroupQualEntry,
     GroupQualTeam,
     GroupsOverviewResponse,
+    KnockoutScoreFixtureRow,
+    KnockoutScoresOverviewResponse,
     MatchPredictionCreate,
     MatchPredictionRead,
     MatchPredictionUpdate,
@@ -985,6 +987,113 @@ async def get_bracket_overview(
     )
     _overview_cache_put(cache_key, response)
     return response
+
+
+# Round order for the knockout-scores overview: round_of_32 → final.
+# (`winner` is a bracket-only stage with no fixture, so it's omitted.)
+_KO_FIXTURE_STAGE_ORDER = {
+    "round_of_32": 0,
+    "round_of_16": 1,
+    "quarter_final": 2,
+    "semi_final": 3,
+    "final": 4,
+}
+
+
+@router.get(
+    "/overview/knockout-scores", response_model=KnockoutScoresOverviewResponse
+)
+async def get_knockout_scores_overview(
+    session: DbSession,
+    _user: CurrentUser,
+) -> KnockoutScoresOverviewResponse:
+    """Pool-wide distribution of everyone's Phase 2 knockout match-score picks.
+
+    The knockout sibling of /overview/groups, but with a crucial difference:
+    knockout fixtures lock *per match* (T-{lock} before each kickoff), not
+    en-masse at a single deadline. So unlike the group overview — which is
+    one all-or-nothing gate — this endpoint reveals each fixture's 1/X/2
+    split **only once that fixture is individually locked or finished**, via
+    `get_fixture_lock_view` (the exact gate the per-match /community endpoint
+    uses). A knockout fixture that hasn't locked yet contributes no row at
+    all, so unlocked picks never leak.
+
+    Ghost users are excluded from every count, mirroring /overview/groups.
+
+    Not cached: the visible-fixture set grows as matches lock through the
+    knockout rounds, and the per-fixture gate must be re-evaluated every
+    request, so the (cheap) aggregate is rebuilt each call.
+    """
+    # Every knockout fixture (stage != "group"), newest-round last, with its
+    # score relationship eager-loaded for the live result chip.
+    fx_result = await session.execute(
+        select(Fixture)
+        .options(selectinload(Fixture.score))
+        .where(Fixture.stage != "group")
+        .order_by(Fixture.kickoff)
+    )
+    fixtures = list(fx_result.scalars().all())
+
+    # Per-fixture blind-pool gate — only locked/finished fixtures are visible.
+    visible: list[Fixture] = []
+    for f in fixtures:
+        locked, _ = await get_fixture_lock_view(session, f)
+        if locked or f.status == MatchStatus.FINISHED:
+            visible.append(f)
+
+    rows: list[KnockoutScoreFixtureRow] = []
+    predictor_names: set[str] = set()
+
+    if visible:
+        visible_ids = [f.id for f in visible]
+        # Score picks for the visible knockout fixtures only — never query a
+        # fixture that hasn't passed its gate, so unlocked picks can't leak
+        # even into the total-predictors count. Ghosts excluded.
+        pred_result = await session.execute(
+            select(MatchPrediction, User.name)
+            .join(User, MatchPrediction.user_id == User.id)
+            .where(
+                MatchPrediction.fixture_id.in_(visible_ids),  # type: ignore[union-attr]
+                User.is_ghost == False,  # noqa: E712
+            )
+        )
+        outcome_counts: dict[uuid.UUID, dict[str, int]] = defaultdict(
+            lambda: {"1": 0, "X": 0, "2": 0}
+        )
+        for pred, user_name in pred_result.all():
+            outcome_counts[pred.fixture_id][pred.predicted_outcome] += 1
+            predictor_names.add(user_name)
+
+        for f in visible:
+            oc = outcome_counts.get(f.id, {"1": 0, "X": 0, "2": 0})
+            rows.append(
+                KnockoutScoreFixtureRow(
+                    fixture_id=f.id,
+                    home_team=f.home_team,
+                    away_team=f.away_team,
+                    kickoff=f.kickoff,
+                    status=f.status,
+                    stage=f.stage,
+                    home_count=oc["1"],
+                    draw_count=oc["X"],
+                    away_count=oc["2"],
+                    actual_home=f.score.home_score if f.score else None,
+                    actual_away=f.score.away_score if f.score else None,
+                )
+            )
+
+        # Order by round (round_of_32 → final) then kickoff. Unknown stages
+        # sort last but keep a stable kickoff order.
+        rows.sort(
+            key=lambda r: (
+                _KO_FIXTURE_STAGE_ORDER.get(r.stage, 99),
+                r.kickoff,
+            )
+        )
+
+    return KnockoutScoresOverviewResponse(
+        total_predictors=len(predictor_names), fixtures=rows
+    )
 
 
 @router.get("/overview/bonus", response_model=BonusOverviewResponse)

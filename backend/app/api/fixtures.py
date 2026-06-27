@@ -299,8 +299,17 @@ async def create_fixture(
     )
     session.add(fixture)
     await session.commit()
-    await session.refresh(fixture)
-    return fixture_to_read(fixture)
+    # Re-fetch with the score relationship eager-loaded — a freshly created
+    # row has no Score, but fixture_to_read reads fixture.score, which would
+    # otherwise trigger a lazy load on the async session (MissingGreenlet).
+    result = await session.execute(
+        select(Fixture)
+        .options(selectinload(Fixture.score))
+        .where(Fixture.id == fixture.id)
+    )
+    fixture = result.scalar_one()
+    phase1_locked = await is_phase1_locked(session)
+    return await fixture_to_read(session, fixture, phase1_locked=phase1_locked)
 
 
 @router.put("/{fixture_id}", response_model=FixtureRead)
@@ -311,7 +320,11 @@ async def update_fixture(
     _admin: AdminUser,
 ) -> FixtureRead:
     """Update a fixture (admin only)."""
-    result = await session.execute(select(Fixture).where(Fixture.id == fixture_id))
+    result = await session.execute(
+        select(Fixture)
+        .options(selectinload(Fixture.score))
+        .where(Fixture.id == fixture_id)
+    )
     fixture = result.scalar_one_or_none()
 
     if not fixture:
@@ -323,8 +336,17 @@ async def update_fixture(
 
     fixture.updated_at = utc_now()
     await session.commit()
-    await session.refresh(fixture)
-    return fixture_to_read(fixture)
+    # Re-fetch with the score eager-loaded: commit expires the instance, and a
+    # plain refresh wouldn't reload the relationship, so fixture_to_read would
+    # lazy-load fixture.score on the async session (MissingGreenlet).
+    result = await session.execute(
+        select(Fixture)
+        .options(selectinload(Fixture.score))
+        .where(Fixture.id == fixture.id)
+    )
+    fixture = result.scalar_one()
+    phase1_locked = await is_phase1_locked(session)
+    return await fixture_to_read(session, fixture, phase1_locked=phase1_locked)
 
 
 @router.patch("/{fixture_id}/status", response_model=FixtureRead)
@@ -335,7 +357,11 @@ async def update_fixture_status(
     _admin: AdminUser,
 ) -> FixtureRead:
     """Update fixture status and minute (admin only)."""
-    result = await session.execute(select(Fixture).where(Fixture.id == fixture_id))
+    result = await session.execute(
+        select(Fixture)
+        .options(selectinload(Fixture.score))
+        .where(Fixture.id == fixture_id)
+    )
     fixture = result.scalar_one_or_none()
 
     if not fixture:
@@ -347,8 +373,15 @@ async def update_fixture_status(
     fixture.updated_at = utc_now()
 
     await session.commit()
-    await session.refresh(fixture)
-    return fixture_to_read(fixture)
+    # Re-fetch with the score eager-loaded (see update_fixture for why).
+    result = await session.execute(
+        select(Fixture)
+        .options(selectinload(Fixture.score))
+        .where(Fixture.id == fixture.id)
+    )
+    fixture = result.scalar_one()
+    phase1_locked = await is_phase1_locked(session)
+    return await fixture_to_read(session, fixture, phase1_locked=phase1_locked)
 
 
 @router.delete("/{fixture_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -10,6 +10,7 @@ import type {
 	BracketPrediction,
 	BracketOverviewResponse,
 	GroupsOverviewResponse,
+	KnockoutScoresOverviewResponse,
 	TeamAdvancementPrediction,
 	CommunityPredictionsResponse
 } from '$types';
@@ -134,4 +135,11 @@ export async function getGroupsOverview(): Promise<GroupsOverviewResponse> {
 
 export async function getBracketOverview(phase: 1 | 2 = 1): Promise<BracketOverviewResponse> {
 	return api.get<BracketOverviewResponse>(`/predictions/overview/bracket?phase=${phase}`);
+}
+
+/** Pool-wide distribution of Phase 2 knockout match-score picks. Per-match
+ *  blind pool: the backend only returns a fixture's split once that fixture
+ *  individually locks (or finishes), so unlocked picks never leak. */
+export async function getKnockoutScoresOverview(): Promise<KnockoutScoresOverviewResponse> {
+	return api.get<KnockoutScoresOverviewResponse>('/predictions/overview/knockout-scores');
 }

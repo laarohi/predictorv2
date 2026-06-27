@@ -119,6 +119,34 @@ export async function syncScores(): Promise<SyncScoresResponse> {
 	return api.post<SyncScoresResponse>('/admin/scores/sync');
 }
 
+// ---- Knockout fixture resolution ------------------------------------------
+
+export interface KnockoutMatchupView {
+	match_number: number;
+	home_team: string;
+	away_team: string;
+}
+
+export interface ResolveKnockoutResponse {
+	dry_run: boolean;
+	groups_complete: boolean;
+	r32_resolved: boolean;
+	changed_count: number;
+	matchups: KnockoutMatchupView[];
+	unresolved: number[];
+	notes: string[];
+}
+
+/**
+ * Resolve the real knockout teams onto the placeholder fixtures from actual
+ * group standings (R32) + prior-round results (R16→Final). `dryRun=true`
+ * (default) previews the computed matchups without writing — for the admin to
+ * verify against the official bracket before committing.
+ */
+export async function resolveKnockoutFixtures(dryRun = true): Promise<ResolveKnockoutResponse> {
+	return api.post<ResolveKnockoutResponse>(`/admin/fixtures/resolve-knockout?dry_run=${dryRun}`);
+}
+
 export type AuditEventKind = 'match' | 'team' | 'bonus';
 export type AuditEventAction = 'insert' | 'update' | 'delete' | 'lock';
 

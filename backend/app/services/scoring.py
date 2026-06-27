@@ -137,8 +137,11 @@ class FixedScoring:
             mode="fixed",
             predicted_home=prediction.home_score,
             predicted_away=prediction.away_score,
-            actual_home=score.final_home_score,
-            actual_away=score.final_away_score,
+            # MATCH scores are graded on the 90-minute (regulation) result —
+            # `home_score`/`away_score`, NOT `final_*` (which folds in ET).
+            # "Who advanced" is scored separately by the advancement layer.
+            actual_home=score.home_score,
+            actual_away=score.away_score,
             total_predictors=total_predictors,
             correct_predictors=correct_predictors,
             outcome_points=config.get("correct_outcome", 5),
@@ -168,8 +171,9 @@ class HybridScoring:
             mode="hybrid",
             predicted_home=prediction.home_score,
             predicted_away=prediction.away_score,
-            actual_home=score.final_home_score,
-            actual_away=score.final_away_score,
+            # Regulation result (90 min); see FixedScoring for the rationale.
+            actual_home=score.home_score,
+            actual_away=score.away_score,
             total_predictors=total_predictors,
             correct_predictors=correct_predictors,
             outcome_points=config.get("correct_outcome", 5),
@@ -280,8 +284,9 @@ class LogarithmicScoring:
             mode="logarithmic",
             predicted_home=prediction.home_score,
             predicted_away=prediction.away_score,
-            actual_home=score.final_home_score,
-            actual_away=score.final_away_score,
+            # Regulation result (90 min); see FixedScoring for the rationale.
+            actual_home=score.home_score,
+            actual_away=score.away_score,
             total_predictors=total_predictors,
             correct_predictors=correct_predictors,
             outcome_points=config.get("correct_outcome", 5),
@@ -846,7 +851,12 @@ async def calculate_user_points(
         else:
             outcome_counts = await get_outcome_counts(session, fixture.id)
         total_predictors = sum(outcome_counts.values())
-        correct_predictors = outcome_counts.get(score.outcome, 0)
+        # Rarity denominator must use the REGULATION outcome — match scores
+        # are graded on the 90-min result, so "how many got the outcome right"
+        # is counted against regulation_outcome, not the ET/penalty winner.
+        # The outcome_counts buckets (predicted 1/X/2 tallies) are unchanged;
+        # only which bucket counts as "correct" switches to regulation.
+        correct_predictors = outcome_counts.get(score.regulation_outcome, 0)
 
         # Calculate points using configured strategy
         points, is_correct_outcome, is_exact_score = calculate_match_points(
@@ -883,6 +893,9 @@ async def calculate_user_points(
         if actual_advancement_cache is not None
         else await get_actual_advancement(session)
     )
+    has_phase_2_bracket = any(
+        pred.phase == PredictionPhase.PHASE_2 for pred in team_predictions
+    )
     for pred in team_predictions:
         points = calculate_advancement_points(pred, actual_advancement, pred.phase)
         if points == 0:
@@ -895,6 +908,29 @@ async def calculate_user_points(
             pred.stage,
             points,
         )
+
+    # --- Phase 1 → Phase 2 bracket read-time fallback ---------------------
+    # If a user never (re)submitted a Phase 2 bracket, their Phase 1 picks
+    # carry forward as their Phase 2 bracket: score those same Phase 1 rows a
+    # SECOND time under the Phase 2 advancement point table and add the result
+    # to the phase_2 bucket. (The Phase 1 rows still score normally in phase_1
+    # above — this is purely ADDITIVE to phase_2.)
+    #
+    # Fires ONLY on the COMPLETE ABSENCE of Phase 2 rows. A user with even one
+    # Phase 2 TeamPrediction is treated as having submitted their Phase 2
+    # bracket, and only their actual Phase 2 rows score Phase 2 (no fallback).
+    # Stale Phase 1 picks that contradict the real results simply earn nothing
+    # under normal advancement scoring — no special handling needed.
+    if not has_phase_2_bracket:
+        for pred in team_predictions:
+            if pred.phase != PredictionPhase.PHASE_1:
+                continue
+            points = calculate_advancement_points(
+                pred, actual_advancement, PredictionPhase.PHASE_2
+            )
+            if points == 0:
+                continue
+            _add_advancement_points_to_phase(phase2, pred.stage, points)
 
     # Phase 1 group-position bonus — derived from match score predictions,
     # paid only for correctly-placed teams that qualify. Lives in

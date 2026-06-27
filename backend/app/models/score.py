@@ -71,6 +71,27 @@ class Score(SQLModel, table=True):
         return "X"
 
     @property
+    def regulation_outcome(self) -> str:
+        """Match outcome after 90 minutes ONLY: '1'/'X'/'2', draws allowed.
+
+        Computed purely from `home_score` vs `away_score` — it deliberately
+        ignores extra time and penalties. This is what MATCH-SCORE grading
+        uses (group and knockout alike): a knockout score prediction is
+        graded on the regulation result, while "who advanced" is scored
+        separately by the advancement/bracket layer (no double-count).
+
+        Contrast with `outcome`, which folds in ET then penalties and is used
+        by advancement scoring, the knockout resolver, and tiebreakers — those
+        MUST keep returning the true ET/penalty winner, so do not conflate the
+        two. For a group fixture (no ET/pens) the two properties are equal.
+        """
+        if self.home_score > self.away_score:
+            return "1"
+        elif self.home_score < self.away_score:
+            return "2"
+        return "X"
+
+    @property
     def final_home_score(self) -> int:
         """Get final home score (including ET if applicable)."""
         return self.home_score_et if self.home_score_et is not None else self.home_score

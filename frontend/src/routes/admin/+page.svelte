@@ -23,12 +23,14 @@
 		syncScores,
 		sendPhase1TestReceipt,
 		updateScore,
+		resolveKnockoutFixtures,
 		type AdminStats,
 		type CompetitionAdminView,
 		type UserAdminView,
 		type SyncScoresResponse,
 		type TestReceiptResponse,
-		type ScoreUpdatePayload
+		type ScoreUpdatePayload,
+		type ResolveKnockoutResponse
 	} from '$lib/api/admin';
 	import { getAllFixtures } from '$api/fixtures';
 	import type { Fixture } from '$types';
@@ -66,6 +68,12 @@
 	let activating = false;
 	let activationError: string | null = null;
 	let activationSuccess: string | null = null;
+
+	// Knockout fixture resolution (preview / apply).
+	let knockoutPreview: ResolveKnockoutResponse | null = null;
+	let resolvingKnockout = false;
+	let knockoutError: string | null = null;
+	let knockoutSuccess: string | null = null;
 
 	let syncing = false;
 	let syncResult: SyncScoresResponse | null = null;
@@ -439,6 +447,15 @@
 			})
 		: users;
 
+	// The <input type="date"> + <input type="time"> values are the admin's
+	// LOCAL wall-clock (Malta). `new Date(naive)` parses as local; toISOString()
+	// emits an explicit-offset UTC string — which the AwareDatetime backend
+	// fields REQUIRE. A bare "...T18:45:00" (no offset) is rejected with a 422,
+	// which previously made the Activate / Set-deadline buttons silently fail.
+	function localInputsToUtcIso(date: string, time: string): string {
+		return new Date(`${date}T${time}:00`).toISOString();
+	}
+
 	async function handleSetPhase1Deadline() {
 		if (!phase1DeadlineDate) {
 			phase1Error = 'Please select a deadline date';
@@ -448,7 +465,7 @@
 		phase1Error = null;
 		phase1Success = null;
 		try {
-			const deadline = `${phase1DeadlineDate}T${phase1DeadlineTime}:00`;
+			const deadline = localInputsToUtcIso(phase1DeadlineDate, phase1DeadlineTime);
 			const result = await setPhase1Deadline(deadline);
 			phase1Success = `Phase 1 deadline set: ${new Date(result.deadline).toLocaleString()}`;
 			await Promise.all([loadData(), fetchPhaseStatus()]);
@@ -468,9 +485,17 @@
 		activationError = null;
 		activationSuccess = null;
 		try {
-			const deadline = `${bracketDeadlineDate}T${bracketDeadlineTime}:00`;
+			const deadline = localInputsToUtcIso(bracketDeadlineDate, bracketDeadlineTime);
+			// "Update deadline" while already active: the activate endpoint
+			// rejects a double-activation, so move the deadline by deactivating
+			// then re-activating. Existing Phase 2 picks are untouched — only the
+			// active flag + bracket deadline change.
+			const updating = $isPhase2Active;
+			if (updating) await deactivatePhase2();
 			const result = await activatePhase2(deadline);
-			activationSuccess = `Phase 2 activated! Bracket deadline: ${new Date(result.bracket_deadline).toLocaleString()}`;
+			activationSuccess = updating
+				? `Phase 2 deadline updated: ${new Date(result.bracket_deadline).toLocaleString()}`
+				: `Phase 2 activated! Bracket deadline: ${new Date(result.bracket_deadline).toLocaleString()}`;
 			await Promise.all([loadData(), fetchPhaseStatus()]);
 		} catch (e) {
 			activationError = e instanceof Error ? e.message : 'Failed to activate Phase 2';
@@ -492,6 +517,36 @@
 			activationError = e instanceof Error ? e.message : 'Failed to deactivate Phase 2';
 		} finally {
 			activating = false;
+		}
+	}
+
+	async function handlePreviewKnockout() {
+		resolvingKnockout = true;
+		knockoutError = null;
+		knockoutSuccess = null;
+		try {
+			knockoutPreview = await resolveKnockoutFixtures(true);
+		} catch (e) {
+			knockoutError = e instanceof Error ? e.message : 'Failed to compute knockout matchups';
+		} finally {
+			resolvingKnockout = false;
+		}
+	}
+
+	async function handleApplyKnockout() {
+		if (!confirm('Stamp these real teams onto the knockout fixtures? Kickoffs and IDs are preserved; safe to re-run.')) return;
+		resolvingKnockout = true;
+		knockoutError = null;
+		knockoutSuccess = null;
+		try {
+			const res = await resolveKnockoutFixtures(false);
+			knockoutPreview = res;
+			knockoutSuccess = `Applied — ${res.changed_count} fixture row${res.changed_count === 1 ? '' : 's'} updated.`;
+			await loadData();
+		} catch (e) {
+			knockoutError = e instanceof Error ? e.message : 'Failed to apply knockout resolution';
+		} finally {
+			resolvingKnockout = false;
 		}
 	}
 
@@ -817,6 +872,54 @@
 							{/if}
 						</div>
 					</div>
+				</div>
+			</section>
+
+			<!-- Knockout Fixtures Resolution -->
+			<section class="pn-pf-section">
+				<div class="h"><span>Knockout Fixtures</span><span class="right">Resolve real teams</span></div>
+				<div class="body">
+					<p style="font-family: var(--body); font-size: 13px; color: var(--ink-2); margin: 0 0 12px; line-height: 1.5;">
+						Once the group stage is complete, compute the real R32 matchups from actual
+						standings (and later rounds from results) using the official FIFA 2026 routing,
+						and stamp them onto the placeholder knockout fixtures. Preview first — verify
+						against the official bracket — then apply. Safe to re-run; kickoffs and IDs are preserved.
+					</p>
+					{#if knockoutError}<div class="pn-pf-alert error" style="margin-bottom: 12px;">{knockoutError}</div>{/if}
+					{#if knockoutSuccess}<div class="pn-pf-alert success" style="margin-bottom: 12px;">{knockoutSuccess}</div>{/if}
+					<div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
+						<button class="pn-btn" type="button" on:click={handlePreviewKnockout} disabled={resolvingKnockout}>
+							{resolvingKnockout ? 'Working…' : 'Preview matchups'}
+						</button>
+						{#if knockoutPreview && knockoutPreview.changed_count > 0}
+							<button class="pn-btn gold" type="button" on:click={handleApplyKnockout} disabled={resolvingKnockout}>
+								Apply to fixtures ({knockoutPreview.changed_count})
+							</button>
+						{/if}
+					</div>
+					{#if knockoutPreview}
+						<div class="pn-ad-status" style="margin-bottom: 12px;">
+							<span><b>GROUPS</b> · <span class={knockoutPreview.groups_complete ? 'ok' : 'warn'}>{knockoutPreview.groups_complete ? 'COMPLETE' : 'INCOMPLETE'}</span></span>
+							<span><b>R32</b> · <span class={knockoutPreview.r32_resolved ? 'ok' : 'warn'}>{knockoutPreview.r32_resolved ? 'RESOLVED' : 'PENDING'}</span></span>
+						</div>
+						{#if knockoutPreview.notes.length}
+							<div style="font-family: var(--mono); font-size: 11px; color: var(--ink-2); margin-bottom: 12px;">{knockoutPreview.notes.join(' · ')}</div>
+						{/if}
+						{#if knockoutPreview.matchups.length}
+							<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 18px; font-family: var(--mono); font-size: 12px;">
+								{#each knockoutPreview.matchups as m (m.match_number)}
+									<div style="display: flex; gap: 8px; align-items: baseline; padding: 2px 0;">
+										<span style="color: var(--ink-3); min-width: 30px;">#{m.match_number}</span>
+										<span style="flex: 1; text-align: right;">{m.home_team}</span>
+										<span style="color: var(--ink-3);">v</span>
+										<span style="flex: 1;">{m.away_team}</span>
+									</div>
+								{/each}
+							</div>
+						{:else}
+							<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em;">No matchups resolvable yet — complete the group stage first.</p>
+						{/if}
+					{/if}
 				</div>
 			</section>
 

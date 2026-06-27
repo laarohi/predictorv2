@@ -350,6 +350,12 @@
 	border-top: 1.5px solid rgba(14, 29, 64, 0.18);
 	padding-top: 9px;
 }
+/* Knockout-scores panels have no team table above the fixtures, so the
+   separating border/padding would dangle under the round header. */
+.pn .pn-ov-group .fixtures.bare {
+	border-top: 0;
+	padding-top: 2px;
+}
 .pn .pn-ov-group .fx {
 	display: grid;
 	grid-template-columns: 3.6rem minmax(0, 1fr) 3.6rem;

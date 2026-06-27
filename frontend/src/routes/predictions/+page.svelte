@@ -88,7 +88,12 @@
 	// Phase + pill selection state
 	let activePhase: 'phase1' | 'phase2' = 'phase1';
 	let initialPhaseSet = false;
-	$: if (!initialPhaseSet && $isPhase2Active !== undefined) {
+	// Wait for phaseStatus to actually LOAD before latching the default:
+	// isPhase2Active reads `false` while phaseStatus is still null, so keying
+	// off it alone would latch Phase I before the real status arrives (then
+	// never flip, because the guard is one-shot). Gating on $phaseStatus —
+	// the same signal the default-view redirect uses — fixes the race.
+	$: if (!initialPhaseSet && $phaseStatus) {
 		activePhase = $isPhase2Active ? 'phase2' : 'phase1';
 		initialPhaseSet = true;
 	}
@@ -324,51 +329,27 @@
 	});
 
 	// ---- Smart default view (Your picks vs Overview) -----------------------
-	// Once Phase 1 locks, the Predict tab's default destination becomes the
-	// pool overview — there's nothing left to fill in, so show everyone's
-	// picks instead of a frozen wizard. The default flips back to the wizard
-	// whenever the user has PENDING picks: an open, teams-known Phase 2
-	// knockout match without a score pick, or an incomplete Phase 2 bracket
-	// before its deadline. An explicit ?view=picks (the Overview page's
-	// "Your picks" tab and lock-card CTA) always shows the wizard.
+	// While Phase 1 is open, OR once Phase 2 goes live, the Predict tab
+	// defaults to the wizard ("Your picks") — that's where the user fills in
+	// group scores (Phase 1) or their knockout bracket + match scores
+	// (Phase 2). Only in the BETWEEN-PHASES window (Phase 1 locked, Phase 2
+	// not yet active) is there nothing left to enter, so we default to the
+	// pool overview instead of a frozen wizard. An explicit ?view=picks (the
+	// Overview page's "Your picks" tab and lock-card CTA) always shows the wizard.
 	const isRealTeam = (t: string) => !!t && t !== 'TBD' && !t.toLowerCase().startsWith('slot:');
 
-	$: pendingPickCount = (() => {
-		if (!$isPhase2Active) return 0;
-		let pending = 0;
-		for (const f of $actualKnockoutFixtures) {
-			if (!isRealTeam(f.home_team) || !isRealTeam(f.away_team)) continue;
-			if ((predictionStateMap.get(f.id) ?? 'empty') === 'empty') pending++;
-		}
-		if (!$isPhase2BracketLocked) {
-			const b = $unsavedPhase2BracketPrediction || $phase2BracketPrediction;
-			// R16 onward only — the 32 R32 entrants are known facts in Phase 2.
-			let filled = 0;
-			if (b) {
-				for (const arr of [b.round_of_16, b.quarter_finals, b.semi_finals, b.final]) {
-					for (const t of arr || []) if (t) filled++;
-				}
-				if (b.winner) filled++;
-			}
-			pending += Math.max(0, BRACKET_TOTAL_SLOTS_PHASE2 - filled);
-		}
-		return pending;
-	})();
-
 	// Decide once per visit, and only when the inputs it depends on have
-	// actually arrived (phaseStatus hydrates async; the Phase 2 branch also
-	// needs the fixture + prediction fetches). replaceState keeps the bare
-	// /predictions entry out of history so Back doesn't bounce.
+	// actually arrived (phaseStatus hydrates async). replaceState keeps the
+	// bare /predictions entry out of history so Back doesn't bounce.
 	let viewRouteDecided = false;
 	$: if (browser && !viewRouteDecided && $phaseStatus) {
-		if ($page.url.searchParams.get('view') === 'picks' || !$isPhase1Locked) {
-			viewRouteDecided = true; // explicit choice, or Phase 1 still open
-		} else if (!$isPhase2Active) {
+		if ($page.url.searchParams.get('view') === 'picks' || !$isPhase1Locked || $isPhase2Active) {
+			// Phase 1 still open, Phase 2 live, or an explicit request → wizard.
+			viewRouteDecided = true;
+		} else {
+			// Between phases: nothing left to fill, show the pool overview.
 			viewRouteDecided = true;
 			void goto('/predictions/overview', { replaceState: true });
-		} else if (fetchesDone) {
-			viewRouteDecided = true;
-			if (pendingPickCount === 0) void goto('/predictions/overview', { replaceState: true });
 		}
 	}
 
@@ -677,8 +658,6 @@
 	}
 
 	// ---- Phase 2 wiring ---------------------------------------------------
-	let phase2BracketComponent: PnKnockoutBracket;
-	let phase2BracketSaveStatus: 'idle' | 'saving' | 'saved' | 'error' = 'idle';
 	$: phase2DisplayBracket = $unsavedPhase2BracketPrediction || $phase2BracketPrediction;
 	$: hasPhase2BracketSelections = !!(
 		phase2DisplayBracket &&
@@ -691,23 +670,75 @@
 	function handlePhase2BracketUpdate(event: CustomEvent<BracketPrediction>) {
 		unsavedPhase2BracketPrediction.set(event.detail);
 	}
-	async function handleSavePhase2Bracket() {
-		const b = $unsavedPhase2BracketPrediction;
-		if (!b) return;
-		phase2BracketSaveStatus = 'saving';
-		const preds = bracketToPredictions(b).filter((p) => p.stage !== 'round_of_32');
-		const ok = await saveBracketPredictions(preds);
-		phase2BracketSaveStatus = ok ? 'saved' : 'error';
-		if (ok) {
-			unsavedPhase2BracketPrediction.set(null);
-			setTimeout(() => (phase2BracketSaveStatus = 'idle'), 2000);
-		}
+
+	// ---- Phase 2 sections: Bracket / Matches ------------------------------
+	// Mirrors the Phase 1 Groups/Knockout split. A section toggle picks
+	// Bracket vs Matches; within Matches a STAGE picker (R32→Final, with
+	// prev/next arrows) swaps which round's knockout score cards are shown —
+	// exactly like the group A–L picker in Phase 1.
+	type Phase2Section = 'bracket' | 'matches';
+	let phase2Section: Phase2Section = 'bracket';
+
+	const KO_STAGES = [
+		{ key: 'round_of_32', label: 'Round of 32', short: 'R32' },
+		{ key: 'round_of_16', label: 'Round of 16', short: 'R16' },
+		{ key: 'quarter_final', label: 'Quarter-finals', short: 'QF' },
+		{ key: 'semi_final', label: 'Semi-finals', short: 'SF' },
+		{ key: 'third_place', label: 'Third place', short: '3rd' },
+		{ key: 'final', label: 'Final', short: 'F' }
+	] as const;
+	let activeKoStage: string = 'round_of_32';
+	let koStageDropdownOpen = false;
+
+	function prevKoStage() {
+		const idx = KO_STAGES.findIndex((s) => s.key === activeKoStage);
+		activeKoStage = (idx <= 0 ? KO_STAGES[KO_STAGES.length - 1] : KO_STAGES[idx - 1]).key;
 	}
-	function handleClearPhase2Bracket() {
-		if (confirm('Clear all Phase 2 knockout selections?')) {
-			phase2BracketComponent?.clearAllSelections();
-		}
+	function nextKoStage() {
+		const idx = KO_STAGES.findIndex((s) => s.key === activeKoStage);
+		activeKoStage = (idx >= KO_STAGES.length - 1 ? KO_STAGES[0] : KO_STAGES[idx + 1]).key;
 	}
+	function selectKoStage(key: string) {
+		activeKoStage = key;
+		koStageDropdownOpen = false;
+	}
+
+	// Real-team knockout fixtures grouped by stage (TBD/slot rows excluded —
+	// a round only becomes pickable once its teams resolve).
+	$: knockoutByStage = (() => {
+		const m = new Map<string, Fixture[]>();
+		for (const f of $actualKnockoutFixtures) {
+			if (!isRealTeam(f.home_team) || !isRealTeam(f.away_team)) continue;
+			const arr = m.get(f.stage) ?? [];
+			arr.push(f);
+			m.set(f.stage, arr);
+		}
+		return m;
+	})();
+	$: activeKoStageFixtures = knockoutByStage.get(activeKoStage) ?? [];
+	$: activeKoStageMeta = KO_STAGES.find((s) => s.key === activeKoStage) ?? KO_STAGES[0];
+	// Reactive lambda (not a plain fn) so call-sites re-evaluate when the
+	// stage map / predictions change — same pattern as groupProgress.
+	$: koStageProgress = (key: string) => {
+		const fx = knockoutByStage.get(key) ?? [];
+		let done = 0;
+		for (const f of fx) if ((predictionStateMap.get(f.id) ?? 'empty') !== 'empty') done++;
+		return { done, total: fx.length };
+	};
+	$: activeKoProg = koStageProgress(activeKoStage);
+	// Match-score progress across ALL resolved knockout fixtures — the hero
+	// meter when the Matches section is active.
+	$: phase2MatchProgress = (() => {
+		let done = 0;
+		let total = 0;
+		for (const [, fx] of knockoutByStage) {
+			for (const f of fx) {
+				total++;
+				if ((predictionStateMap.get(f.id) ?? 'empty') !== 'empty') done++;
+			}
+		}
+		return { done, total, pct: total ? Math.round((done / total) * 100) : 0 };
+	})();
 
 	// ---- Unified save -----------------------------------------------------
 	// Phase 1 has three independent dirty sources: match picks, the knockout
@@ -715,6 +746,10 @@
 	// from the user's POV — one button, one progress count, one round-trip
 	// (parallel under the hood).
 	$: hasAnyPhase1Unsaved = $hasUnsavedChanges || $hasUnsavedBracketChanges || hasUnsavedBonus;
+	// Phase 2 commits BOTH knockout score drafts and the Phase 2 bracket via
+	// the single hero "Save Phase II" button — so the button must light up for
+	// either source, not the bracket alone (the score-only-edit dead-button bug).
+	$: hasAnyPhase2Unsaved = $hasUnsavedChanges || $hasUnsavedPhase2BracketChanges;
 	$: hasAnyUnsaved = $hasUnsavedChanges || $hasUnsavedBracketChanges || $hasUnsavedPhase2BracketChanges || hasUnsavedBonus;
 	beforeNavigate(({ cancel, type }) => {
 		if (!hasAnyUnsaved) return;
@@ -798,8 +833,12 @@
 		}
 		if ($hasUnsavedPhase2BracketChanges && $unsavedPhase2BracketPrediction) {
 			const p2 = $unsavedPhase2BracketPrediction;
+			// Phase 2 stores R16-onward only: the 32 R32 entrants are known
+			// facts and their advancement is credited at group qualification,
+			// so we never persist round_of_32 rows for Phase 2.
+			const p2preds = bracketToPredictions(p2).filter((p) => p.stage !== 'round_of_32');
 			tasks.push(
-				saveBracketPredictions(bracketToPredictions(p2)).then((ok) => {
+				saveBracketPredictions(p2preds).then((ok) => {
 					if (ok) unsavedPhase2BracketPrediction.set(null);
 					return ok;
 				})
@@ -842,19 +881,23 @@
 	// so the save button's badge can show "X unsaved out of 145" in user terms.
 	function countBracketChangedSlots(
 		unsaved: BracketPrediction | null,
-		saved: BracketPrediction | null
+		saved: BracketPrediction | null,
+		skipR32 = false
 	): number {
 		if (!unsaved) return 0;
 		let count = 0;
 		const empty = { round_of_32: [], round_of_16: [], quarter_finals: [], semi_finals: [], final: [] };
 		const base = saved || ({ ...empty, group_winners: {}, winner: '' } as BracketPrediction);
-		const stages: (keyof typeof empty)[] = [
+		const allStages: (keyof typeof empty)[] = [
 			'round_of_32',
 			'round_of_16',
 			'quarter_finals',
 			'semi_finals',
 			'final'
 		];
+		// Phase 2 never persists round_of_32 (the 32 entrants are known facts),
+		// so its change-count must ignore that stage or every pick reads as +32.
+		const stages = skipR32 ? allStages.filter((s) => s !== 'round_of_32') : allStages;
 		for (const key of stages) {
 			const u = unsaved[key] || [];
 			const s = base[key] || [];
@@ -909,6 +952,47 @@
 		}
 		return parts;
 	})();
+
+	// Phase 2 unsaved tally + breakdown — knockout score drafts + Phase 2
+	// bracket changes (R16-onward only), surfaced on the hero "Save Phase II"
+	// button + tooltip.
+	$: phase2UnsavedTotal =
+		$unsavedChangesCount +
+		countBracketChangedSlots($unsavedPhase2BracketPrediction, $phase2BracketPrediction, true);
+	$: phase2DirtySources = (() => {
+		const parts: string[] = [];
+		if ($unsavedChangesCount > 0)
+			parts.push(`${$unsavedChangesCount} score ${$unsavedChangesCount === 1 ? 'pick' : 'picks'}`);
+		const bracketChanged = countBracketChangedSlots($unsavedPhase2BracketPrediction, $phase2BracketPrediction, true);
+		if (bracketChanged > 0)
+			parts.push(`${bracketChanged} bracket ${bracketChanged === 1 ? 'pick' : 'picks'}`);
+		return parts;
+	})();
+
+	// Hero progress meter: Phase 1 counts group + bracket + bonus picks;
+	// Phase 2 counts the 31 knockout BRACKET picks (R16→Winner) — that's what
+	// locks at the bracket deadline shown in the same hero countdown. Knockout
+	// score cards track their own per-card state below.
+	$: phase2BracketFilled = (() => {
+		const b = phase2DisplayBracket;
+		if (!b) return 0;
+		let filled = 0;
+		for (const arr of [b.round_of_16, b.quarter_finals, b.semi_finals, b.final]) {
+			for (const t of arr || []) if (t) filled++;
+		}
+		if (b.winner) filled++;
+		return filled;
+	})();
+	$: heroProgress =
+		activePhase === 'phase2'
+			? phase2Section === 'matches'
+				? phase2MatchProgress
+				: {
+						done: phase2BracketFilled,
+						total: BRACKET_TOTAL_SLOTS_PHASE2,
+						pct: Math.round((phase2BracketFilled / BRACKET_TOTAL_SLOTS_PHASE2) * 100)
+					}
+			: phaseProgress;
 
 	// Count filled bracket slots across all knockout stages for the Phase 1
 	// progress bar. Phase 1 bracket has 32 R32 winners + 16 R16 + 8 QF + 4 SF
@@ -1118,35 +1202,44 @@
 					<a href="/predictions?view=picks" class="on" aria-current="page">Your picks</a>
 					<a href="/predictions/overview">Overview</a>
 				</nav>
-				<!-- Section tabs (Groups / Knockout / Bonus) — navigation within
-				     content, lives on the LEFT where users expect navigation. -->
-				<div class="phase-toggle">
-					<button class:on={activeSection === 'groups'} on:click={() => (activeSection = 'groups')}>Groups</button>
-					<button
-						class:on={activeSection === 'knockout'}
-						class:gated={phase1BracketGated}
-						on:click={() => (activeSection = 'knockout')}
-						title={phase1BracketGated ? 'Complete all group predictions to unlock' : ''}
-					>Knockout</button>
-					<button class:on={activeSection === 'bonus'} on:click={() => (activeSection = 'bonus')}>Bonus</button>
-				</div>
+				<!-- Section tabs — navigation within content, on the LEFT where
+				     users expect navigation. Phase 1: Groups / Knockout / Bonus.
+				     Phase 2: Bracket / Matches (the knockout score cards get their
+				     own tab, mirroring how groups were split from the bracket). -->
+				{#if activePhase === 'phase1'}
+					<div class="phase-toggle">
+						<button class:on={activeSection === 'groups'} on:click={() => (activeSection = 'groups')}>Groups</button>
+						<button
+							class:on={activeSection === 'knockout'}
+							class:gated={phase1BracketGated}
+							on:click={() => (activeSection = 'knockout')}
+							title={phase1BracketGated ? 'Complete all group predictions to unlock' : ''}
+						>Knockout</button>
+						<button class:on={activeSection === 'bonus'} on:click={() => (activeSection = 'bonus')}>Bonus</button>
+					</div>
+				{:else}
+					<div class="phase-toggle">
+						<button class:on={phase2Section === 'bracket'} on:click={() => (phase2Section = 'bracket')}>Bracket</button>
+						<button class:on={phase2Section === 'matches'} on:click={() => (phase2Section = 'matches')}>Matches</button>
+					</div>
+				{/if}
 			</div>
 			<div class="progress-stack">
 				<div class="big-num" aria-hidden="true">
-					{#if progressReady}<b>{phaseProgress.done}</b><span class="slash">/{phaseProgress.total}</span>{:else}<b>—</b><span class="slash">/—</span>{/if}
+					{#if progressReady}<b>{heroProgress.done}</b><span class="slash">/{heroProgress.total}</span>{:else}<b>—</b><span class="slash">/—</span>{/if}
 				</div>
 				<div class="bar-and-labels">
 					<div class="l">
-						<span>Matches predicted</span>
-						<span>{progressReady ? phaseProgress.pct : 0}%</span>
+						<span>{activePhase === 'phase2' && phase2Section === 'bracket' ? 'Knockout picks' : 'Matches predicted'}</span>
+						<span>{progressReady ? heroProgress.pct : 0}%</span>
 					</div>
-					<div class="bar"><div class="bar-fill" style="width: {progressReady ? phaseProgress.pct : 0}%;"></div></div>
+					<div class="bar"><div class="bar-fill" style="width: {progressReady ? heroProgress.pct : 0}%;"></div></div>
 					<div class="l">
 						<span>
 							{#if activePhase === 'phase1'}
 								{#if $isPhase1Locked}Locked{:else}Locks in {$phase1Countdown ?? '—'}{/if}
 							{:else}
-								{#if $isPhase2BracketLocked}Locked{:else}Locks in {$phase2Countdown ?? '—'}{/if}
+								{#if phase2Section === 'matches'}Locks per match{:else if $isPhase2BracketLocked}Locked{:else}Locks in {$phase2Countdown ?? '—'}{/if}
 							{/if}
 						</span>
 					</div>
@@ -1166,18 +1259,20 @@
 				{/if}
 				<button
 					class="pn-hero-save pn-hero-save--prominent"
-					class:dirty={(activePhase === 'phase1' ? hasAnyPhase1Unsaved : $hasUnsavedPhase2BracketChanges) && saveStatus === 'idle'}
+					class:dirty={(activePhase === 'phase1' ? hasAnyPhase1Unsaved : hasAnyPhase2Unsaved) && saveStatus === 'idle'}
 					class:saving={saveStatus === 'saving'}
 					class:success={saveStatus === 'saved'}
 					class:error={saveStatus === 'error'}
 					on:click={handleSaveAll}
-					disabled={((activePhase === 'phase1' ? !hasAnyPhase1Unsaved : !$hasUnsavedPhase2BracketChanges) && saveStatus === 'idle') || saveStatus === 'saving' || $matchPredictionsLoading}
+					disabled={((activePhase === 'phase1' ? !hasAnyPhase1Unsaved : !hasAnyPhase2Unsaved) && saveStatus === 'idle') || saveStatus === 'saving' || $matchPredictionsLoading}
 					title={saveError ??
 						(activePhase === 'phase1' && hasAnyPhase1Unsaved
 							? `Unsaved: ${phase1DirtySources.join(' · ')}`
-							: $lastLocalSave
-								? `All saved · drafts mirrored locally at ${formatLocalTime($lastLocalSave)}`
-								: 'All predictions saved')}
+							: activePhase === 'phase2' && hasAnyPhase2Unsaved
+								? `Unsaved: ${phase2DirtySources.join(' · ')}`
+								: $lastLocalSave
+									? `All saved · drafts mirrored locally at ${formatLocalTime($lastLocalSave)}`
+									: 'All predictions saved')}
 				>
 					{#if saveStatus === 'saving'}
 						Saving…
@@ -1188,9 +1283,9 @@
 					{:else if activePhase === 'phase1' && hasAnyPhase1Unsaved}
 						Save Phase I
 						<span class="badge">{phase1UnsavedTotal}</span>
-					{:else if activePhase === 'phase2' && $hasUnsavedPhase2BracketChanges}
+					{:else if activePhase === 'phase2' && hasAnyPhase2Unsaved}
 						Save Phase II
-						<span class="badge">{countBracketChangedSlots($unsavedPhase2BracketPrediction, $phase2BracketPrediction)}</span>
+						<span class="badge">{phase2UnsavedTotal}</span>
 					{:else}
 						✓ All saved
 					{/if}
@@ -1217,20 +1312,20 @@
 				</div>
 				<div class="progress-row">
 					<div class="big-num" aria-hidden="true">
-						{#if progressReady}<b>{phaseProgress.done}</b><span class="slash">/{phaseProgress.total}</span>{:else}<b>—</b><span class="slash">/—</span>{/if}
+						{#if progressReady}<b>{heroProgress.done}</b><span class="slash">/{heroProgress.total}</span>{:else}<b>—</b><span class="slash">/—</span>{/if}
 					</div>
 					<div class="bar-and-labels">
 						<div class="l">
-							<span>Matches predicted</span>
-							<span>{progressReady ? phaseProgress.pct : 0}%</span>
+							<span>{activePhase === 'phase2' && phase2Section === 'bracket' ? 'Knockout picks' : 'Matches predicted'}</span>
+							<span>{progressReady ? heroProgress.pct : 0}%</span>
 						</div>
-						<div class="bar"><div class="bar-fill" style="width: {progressReady ? phaseProgress.pct : 0}%;"></div></div>
+						<div class="bar"><div class="bar-fill" style="width: {progressReady ? heroProgress.pct : 0}%;"></div></div>
 						<div class="l">
 							<span>
 								{#if activePhase === 'phase1'}
 									{#if $isPhase1Locked}Locked{:else}Locks in {$phase1Countdown ?? '—'}{/if}
 								{:else}
-									{#if $isPhase2BracketLocked}Locked{:else}Locks in {$phase2Countdown ?? '—'}{/if}
+									{#if phase2Section === 'matches'}Locks per match{:else if $isPhase2BracketLocked}Locked{:else}Locks in {$phase2Countdown ?? '—'}{/if}
 								{/if}
 							</span>
 						</div>
@@ -1241,15 +1336,17 @@
 				     hero save (see above for comment). -->
 				<button
 					class="pn-hero-save pn-hero-save--mobile"
-					class:dirty={(activePhase === 'phase1' ? hasAnyPhase1Unsaved : $hasUnsavedPhase2BracketChanges) && saveStatus === 'idle'}
+					class:dirty={(activePhase === 'phase1' ? hasAnyPhase1Unsaved : hasAnyPhase2Unsaved) && saveStatus === 'idle'}
 					class:saving={saveStatus === 'saving'}
 					class:success={saveStatus === 'saved'}
 					class:error={saveStatus === 'error'}
 					on:click={handleSaveAll}
-					disabled={((activePhase === 'phase1' ? !hasAnyPhase1Unsaved : !$hasUnsavedPhase2BracketChanges) && saveStatus === 'idle') || saveStatus === 'saving' || $matchPredictionsLoading}
+					disabled={((activePhase === 'phase1' ? !hasAnyPhase1Unsaved : !hasAnyPhase2Unsaved) && saveStatus === 'idle') || saveStatus === 'saving' || $matchPredictionsLoading}
 					title={activePhase === 'phase1' && hasAnyPhase1Unsaved
 						? `Unsaved: ${phase1DirtySources.join(' · ')}`
-						: 'All predictions saved'}
+						: activePhase === 'phase2' && hasAnyPhase2Unsaved
+							? `Unsaved: ${phase2DirtySources.join(' · ')}`
+							: 'All predictions saved'}
 				>
 					{#if saveStatus === 'saving'}
 						Saving…
@@ -1260,24 +1357,31 @@
 					{:else if activePhase === 'phase1' && hasAnyPhase1Unsaved}
 						Save Phase I
 						<span class="badge">{phase1UnsavedTotal}</span>
-					{:else if activePhase === 'phase2' && $hasUnsavedPhase2BracketChanges}
+					{:else if activePhase === 'phase2' && hasAnyPhase2Unsaved}
 						Save Phase II
-						<span class="badge">{countBracketChangedSlots($unsavedPhase2BracketPrediction, $phase2BracketPrediction)}</span>
+						<span class="badge">{phase2UnsavedTotal}</span>
 					{:else}
 						✓ All saved
 					{/if}
 				</button>
 			</section>
-			<nav class="pn-wm-tabs">
-				<button class:on={activeSection === 'groups'} on:click={() => (activeSection = 'groups')}>Groups</button>
-				<button
-					class:on={activeSection === 'knockout'}
-					class:gated={phase1BracketGated}
-					on:click={() => (activeSection = 'knockout')}
-					title={phase1BracketGated ? 'Complete all group predictions to unlock' : ''}
-				>Knockout</button>
-				<button class:on={activeSection === 'bonus'} on:click={() => (activeSection = 'bonus')}>Bonus</button>
-			</nav>
+			{#if activePhase === 'phase1'}
+				<nav class="pn-wm-tabs">
+					<button class:on={activeSection === 'groups'} on:click={() => (activeSection = 'groups')}>Groups</button>
+					<button
+						class:on={activeSection === 'knockout'}
+						class:gated={phase1BracketGated}
+						on:click={() => (activeSection = 'knockout')}
+						title={phase1BracketGated ? 'Complete all group predictions to unlock' : ''}
+					>Knockout</button>
+					<button class:on={activeSection === 'bonus'} on:click={() => (activeSection = 'bonus')}>Bonus</button>
+				</nav>
+			{:else}
+				<nav class="pn-wm-tabs">
+					<button class:on={phase2Section === 'bracket'} on:click={() => (phase2Section = 'bracket')}>Bracket</button>
+					<button class:on={phase2Section === 'matches'} on:click={() => (phase2Section = 'matches')}>Matches</button>
+				</nav>
+			{/if}
 		</div>
 
 		<!-- Phase 1 wizard -->
@@ -1683,36 +1787,87 @@
 
 		{/if}
 
-		<!-- Phase 2 — Panini bracket + knockout match score cards -->
+		<!-- Phase 2 — Bracket / Matches (mirrors Phase 1's groups-vs-bracket split) -->
 		{#if activePhase === 'phase2'}
 			{#if $actualStandingsLoading}
 				<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.08em; text-transform: uppercase; padding: 16px;">Loading Phase II data…</p>
-			{:else}
+			{:else if phase2Section === 'bracket'}
+				<!-- Bracket: full R32 → Final wall chart seeded from ACTUAL group
+				     standings. Picking each R32 winner seeds R16, so the R32
+				     column is shown and interactive (not hidden). -->
 				<PnKnockoutBracket
-					bind:this={phase2BracketComponent}
 					prediction={phase2DisplayBracket}
 					groupStandings={$actualGroupStandingsMap}
 					fifaRankings={$fifaRankings}
 					locked={$isPhase2BracketLocked}
 					phase="phase_2"
-					hideR32
 					on:update={handlePhase2BracketUpdate}
 				/>
-				<div style="display: flex; gap: 12px; justify-content: flex-end; margin-top: 12px; margin-bottom: 22px;">
-					{#if $hasUnsavedPhase2BracketChanges}
-						<button class="pn-btn gold" on:click={handleSavePhase2Bracket} disabled={phase2BracketSaveStatus === 'saving'}>
-							{phase2BracketSaveStatus === 'saving' ? 'Saving…' : phase2BracketSaveStatus === 'saved' ? '✓ Saved' : 'Save bracket'}
-						</button>
-					{/if}
-				</div>
+			{:else}
+				<!-- Matches: a STAGE picker (R32 → Final, prev/next arrows) swaps
+				     which round's knockout score cards are shown — the same nav
+				     pattern as the Phase 1 group A–L picker. -->
+				<section class="pn-wiz-nav">
+					<div class="pn-wiz-nav-desktop">
+						<div class="groups-grid">
+							{#each KO_STAGES as s (s.key)}
+								{@const sp = koStageProgress(s.key)}
+								<button
+									class="pn-wiz-gp"
+									class:active={activeKoStage === s.key}
+									class:done={sp.total > 0 && sp.done === sp.total}
+									on:click={() => (activeKoStage = s.key)}
+								>
+									{s.short}
+									<span class="gp-prog">{sp.total > 0 ? `${sp.done}/${sp.total}` : 'TBD'}</span>
+								</button>
+							{/each}
+						</div>
+					</div>
+					<div class="pn-wiz-nav-mobile">
+						<div class="picker-row">
+							<button class="arrow" on:click={prevKoStage} aria-label="Previous round">◀</button>
+							<div class="dropdown" use:clickOutside={() => (koStageDropdownOpen = false)}>
+								<button
+									class="trigger"
+									class:done={activeKoProg.total > 0 && activeKoProg.done === activeKoProg.total}
+									class:open={koStageDropdownOpen}
+									on:click={() => (koStageDropdownOpen = !koStageDropdownOpen)}
+								>
+									<span class="lbl">{activeKoStageMeta.label}</span>
+									<span class="prog">{activeKoProg.total > 0 ? `${activeKoProg.done}/${activeKoProg.total}` : 'TBD'}</span>
+									<span class="chev">▾</span>
+								</button>
+								{#if koStageDropdownOpen}
+									<ul class="menu" transition:fade={{ duration: 120 }}>
+										{#each KO_STAGES as s (s.key)}
+											{@const sp = koStageProgress(s.key)}
+											<li>
+												<button
+													class:active={activeKoStage === s.key}
+													class:done={sp.total > 0 && sp.done === sp.total}
+													on:click={() => selectKoStage(s.key)}
+												>
+													<span class="lbl">{s.label}</span>
+													<span class="prog">{sp.total > 0 ? `${sp.done}/${sp.total}` : 'TBD'}</span>
+												</button>
+											</li>
+										{/each}
+									</ul>
+								{/if}
+							</div>
+							<button class="arrow" on:click={nextKoStage} aria-label="Next round">▶</button>
+						</div>
+					</div>
+				</section>
 
-				<!-- Knockout fixture score predictions (Phase 2 only) -->
+				<!-- Knockout score cards for the selected stage -->
 				<section class="pn-wiz-group">
 					<h2 style="font-family: var(--display); font-size: 22px; text-transform: uppercase; margin: 0 0 12px;">
-						Knockout <em style="color: var(--red); font-style: normal;">scores</em>
+						{activeKoStageMeta.label} <em style="color: var(--red); font-style: normal;">scores</em>
 					</h2>
 					<div class="pn-wiz-matches">
-						{#each $actualKnockoutFixtures as f (f.id)}
+						{#each activeKoStageFixtures as f (f.id)}
 							{@const state = predictionState(f)}
 							<div
 								class="pn-mcard"
@@ -1793,7 +1948,7 @@
 							</div>
 						{:else}
 							<div style="padding: 16px; font-family: var(--mono); font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">
-								No knockout fixtures yet — Phase II starts once groups conclude.
+								{activeKoStageMeta.label} teams are still to be decided — this round fills in as the previous round completes.
 							</div>
 						{/each}
 					</div>

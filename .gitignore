@@ -99,3 +99,6 @@ worktrees/
 panini-files/
 # scratch state from manual UI tests
 backend/scripts/.test_match_detail_state.json
+
+# Local dev DB snapshots (contain real user data — never commit)
+.dev-db-snapshots/

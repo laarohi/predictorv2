@@ -29,7 +29,8 @@
 	import {
 		getBracketOverview,
 		getCommunityPredictions,
-		getGroupsOverview
+		getGroupsOverview,
+		getKnockoutScoresOverview
 	} from '$api/predictions';
 	import { getLeaderboard, type PhaseFilter } from '$api/leaderboard';
 	import { getScoringConfig, type ScoringConfig } from '$api/competition';
@@ -46,6 +47,8 @@
 		BracketOverviewTeamRow,
 		CommunityPredictionsResponse,
 		GroupsOverviewResponse,
+		KnockoutScoreFixtureRow,
+		KnockoutScoresOverviewResponse,
 		LeaderboardEntry,
 		LeaderboardResponse,
 		OverviewCountCell,
@@ -64,6 +67,11 @@
 		sectionInitialised = true;
 	}
 
+	// Within the Knockout section: the existing per-round advancement
+	// forecast, or (Phase 2 only) the pool's knockout match-SCORE splits.
+	type KnockoutView = 'advancement' | 'scores';
+	let knockoutView: KnockoutView = 'advancement';
+
 	function setSection(s: Section) {
 		section = s;
 		if (browser) {
@@ -72,8 +80,17 @@
 			else url.searchParams.delete('tab');
 			history.replaceState(history.state, '', url);
 		}
-		if (s === 'knockout') void loadBracket();
+		if (s === 'knockout') {
+			void loadBracket();
+			if (knockoutView === 'scores') void loadKnockoutScores();
+		}
 		if (s === 'bonus') void loadBonus();
+	}
+
+	function setKnockoutView(v: KnockoutView) {
+		knockoutView = v;
+		if (v === 'scores') void loadKnockoutScores();
+		else void loadBracket();
 	}
 
 	// ---- Data ---------------------------------------------------------------
@@ -133,6 +150,59 @@
 		void loadBracket();
 	}
 
+	// Knockout match-SCORE distribution (Phase 2). Per-match blind pool: the
+	// backend only returns a fixture's split once it individually locks, so
+	// this can change between visits as more knockout matches kick off — we
+	// refetch each time the Scores sub-view is opened rather than caching.
+	let koScoresData: KnockoutScoresOverviewResponse | null = null;
+	let koScoresError: string | null = null;
+	let koScoresLoading = false;
+
+	async function loadKnockoutScores() {
+		if (!$isPhase2Active) return;
+		if (koScoresLoading) return;
+		koScoresLoading = true;
+		koScoresError = null;
+		try {
+			koScoresData = await getKnockoutScoresOverview();
+		} catch (e) {
+			koScoresError = e instanceof Error ? e.message : 'Failed to load the overview.';
+		} finally {
+			koScoresLoading = false;
+		}
+	}
+
+	// Round label + ordering for the knockout-scores panels.
+	const KO_ROUND_LABELS: Record<string, string> = {
+		round_of_32: 'Round of 32',
+		round_of_16: 'Round of 16',
+		quarter_final: 'Quarter-finals',
+		semi_final: 'Semi-finals',
+		final: 'Final'
+	};
+	const KO_ROUND_ORDER = ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'final'];
+
+	interface KnockoutRound {
+		stage: string;
+		label: string;
+		fixtures: KnockoutScoreFixtureRow[];
+	}
+	// Group the (already round-then-kickoff ordered) fixtures into round panels.
+	$: koRounds = (() => {
+		if (!koScoresData) return [] as KnockoutRound[];
+		const byStage = new Map<string, KnockoutScoreFixtureRow[]>();
+		for (const fx of koScoresData.fixtures) {
+			const list = byStage.get(fx.stage) ?? [];
+			list.push(fx);
+			byStage.set(fx.stage, list);
+		}
+		return KO_ROUND_ORDER.filter((s) => byStage.has(s)).map((s) => ({
+			stage: s,
+			label: KO_ROUND_LABELS[s] ?? s,
+			fixtures: byStage.get(s) ?? []
+		}));
+	})();
+
 	// Bonus-question answer distribution.
 	let bonusData: BonusOverviewResponse | null = null;
 	let bonusError: string | null = null;
@@ -162,6 +232,15 @@
 	$: if (browser && $isPhase1Locked) void loadGroups();
 	$: if (browser && $isPhase1Locked && section === 'knockout') void loadBracket();
 	$: if (browser && $isPhase1Locked && section === 'bonus') void loadBonus();
+	$: if (
+		browser &&
+		$isPhase2Active &&
+		section === 'knockout' &&
+		knockoutView === 'scores' &&
+		!koScoresData &&
+		!koScoresLoading
+	)
+		void loadKnockoutScores();
 
 	// ---- Forecast table sorting --------------------------------------------
 	type SortKey = keyof Pick<
@@ -401,6 +480,20 @@
 			</div>
 			<div class="controls">
 				{#if section === 'knockout' && $isPhase2Active}
+					<!-- Advancement (forecast) vs Scores (match-score splits). Only
+					     meaningful once Phase 2 is live, where knockout scores exist. -->
+					<div class="pn-ovswitch slim" role="group" aria-label="Knockout view">
+						<button
+							class:on={knockoutView === 'advancement'}
+							on:click={() => setKnockoutView('advancement')}>Advancement</button
+						>
+						<button
+							class:on={knockoutView === 'scores'}
+							on:click={() => setKnockoutView('scores')}>Scores</button
+						>
+					</div>
+				{/if}
+				{#if section === 'knockout' && $isPhase2Active && knockoutView === 'advancement'}
 					<div class="pn-ovswitch slim" role="group" aria-label="Bracket phase">
 						<button class:on={bracketPhase === 1} on:click={() => setBracketPhase(1)}>Phase I</button>
 						<button class:on={bracketPhase === 2} on:click={() => setBracketPhase(2)}>Phase II</button>
@@ -613,7 +706,87 @@
 			{/if}
 		{:else}
 			<!-- ──────────────────────── Knockout ──────────────────────── -->
-			{#if bracketPhase === 2 && !phase2Viewable}
+			{#if $isPhase2Active && knockoutView === 'scores'}
+				<!-- Knockout match-score splits (Phase 2, per-match blind pool) -->
+				{#if koScoresLoading}
+					<p class="pn-ov-note">Loading the pool's knockout scores…</p>
+				{:else if koScoresError}
+					<p class="pn-ov-note error">{koScoresError}</p>
+				{:else if koScoresData}
+					<div class="pn-ov-legend">
+						<span class="cap">
+							Every knockout fixture's pool split — once a match locks, how all
+							<b>{koScoresData.total_predictors}</b> players scored it
+						</span>
+						<span class="key">
+							<i class="sw home"></i> home win
+							<i class="sw draw"></i> draw
+							<i class="sw away"></i> away win
+							<span class="dim">· tap a match for the score heatmap</span>
+						</span>
+					</div>
+					{#if koRounds.length === 0}
+						<section class="pn-ov-locked">
+							<div class="lock-badge">SEALED</div>
+							<h2>No knockout matches have locked yet</h2>
+							<p>
+								Knockout scores stay hidden per match until 15 minutes before each kickoff.
+								The pool's picks for a fixture open up the moment it locks — check back once
+								the knockouts get under way.
+							</p>
+						</section>
+					{:else}
+						<div class="pn-ov-groups">
+							{#each koRounds as r (r.stage)}
+								<div class="pn-ov-group">
+									<div class="ghd">
+										<span class="gletter">{r.fixtures.length}</span>
+										<span class="glabel">{r.label}</span>
+									</div>
+									<div class="fixtures bare">
+										{#each r.fixtures as fx (fx.fixture_id)}
+											{@const chip = statusChip(fx)}
+											{@const fxTotal = fx.home_count + fx.draw_count + fx.away_count}
+											<button
+												class="fx"
+												on:click={() => openFixture(fx)}
+												title="{fx.home_team} v {fx.away_team} — see everyone's scores"
+											>
+												<span class="fxteam">
+													<PnFlag code={teamCode(fx.home_team)} w={20} h={14} />
+													<span class="code">{teamCode(fx.home_team)}</span>
+												</span>
+												<span class="fxbar" class:empty={fxTotal === 0}>
+													{#if fxTotal > 0}
+														<span class="seg home" style="width:{pct(fx.home_count, fxTotal)}%"
+															>{segLabel(fx.home_count, fxTotal)}</span
+														>
+														<span class="seg draw" style="width:{pct(fx.draw_count, fxTotal)}%"
+															>{segLabel(fx.draw_count, fxTotal)}</span
+														>
+														<span class="seg away" style="width:{pct(fx.away_count, fxTotal)}%"
+															>{segLabel(fx.away_count, fxTotal)}</span
+														>
+													{:else}
+														<span class="none">no picks</span>
+													{/if}
+													{#if chip}
+														<span class="result {chip.cls}">{chip.label}</span>
+													{/if}
+												</span>
+												<span class="fxteam right">
+													<span class="code">{teamCode(fx.away_team)}</span>
+													<PnFlag code={teamCode(fx.away_team)} w={20} h={14} />
+												</span>
+											</button>
+										{/each}
+									</div>
+								</div>
+							{/each}
+						</div>
+					{/if}
+				{/if}
+			{:else if bracketPhase === 2 && !phase2Viewable}
 				<section class="pn-ov-locked">
 					<div class="lock-badge">SEALED</div>
 					<h2>Phase II picks stay hidden until the bracket locks</h2>

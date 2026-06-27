@@ -88,6 +88,24 @@
       "total_predictors": 100, "correct_predictors": 2,
       "outcome_points": 5, "exact_points": 10, "cap": 10,
       "expected_points": 25, "expected_correct_outcome": true, "expected_exact_score": true
+    },
+    {
+      "_note": "ET knockout, graded on REGULATION: match finished 1-1 after 90 min then 2-1 in extra time. `actual_*` here is the regulation (90-min) line — both sides pass home_score/away_score, not the ET final. A user who predicted 1-1 scores the draw outcome + exact bonus; the bracket scores 'who advanced' separately. correct_predictors counts those who picked the regulation outcome (X).",
+      "name": "ko_extra_time_graded_on_regulation_draw",
+      "mode": "logarithmic",
+      "predicted_home": 1, "predicted_away": 1, "actual_home": 1, "actual_away": 1,
+      "total_predictors": 12, "correct_predictors": 3,
+      "outcome_points": 5, "exact_points": 10, "cap": 10,
+      "expected_points": 18, "expected_correct_outcome": true, "expected_exact_score": true
+    },
+    {
+      "_note": "Same ET knockout (reg 1-1, ET 2-1) from the perspective of a user who predicted 2-1 (the EXTRA-TIME final). Graded on regulation it's a miss: their predicted home-win doesn't match the regulation draw, so 0 points for the match score (their advancement call is scored by the bracket layer, not here).",
+      "name": "ko_extra_time_et_winner_pick_is_a_match_miss",
+      "mode": "logarithmic",
+      "predicted_home": 2, "predicted_away": 1, "actual_home": 1, "actual_away": 1,
+      "total_predictors": 12, "correct_predictors": 3,
+      "outcome_points": 5, "exact_points": 10, "cap": 10,
+      "expected_points": 0, "expected_correct_outcome": false, "expected_exact_score": false
     }
   ]
 }
