@@ -215,3 +215,71 @@ async def test_rounds_ordered_r32_to_final(session, seeded):
     # R32 (the seeded locked fixture) comes before the semi_final even though
     # the SF kicked off earlier.
     assert stages == ["round_of_32", "semi_final"]
+
+
+@pytest.mark.asyncio
+async def test_excludes_unresolved_placeholder_fixtures(session, seeded):
+    """A locked KO fixture whose teams are still 'slot:...' placeholders (admin
+    hasn't run resolve-knockout yet) must NOT surface — no placeholder strings,
+    no leaked picks — even though its kickoff is past its lock window."""
+    comp_id = seeded["locked"].competition_id
+    now = utc_now()
+    placeholder = Fixture(
+        competition_id=comp_id,
+        home_team="slot:round_of_16:537377:home",
+        away_team="slot:round_of_16:537377:away",
+        kickoff=now - timedelta(hours=1),  # past its lock window
+        stage="round_of_16",
+        status=MatchStatus.SCHEDULED,
+    )
+    session.add(placeholder)
+    await session.commit()
+    await session.refresh(placeholder)
+    session.add(
+        MatchPrediction(
+            user_id=seeded["alice"].id, fixture_id=placeholder.id,
+            home_score=1, away_score=0, phase=PredictionPhase.PHASE_2,
+        )
+    )
+    await session.commit()
+
+    resp = await get_knockout_scores_overview(session, _viewer())
+    teams = {(f.home_team, f.away_team) for f in resp.fixtures}
+    assert not any(h.startswith("slot:") or a.startswith("slot:") for h, a in teams)
+    # Only the seeded resolved R32 fixture is visible; the placeholder + its
+    # pick never enter the aggregate (count stays Alice+Bob on the R32).
+    assert len(resp.fixtures) == 1
+    assert resp.total_predictors == 2
+
+
+@pytest.mark.asyncio
+async def test_includes_third_place_fixture(session, seeded):
+    """The third-place play-off (stage='third_place') is a real, scored fixture
+    and must appear once locked — it was previously dropped by the round-order
+    map (and the frontend KO_ROUND_ORDER) entirely."""
+    comp_id = seeded["locked"].competition_id
+    now = utc_now()
+    third = Fixture(
+        competition_id=comp_id,
+        home_team="Croatia",
+        away_team="Morocco",
+        kickoff=now - timedelta(hours=2),
+        stage="third_place",
+        status=MatchStatus.FINISHED,
+    )
+    session.add(third)
+    await session.commit()
+    await session.refresh(third)
+    session.add(
+        MatchPrediction(
+            user_id=seeded["alice"].id, fixture_id=third.id,
+            home_score=2, away_score=1, phase=PredictionPhase.PHASE_2,
+        )
+    )
+    await session.commit()
+
+    resp = await get_knockout_scores_overview(session, _viewer())
+    stages = [f.stage for f in resp.fixtures]
+    assert "third_place" in stages
+    # third_place sorts after R32 (order index 4) and before the Final.
+    assert stages == ["round_of_32", "third_place"]

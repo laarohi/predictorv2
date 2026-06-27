@@ -67,6 +67,12 @@ export async function deactivatePhase2(): Promise<{ status: string }> {
 	return api.post('/admin/competition/phase2/deactivate');
 }
 
+export async function updatePhase2Deadline(
+	bracketDeadline: string
+): Promise<{ status: string; bracket_deadline: string }> {
+	return api.post('/admin/competition/phase2/deadline', { bracket_deadline: bracketDeadline });
+}
+
 export async function getAllUsers(): Promise<UserAdminView[]> {
 	return api.get<UserAdminView[]>('/admin/users');
 }

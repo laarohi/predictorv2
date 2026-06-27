@@ -434,6 +434,64 @@ async def deactivate_phase2(
     return {"status": "Phase 2 deactivated"}
 
 
+@router.post("/competition/phase2/deadline")
+async def update_phase2_deadline(
+    request: Phase2ActivateRequest,
+    session: DbSession,
+    _admin: AdminUser,
+) -> dict:
+    """Move the Phase 2 bracket deadline while Phase 2 is already active.
+
+    A dedicated path (vs deactivate→reactivate) so a rejected new deadline can
+    never leave Phase 2 OFF pool-wide: this only ever writes the deadline, never
+    flips is_phase2_active.
+    """
+    result = await session.execute(
+        select(Competition).where(Competition.is_active == True)
+    )
+    competition = result.scalar_one_or_none()
+    if not competition:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No active competition found",
+        )
+    if not competition.is_phase2_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Phase 2 is not active",
+        )
+    if request.bracket_deadline <= utc_now():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="bracket_deadline must be in the future",
+        )
+    # Must still be before the first knockout match kicks off. Min over ALL
+    # knockout fixtures (any status, not just 'scheduled') so the deadline can
+    # never be moved past a match that has already started.
+    result = await session.execute(
+        select(func.min(Fixture.kickoff)).where(
+            Fixture.competition_id == competition.id,
+            Fixture.stage != "group",
+        )
+    )
+    first_ko_kickoff = result.scalar_one_or_none()
+    if first_ko_kickoff and request.bracket_deadline > aware_utc(first_ko_kickoff):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "bracket_deadline must not be after the first knockout "
+                f"kickoff ({aware_utc(first_ko_kickoff).isoformat()})"
+            ),
+        )
+    competition.phase2_bracket_deadline = request.bracket_deadline
+    competition.updated_at = utc_now()
+    await session.commit()
+    return {
+        "status": "Phase 2 deadline updated",
+        "bracket_deadline": request.bracket_deadline.isoformat(),
+    }
+
+
 @router.post("/competition/phase1/deadline")
 async def set_phase1_deadline(
     request: Phase1DeadlineRequest,

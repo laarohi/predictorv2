@@ -747,9 +747,11 @@
 	// (parallel under the hood).
 	$: hasAnyPhase1Unsaved = $hasUnsavedChanges || $hasUnsavedBracketChanges || hasUnsavedBonus;
 	// Phase 2 commits BOTH knockout score drafts and the Phase 2 bracket via
-	// the single hero "Save Phase II" button — so the button must light up for
-	// either source, not the bracket alone (the score-only-edit dead-button bug).
-	$: hasAnyPhase2Unsaved = $hasUnsavedChanges || $hasUnsavedPhase2BracketChanges;
+	// the single hero "Save Phase II" button. Tie the enable to phase2UnsavedTotal
+	// (R16-onward bracket changes + score drafts) so the button is enabled iff
+	// its badge is > 0 — an R32-only no-op pick (round_of_32 is never persisted)
+	// leaves nothing to save and must not light up a "Save Phase II [0]" button.
+	$: hasAnyPhase2Unsaved = phase2UnsavedTotal > 0;
 	$: hasAnyUnsaved = $hasUnsavedChanges || $hasUnsavedBracketChanges || $hasUnsavedPhase2BracketChanges || hasUnsavedBonus;
 	beforeNavigate(({ cancel, type }) => {
 		if (!hasAnyUnsaved) return;

@@ -477,6 +477,12 @@ async def apply_knockout_resolution(
             continue
 
         pair = matchups.get(mn)
+        # Track matches whose teams still aren't resolved (placeholder), even
+        # when we backfill their match_number this run — otherwise the admin
+        # preview's `unresolved` list omits R32 rows that only got an mn stamp.
+        if pair is None and _is_placeholder(fx.home_team):
+            report.unresolved.append(mn)
+
         # Determine desired values.
         desired_mn = mn
         desired_home = pair[0] if pair else fx.home_team
@@ -488,8 +494,6 @@ async def apply_knockout_resolution(
         mn_changed = fx.match_number != desired_mn
 
         if not teams_changed and not mn_changed:
-            if pair is None and mn not in matchups:
-                report.unresolved.append(mn)
             continue
 
         report.changes.append(

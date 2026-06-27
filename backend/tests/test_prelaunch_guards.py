@@ -25,6 +25,7 @@ from app.api.admin import (
     Phase2ActivateRequest,
     activate_phase2,
     set_phase1_deadline,
+    update_phase2_deadline,
 )
 from app.api.predictions import batch_update_predictions
 from app.dependencies import RequestContext
@@ -180,6 +181,77 @@ class TestPhase2ActivationGuards:
         )
         assert result["status"] == "Phase 2 activated"
         assert competition.is_phase2_active is True
+
+
+class TestPhase2DeadlineUpdate:
+    """The dedicated update-deadline endpoint moves the bracket deadline WITHOUT
+    ever deactivating Phase 2. The deactivate→reactivate pattern it replaced
+    could strand Phase 2 OFF pool-wide if the re-activate failed validation;
+    these guard that a rejected update leaves is_phase2_active untouched."""
+
+    @staticmethod
+    def _active_comp() -> Competition:
+        comp = _competition(None)
+        comp.is_phase2_active = True
+        return comp
+
+    @pytest.mark.asyncio
+    async def test_update_moves_deadline_and_stays_active(self):
+        first_ko = datetime.now(timezone.utc) + timedelta(days=1)
+        comp = self._active_comp()
+        new_deadline = first_ko - timedelta(hours=2)
+        result = await update_phase2_deadline(
+            request=Phase2ActivateRequest(bracket_deadline=new_deadline),
+            session=_session_returning(comp, first_ko),
+            _admin=_admin(),
+        )
+        assert result["status"] == "Phase 2 deadline updated"
+        assert comp.phase2_bracket_deadline == new_deadline
+        assert comp.is_phase2_active is True  # never flipped off
+
+    @pytest.mark.asyncio
+    async def test_update_when_not_active_rejected(self):
+        comp = _competition(None)  # is_phase2_active = False
+        with pytest.raises(HTTPException) as exc:
+            await update_phase2_deadline(
+                request=Phase2ActivateRequest(
+                    bracket_deadline=datetime.now(timezone.utc) + timedelta(hours=1)
+                ),
+                session=_session_returning(comp),
+                _admin=_admin(),
+            )
+        assert exc.value.status_code == 400
+        assert "not active" in exc.value.detail
+
+    @pytest.mark.asyncio
+    async def test_past_deadline_rejected_leaves_phase2_on(self):
+        comp = self._active_comp()
+        with pytest.raises(HTTPException) as exc:
+            await update_phase2_deadline(
+                request=Phase2ActivateRequest(
+                    bracket_deadline=datetime.now(timezone.utc) - timedelta(hours=1)
+                ),
+                session=_session_returning(comp),
+                _admin=_admin(),
+            )
+        assert exc.value.status_code == 400
+        assert comp.is_phase2_active is True  # the key safety property
+
+    @pytest.mark.asyncio
+    async def test_deadline_after_first_ko_rejected_leaves_phase2_on(self):
+        first_ko = datetime.now(timezone.utc) + timedelta(days=1)
+        comp = self._active_comp()
+        with pytest.raises(HTTPException) as exc:
+            await update_phase2_deadline(
+                request=Phase2ActivateRequest(
+                    bracket_deadline=first_ko + timedelta(hours=2)
+                ),
+                session=_session_returning(comp, first_ko),
+                _admin=_admin(),
+            )
+        assert exc.value.status_code == 400
+        assert "first knockout" in exc.value.detail
+        assert comp.is_phase2_active is True
 
 
 class TestBatchSizeCap:

@@ -996,7 +996,8 @@ _KO_FIXTURE_STAGE_ORDER = {
     "round_of_16": 1,
     "quarter_final": 2,
     "semi_final": 3,
-    "final": 4,
+    "third_place": 4,
+    "final": 5,
 }
 
 
@@ -1035,8 +1036,14 @@ async def get_knockout_scores_overview(
     fixtures = list(fx_result.scalars().all())
 
     # Per-fixture blind-pool gate — only locked/finished fixtures are visible.
+    # Also skip fixtures whose teams aren't resolved yet (still 'slot:...'
+    # placeholders): their scheduled kickoff can pass its T-lock window before
+    # the admin runs resolve-knockout, and we must never surface placeholder
+    # strings or count picks against an unresolved matchup.
     visible: list[Fixture] = []
     for f in fixtures:
+        if f.home_team.startswith("slot:") or f.away_team.startswith("slot:"):
+            continue
         locked, _ = await get_fixture_lock_view(session, f)
         if locked or f.status == MatchStatus.FINISHED:
             visible.append(f)

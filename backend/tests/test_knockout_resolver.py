@@ -291,6 +291,9 @@ async def test_apply_does_nothing_before_groups_finish(session, competition) -> 
     # match_number backfilled even pre-resolution.
     for f in rows:
         assert f.match_number == MATCH_NUMBER_BY_EXTERNAL_ID[f.external_id]
+    # The match_number-only backfill must NOT mask still-placeholder rows from
+    # the admin preview's `unresolved` list — every R32 match is unresolved.
+    assert set(range(73, 89)).issubset(set(report.unresolved))
 
 
 async def test_apply_stamps_r32_and_is_idempotent(session, competition) -> None:

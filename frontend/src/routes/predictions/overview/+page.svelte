@@ -178,9 +178,10 @@
 		round_of_16: 'Round of 16',
 		quarter_final: 'Quarter-finals',
 		semi_final: 'Semi-finals',
+		third_place: 'Third place',
 		final: 'Final'
 	};
-	const KO_ROUND_ORDER = ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'final'];
+	const KO_ROUND_ORDER = ['round_of_32', 'round_of_16', 'quarter_final', 'semi_final', 'third_place', 'final'];
 
 	interface KnockoutRound {
 		stage: string;

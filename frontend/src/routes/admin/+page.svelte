@@ -15,6 +15,7 @@
 		setPhase1Deadline,
 		activatePhase2,
 		deactivatePhase2,
+		updatePhase2Deadline,
 		getAllUsers,
 		toggleUserAdmin,
 		toggleUserActive,
@@ -486,16 +487,16 @@
 		activationSuccess = null;
 		try {
 			const deadline = localInputsToUtcIso(bracketDeadlineDate, bracketDeadlineTime);
-			// "Update deadline" while already active: the activate endpoint
-			// rejects a double-activation, so move the deadline by deactivating
-			// then re-activating. Existing Phase 2 picks are untouched — only the
-			// active flag + bracket deadline change.
-			const updating = $isPhase2Active;
-			if (updating) await deactivatePhase2();
-			const result = await activatePhase2(deadline);
-			activationSuccess = updating
-				? `Phase 2 deadline updated: ${new Date(result.bracket_deadline).toLocaleString()}`
-				: `Phase 2 activated! Bracket deadline: ${new Date(result.bracket_deadline).toLocaleString()}`;
+			// While already active, move the deadline via the dedicated update
+			// endpoint — NEVER deactivate→reactivate (a rejected new deadline
+			// would otherwise leave Phase 2 OFF pool-wide with no rollback).
+			if ($isPhase2Active) {
+				const result = await updatePhase2Deadline(deadline);
+				activationSuccess = `Phase 2 deadline updated: ${new Date(result.bracket_deadline).toLocaleString()}`;
+			} else {
+				const result = await activatePhase2(deadline);
+				activationSuccess = `Phase 2 activated! Bracket deadline: ${new Date(result.bracket_deadline).toLocaleString()}`;
+			}
 			await Promise.all([loadData(), fetchPhaseStatus()]);
 		} catch (e) {
 			activationError = e instanceof Error ? e.message : 'Failed to activate Phase 2';
