@@ -52,7 +52,7 @@
 	import { getScoringConfig, type ScoringConfig } from '$api/competition';
 	import { teamCode } from '$lib/utils/teamCodes';
 	import { goto } from '$app/navigation';
-	import { koChipLabel, computeMatchPoints, wizardHref } from '$lib/utils/matchBreakdown';
+	import { koChipLabel, computeMatchPoints, wizardHref, stageShort } from '$lib/utils/matchBreakdown';
 	import type { Fixture, MatchPrediction } from '$types';
 
 	let trajectoryData: RankTrajectoryResponse | null = null;
@@ -169,7 +169,10 @@
 		const id = f.id;
 		const home = teamCode(f.home_team);
 		const away = teamCode(f.away_team);
-		const grpLabel = f.group ?? '?';
+		// Group letter for group matches; short round code (R32/QF/…) for KO
+		// fixtures, which carry no group — so the Upcoming column reads cleanly
+		// once the between-phases window starts surfacing knockout ties.
+		const grpLabel = f.group ?? stageShort(f.stage);
 		const navigate = () => void goto(`/results/${id}`);
 
 		// Points string incl. the rarity (hybrid) bonus — routed through the
@@ -260,8 +263,13 @@
 		return acc + part.outcome + part.exact + part.bonus;
 	}, 0);
 
+	// NOT group-only: in the between-phases window every group match is finished,
+	// and the real upcoming fixtures are the resolved R32 ties. Exclude only
+	// unresolved 'slot:' placeholders (R16+ before resolution) so we never render
+	// a "slot:…" team. During the group stage the KO rows are still placeholders,
+	// so this naturally yields just the upcoming group matches as before.
 	$: upcoming = $fixtures
-		.filter((f) => f.stage === 'group')
+		.filter((f) => !f.home_team.startsWith('slot:') && !f.away_team.startsWith('slot:'))
 		.filter(
 			(f) =>
 				f.status === 'live' ||
@@ -572,7 +580,7 @@
 					</span>
 				</div>
 				<DwMatchTable
-					groupColumnLabel="Grp"
+					groupColumnLabel={isBetween ? 'Rnd' : 'Grp'}
 					rows={upcoming.map((f) => buildRow(f, scoringConfig, agreementMap))}
 					emptyText="No upcoming matches."
 					targetRows={5}
