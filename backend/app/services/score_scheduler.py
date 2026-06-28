@@ -22,6 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import get_settings
 from app.database import async_session_maker
 from app.models._datetime import utc_now
+from app.services.knockout_resolver import apply_knockout_resolution
+from app.services.leaderboard import invalidate_cache
 from app.services.locking import get_active_competition
 from app.services.receipts import send_phase1_receipts
 from app.services.push_triggers import (
@@ -83,6 +85,32 @@ async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> No
                     )
         except Exception:  # noqa: BLE001
             logger.exception("score_scheduler: score sync tick failed")
+
+        # Auto-resolve later knockout rounds (R16→Final). The moment a feeder
+        # match finishes, the winner→slot mapping is deterministic, so the
+        # scheduler stamps the next round's fixtures with no admin action. R32 is
+        # excluded (resolve_r32=False) — it derives from the full group-standings
+        # logic and stays a manual, admin-verified step. Runs right after the
+        # score sync so a match that just finished this tick resolves its child
+        # immediately. Idempotent: a no-op once everything resolvable is stamped.
+        try:
+            competition = await get_active_competition(session)
+            if competition and competition.is_phase2_active:
+                report = await apply_knockout_resolution(
+                    session, competition, dry_run=False, resolve_r32=False
+                )
+                if report.changes:
+                    invalidate_cache()
+                    logger.info(
+                        "score_scheduler: auto-resolved %d knockout fixture(s): %s",
+                        report.changed_count,
+                        ", ".join(
+                            f"m{c.match_number} {c.new_home} v {c.new_away}"
+                            for c in report.changes
+                        ),
+                    )
+        except Exception:  # noqa: BLE001
+            logger.exception("score_scheduler: knockout auto-resolve tick failed")
 
         # Receipts last — a slow/failing send can't delay the score sync above.
         try:

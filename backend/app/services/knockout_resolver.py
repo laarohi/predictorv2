@@ -366,6 +366,7 @@ async def apply_knockout_resolution(
     competition: Competition,
     *,
     dry_run: bool = False,
+    resolve_r32: bool = True,
 ) -> ResolutionReport:
     """Stamp real team names + FIFA match_number onto the knockout fixtures.
 
@@ -379,6 +380,14 @@ async def apply_knockout_resolution(
       * ``match_number`` is always backfilled from
         MATCH_NUMBER_BY_EXTERNAL_ID for every known knockout row, even if the
         teams aren't resolvable yet.
+
+    ``resolve_r32`` controls only the R32-from-group-standings half. R32 derives
+    from the full group-standings computation (tiebreakers + the third-place
+    allocation grid) and is the round an admin verifies by eye against the
+    official bracket, so the background scheduler calls this with
+    ``resolve_r32=False`` — R16→Final auto-resolve from results (a deterministic
+    winner→slot map) while R32 stays a manual, admin-triggered step. The admin
+    endpoint uses the default (``True``) for the full pass.
 
     With ``dry_run=True`` nothing is committed; the report still lists every
     change that WOULD be made plus the full computed matchup table.
@@ -421,7 +430,10 @@ async def apply_knockout_resolution(
     matchups: dict[int, tuple[str, str]] = {}
 
     # --- R32 from final group standings ---
-    if groups_complete:
+    # Gated on resolve_r32: the scheduler passes False so R32 is never stamped
+    # automatically (it stays an admin-verified click); groups_complete is still
+    # computed/reported either way.
+    if resolve_r32 and groups_complete:
         standings = await get_actual_group_standings(session)
         qualifying_thirds = await get_qualifying_third_place_teams(session)
         # Only attempt if we actually have 12 ranked groups and 8 thirds —

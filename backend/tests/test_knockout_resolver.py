@@ -404,6 +404,67 @@ async def test_later_round_resolution_from_r32_results(session, competition) -> 
     assert r16_rows[89].home_team == expected_r32[74][0]  # winner of 74 = home of 74
 
 
+async def test_resolve_r32_false_skips_r32_but_auto_resolves_later_rounds(
+    session, competition
+) -> None:
+    """The scheduler path. resolve_r32=False NEVER stamps R32 (it stays the
+    manual, admin-verified step) but DOES auto-resolve R16 from actual R32
+    results — the winner→slot map is deterministic, no admin action needed."""
+    await _seed_finished_groups(session, competition)
+    await _seed_knockout_placeholders(session, competition)
+
+    # Auto-mode on fresh placeholders: even though all groups are FINISHED, R32
+    # is neither computed nor stamped. match_number is still backfilled.
+    report = await apply_knockout_resolution(
+        session, competition, dry_run=False, resolve_r32=False
+    )
+    assert report.groups_complete is True
+    assert report.r32_resolved is False
+    assert not (set(range(73, 89)) & set(report.matchups.keys())), "no R32 pairs"
+
+    r32_rows = (
+        await session.execute(select(Fixture).where(Fixture.stage == "round_of_32"))
+    ).scalars().all()
+    assert all(f.home_team.startswith("slot:") for f in r32_rows), "R32 untouched"
+    assert all(
+        f.match_number == MATCH_NUMBER_BY_EXTERNAL_ID[f.external_id] for f in r32_rows
+    ), "match_number still backfilled"
+
+    # The admin performs the manual R32 apply (default resolve_r32=True).
+    await apply_knockout_resolution(session, competition, dry_run=False)
+    r32_rows = (
+        await session.execute(select(Fixture).where(Fixture.stage == "round_of_32"))
+    ).scalars().all()
+    assert all(not f.home_team.startswith("slot:") for f in r32_rows), "R32 now real"
+
+    # R32 matches finish (home wins each).
+    r32_winner_by_match: dict[int, str] = {}
+    for f in r32_rows:
+        mn = MATCH_NUMBER_BY_EXTERNAL_ID[f.external_id]
+        f.status = MatchStatus.FINISHED
+        session.add(Score(fixture=f, home_score=2, away_score=1, source=ScoreSource.API))
+        r32_winner_by_match[mn] = f.home_team
+    await session.commit()
+
+    # Auto-mode again: R16 auto-resolves from the R32 results; R32 left as-is.
+    report = await apply_knockout_resolution(
+        session, competition, dry_run=False, resolve_r32=False
+    )
+    assert report.r32_resolved is False  # still never re-touches R32
+    r16_rows = {
+        MATCH_NUMBER_BY_EXTERNAL_ID[f.external_id]: f
+        for f in (
+            await session.execute(select(Fixture).where(Fixture.stage == "round_of_16"))
+        ).scalars().all()
+    }
+    assert set(r16_rows.keys()) == set(range(89, 97))
+    for mn, (fh, fa) in R16_FEEDS.items():
+        assert (r16_rows[mn].home_team, r16_rows[mn].away_team) == (
+            r32_winner_by_match[fh],
+            r32_winner_by_match[fa],
+        ), f"R16 match {mn} not auto-resolved"
+
+
 async def test_no_op_when_no_competition_rows(session, competition) -> None:
     """No knockout rows at all → empty report, no error."""
     await _seed_finished_groups(session, competition)
