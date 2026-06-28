@@ -49,6 +49,11 @@ class ExternalScore:
     away_score: int | None
     status: MatchStatus
     minute: int | None = None
+    # Match period (soccer): 1/2 = halves (regulation), 3/4 = extra time,
+    # 5 = shootout. >2 means the match went PAST regulation — used to freeze
+    # the 90-minute score for knockout grading (ESPN folds ET into the running
+    # total). None when the provider doesn't expose it (Football-Data).
+    period: int | None = None
     home_score_et: int | None = None
     away_score_et: int | None = None
     home_penalties: int | None = None
@@ -169,6 +174,8 @@ class EspnScoreProvider(ScoreProviderBase):
                 return None
             shootout_home = home.get("shootoutScore")
             shootout_away = away.get("shootoutScore")
+            raw_period = comp.get("status", {}).get("period")
+            period = int(raw_period) if isinstance(raw_period, (int, float)) else None
             return ExternalScore(
                 external_id="",
                 home_team=canonical_team_name(home.get("team", {}).get("displayName", "")),
@@ -177,6 +184,7 @@ class EspnScoreProvider(ScoreProviderBase):
                 away_score=int(away.get("score") or 0),
                 status=status,
                 minute=parse_minute(comp.get("status", {}).get("displayClock")),
+                period=period,
                 home_penalties=int(shootout_home) if shootout_home is not None else None,
                 away_penalties=int(shootout_away) if shootout_away is not None else None,
                 # ESPN's score is one running total (ET goals folded in) —

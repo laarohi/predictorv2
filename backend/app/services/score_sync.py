@@ -9,6 +9,7 @@ Returns counts + errors as a dataclass (no FastAPI types here).
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -20,6 +21,8 @@ from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
 from app.models.score import Score, ScoreSource
 from app.services.external_scores import ExternalScore, get_score_provider
+
+logger = logging.getLogger(__name__)
 from app.services.leaderboard import invalidate_cache
 
 
@@ -202,6 +205,63 @@ _SCORE_BEARING_STATUSES = frozenset(
 )
 
 
+def _score_fields_for(
+    fixture: Fixture, ext: ExternalScore, existing: Score | None
+) -> tuple[int, int, int | None, int | None, int | None, int | None]:
+    """Compute (home, away, home_et, away_et, home_pen, away_pen) to persist,
+    applying the 90-minute freeze for knockout extra time.
+
+    Knockout SCORE grading is on the 90-minute result (`Score.regulation_outcome`
+    = home_score vs away_score). ESPN, our live source, reports ONE running total
+    with extra-time goals folded into home_score/away_score and exposes no 90'
+    split — only the period (>2 once the match passes regulation). So once a
+    knockout fixture is past regulation we must NOT overwrite home_score/
+    away_score (they hold the 90' result captured on the last regulation tick);
+    the running total becomes the after-ET score in *_et instead, and the
+    shootout (if any) sits in penalties. `outcome` then still resolves
+    advancement via ET → penalties, while regulation grading stays true to 90'.
+
+    Providers that already split ET themselves (Football-Data) carry period=None
+    and an explicit *_et, so they take the normal path untouched.
+    """
+    past_regulation = (
+        fixture.stage != "group"
+        and ext.period is not None
+        and ext.period > 2
+    )
+    if not past_regulation:
+        return (
+            ext.home_score,
+            ext.away_score,
+            ext.home_score_et,
+            ext.away_score_et,
+            ext.home_penalties,
+            ext.away_penalties,
+        )
+
+    # Past regulation with a running-total provider. Freeze the 90' score at
+    # whatever was captured during regulation; the running total is post-ET.
+    if existing is not None:
+        reg_home, reg_away = existing.home_score, existing.away_score
+    else:
+        # Never observed this match during regulation (a polling gap) — we have
+        # no true 90' score. Best effort: keep the running total, and flag it so
+        # the admin can correct via the manual Score editor.
+        reg_home, reg_away = ext.home_score, ext.away_score
+        logger.warning(
+            "score_sync: knockout fixture %s first seen past regulation "
+            "(period=%s) — no captured 90' score; using running total %s-%s, "
+            "admin should verify",
+            fixture.id, ext.period, ext.home_score, ext.away_score,
+        )
+
+    # Prefer a provider-supplied ET split if present (FD); else the running
+    # total IS the after-ET score.
+    home_et = ext.home_score_et if ext.home_score_et is not None else ext.home_score
+    away_et = ext.away_score_et if ext.away_score_et is not None else ext.away_score
+    return (reg_home, reg_away, home_et, away_et, ext.home_penalties, ext.away_penalties)
+
+
 async def _apply_external_score(
     session: AsyncSession,
     competition_id,
@@ -262,28 +322,32 @@ async def _apply_external_score(
     score_q = await session.execute(select(Score).where(Score.fixture_id == fixture.id))
     score = score_q.scalar_one_or_none()
 
+    home, away, home_et, away_et, home_pen, away_pen = _score_fields_for(
+        fixture, ext, score
+    )
+
     if score is None:
         session.add(
             Score(
                 fixture_id=fixture.id,
-                home_score=ext.home_score,
-                away_score=ext.away_score,
-                home_score_et=ext.home_score_et,
-                away_score_et=ext.away_score_et,
-                home_penalties=ext.home_penalties,
-                away_penalties=ext.away_penalties,
+                home_score=home,
+                away_score=away,
+                home_score_et=home_et,
+                away_score_et=away_et,
+                home_penalties=home_pen,
+                away_penalties=away_pen,
                 source=ScoreSource.API,
             )
         )
         result.synced += 1
         return None if needs_resolution else fixture.id
 
-    score.home_score = ext.home_score
-    score.away_score = ext.away_score
-    score.home_score_et = ext.home_score_et
-    score.away_score_et = ext.away_score_et
-    score.home_penalties = ext.home_penalties
-    score.away_penalties = ext.away_penalties
+    score.home_score = home
+    score.away_score = away
+    score.home_score_et = home_et
+    score.away_score_et = away_et
+    score.home_penalties = home_pen
+    score.away_penalties = away_pen
     score.source = ScoreSource.API
     score.updated_at = utc_now()
     result.updated += 1
