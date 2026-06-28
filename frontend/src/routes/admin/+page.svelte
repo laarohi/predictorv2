@@ -23,6 +23,7 @@
 		getPaidLocal,
 		syncScores,
 		sendPhase1TestReceipt,
+		sendPhase2TestReceipt,
 		updateScore,
 		resolveKnockoutFixtures,
 		getPhase2PredictionStatus,
@@ -104,6 +105,21 @@
 			receiptError = e instanceof Error ? e.message : 'Failed to send test receipt';
 		} finally {
 			sendingReceipt = false;
+		}
+	}
+
+	// Phase 2 bracket receipt — same self-test, shared result display.
+	let sendingReceipt2 = false;
+	async function handleSendPhase2TestReceipt() {
+		sendingReceipt2 = true;
+		receiptError = null;
+		receiptResult = null;
+		try {
+			receiptResult = await sendPhase2TestReceipt();
+		} catch (e) {
+			receiptError = e instanceof Error ? e.message : 'Failed to send test receipt';
+		} finally {
+			sendingReceipt2 = false;
 		}
 	}
 
@@ -813,12 +829,17 @@
 						</div>
 					{/if}
 					<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); letter-spacing: 0.06em; margin-bottom: 12px;">
-						Sends YOUR Phase 1 receipt to YOUR email — for previewing the format. Doesn't affect other users.
-						Run before the real deadline to validate Resend, DKIM/SPF/DMARC, and Gmail inbox placement.
+						Sends YOUR receipt to YOUR email — for previewing the format. Doesn't affect other users.
+						Run before each deadline to validate Resend, DKIM/SPF/DMARC, and Gmail inbox placement.
 					</p>
-					<button class="pn-btn navy" type="button" on:click={handleSendTestReceipt} disabled={sendingReceipt}>
-						{sendingReceipt ? 'Sending…' : 'Send test receipt to me'}
-					</button>
+					<div style="display: flex; gap: 8px; flex-wrap: wrap;">
+						<button class="pn-btn navy" type="button" on:click={handleSendTestReceipt} disabled={sendingReceipt}>
+							{sendingReceipt ? 'Sending…' : 'Phase 1 receipt to me'}
+						</button>
+						<button class="pn-btn navy" type="button" on:click={handleSendPhase2TestReceipt} disabled={sendingReceipt2}>
+							{sendingReceipt2 ? 'Sending…' : 'Phase 2 bracket receipt to me'}
+						</button>
+					</div>
 				</div>
 			</section>
 

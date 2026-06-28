@@ -30,7 +30,7 @@ from app.services.knockout_resolver import (
     apply_knockout_resolution,
 )
 from app.services.leaderboard import invalidate_cache
-from app.services.receipts import build_phase1_receipt
+from app.services.receipts import build_phase1_receipt, build_phase2_bracket_receipt
 from app.services.score_sync import sync_scores_once
 
 
@@ -947,6 +947,41 @@ async def send_phase1_test_receipt(
     fires at phase1_deadline) is separate and will be wired later.
     """
     receipt = await build_phase1_receipt(session, admin)
+    try:
+        result = await send_email(
+            to=admin.email,
+            subject=receipt.subject,
+            html=receipt.html,
+            text=receipt.text,
+        )
+    except EmailSendError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Email send failed: {e}",
+        )
+
+    return TestReceiptResponse(
+        status="skipped" if not result.ok else "sent",
+        message_id=result.message_id,
+        sent_to=admin.email,
+        subject=receipt.subject,
+    )
+
+
+@router.post("/receipts/test/phase2", response_model=TestReceiptResponse)
+async def send_phase2_test_receipt(
+    session: DbSession,
+    admin: AdminUser,
+) -> TestReceiptResponse:
+    """Send the admin a copy of their own Phase 2 knockout-bracket receipt — for
+    previewing the email + verifying Resend wiring before the bracket deadline.
+
+    Always sends to the calling admin; writes no idempotency row (fire freely to
+    iterate). The production trigger is the scheduler tick that fires at
+    phase2_bracket_deadline. If the admin has no bracket of their own it still
+    sends (the empty-bracket layout is part of what we're previewing).
+    """
+    receipt, _has_bracket = await build_phase2_bracket_receipt(session, admin)
     try:
         result = await send_email(
             to=admin.email,

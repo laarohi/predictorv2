@@ -224,6 +224,10 @@ export async function sendPhase1TestReceipt(): Promise<TestReceiptResponse> {
 	return api.post<TestReceiptResponse>('/admin/receipts/test/phase1');
 }
 
+export async function sendPhase2TestReceipt(): Promise<TestReceiptResponse> {
+	return api.post<TestReceiptResponse>('/admin/receipts/test/phase2');
+}
+
 // ---- Manual match results -------------------------------------------------
 
 export interface ScoreUpdatePayload {
