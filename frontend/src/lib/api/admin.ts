@@ -153,6 +153,35 @@ export async function resolveKnockoutFixtures(dryRun = true): Promise<ResolveKno
 	return api.post<ResolveKnockoutResponse>(`/admin/fixtures/resolve-knockout?dry_run=${dryRun}`);
 }
 
+// ---- Phase 2 prediction-status roster --------------------------------------
+
+export interface Phase2UserStatus {
+	user_id: string;
+	name: string;
+	paid: boolean;
+	bracket_filled: number;
+	bracket_total: number;
+	bracket_status: 'complete' | 'partial' | 'none';
+	scores_filled: number;
+	scores_total: number;
+}
+
+export interface Phase2StatusResponse {
+	is_phase2_active: boolean;
+	bracket_deadline: string | null;
+	bracket_total: number;
+	knockout_fixture_count: number;
+	bracket_not_started: number;
+	bracket_complete: number;
+	users: Phase2UserStatus[];
+}
+
+/** Per-player Phase 2 completion (bracket + KO scores). Counts only — the
+ *  actual picks are never returned, so the blind pool is untouched. */
+export async function getPhase2PredictionStatus(): Promise<Phase2StatusResponse> {
+	return api.get<Phase2StatusResponse>('/admin/phase2/prediction-status');
+}
+
 export type AuditEventKind = 'match' | 'team' | 'bonus';
 export type AuditEventAction = 'insert' | 'update' | 'delete' | 'lock';
 

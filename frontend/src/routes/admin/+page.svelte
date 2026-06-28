@@ -25,13 +25,16 @@
 		sendPhase1TestReceipt,
 		updateScore,
 		resolveKnockoutFixtures,
+		getPhase2PredictionStatus,
 		type AdminStats,
 		type CompetitionAdminView,
 		type UserAdminView,
 		type SyncScoresResponse,
 		type TestReceiptResponse,
 		type ScoreUpdatePayload,
-		type ResolveKnockoutResponse
+		type ResolveKnockoutResponse,
+		type Phase2StatusResponse,
+		type Phase2UserStatus
 	} from '$lib/api/admin';
 	import { getAllFixtures } from '$api/fixtures';
 	import type { Fixture } from '$types';
@@ -75,6 +78,11 @@
 	let resolvingKnockout = false;
 	let knockoutError: string | null = null;
 	let knockoutSuccess: string | null = null;
+
+	// Phase 2 prediction-status roster (who's filled bracket + KO scores).
+	let phase2Status: Phase2StatusResponse | null = null;
+	let phase2StatusLoading = false;
+	let phase2StatusError: string | null = null;
 
 	let syncing = false;
 	let syncResult: SyncScoresResponse | null = null;
@@ -359,6 +367,7 @@
 		adminDataRequested = true;
 		loadData();
 		loadBonusAnswers();
+		loadPhase2Status();
 	}
 
 	async function loadData() {
@@ -376,6 +385,29 @@
 		} finally {
 			loading = false;
 		}
+	}
+
+	async function loadPhase2Status() {
+		phase2StatusLoading = true;
+		phase2StatusError = null;
+		try {
+			phase2Status = await getPhase2PredictionStatus();
+		} catch (e) {
+			phase2StatusError = e instanceof Error ? e.message : 'Failed to load Phase 2 status';
+		} finally {
+			phase2StatusLoading = false;
+		}
+	}
+
+	function p2BadgeStyle(status: string): string {
+		if (status === 'none') return 'background: rgba(200,40,31,.12); color: var(--red);';
+		if (status === 'complete') return 'background: rgba(27,108,62,.15); color: var(--green);';
+		return 'background: rgba(212,154,46,.20); color: #8a5a12;';
+	}
+	function p2BadgeText(u: Phase2UserStatus): string {
+		if (u.bracket_status === 'none') return 'Not started';
+		if (u.bracket_status === 'complete') return `✓ ${u.bracket_filled}/${u.bracket_total}`;
+		return `${u.bracket_filled}/${u.bracket_total}`;
 	}
 
 	async function handleSyncScores() {
@@ -920,6 +952,50 @@
 						{:else}
 							<p style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.06em;">No matchups resolvable yet — complete the group stage first.</p>
 						{/if}
+					{/if}
+				</div>
+			</section>
+
+			<!-- Phase 2 prediction status -->
+			<section class="pn-pf-section">
+				<div class="h">
+					<span>Phase 2 prediction status</span>
+					<span class="right">{#if phase2Status}{phase2Status.bracket_not_started} not started{/if}</span>
+				</div>
+				<div class="body">
+					<p style="font-family: var(--body); font-size: 13px; color: var(--ink-2); margin: 0 0 12px; line-height: 1.5;">
+						Who's filled their Phase 2 <b>bracket</b> ({phase2Status?.bracket_total ?? 31} picks) and per-match knockout <b>scores</b>. Completion counts only — the picks themselves stay blind. Players to chase are listed first.
+					</p>
+					{#if phase2StatusError}<div class="pn-pf-alert error" style="margin-bottom: 12px;">{phase2StatusError}</div>{/if}
+					<div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px;">
+						<button class="pn-btn" type="button" on:click={loadPhase2Status} disabled={phase2StatusLoading}>
+							{phase2StatusLoading ? 'Refreshing…' : 'Refresh'}
+						</button>
+						{#if phase2Status}
+							<span style="font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 4px; background: rgba(200,40,31,.12); color: var(--red);">{phase2Status.bracket_not_started} not started</span>
+							<span style="font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 4px; background: rgba(212,154,46,.20); color: #8a5a12;">{phase2Status.users.length - phase2Status.bracket_not_started - phase2Status.bracket_complete} partial</span>
+							<span style="font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 3px 9px; border-radius: 4px; background: rgba(27,108,62,.15); color: var(--green);">{phase2Status.bracket_complete} complete</span>
+							{#if phase2Status.bracket_deadline}
+								<span style="font-family: var(--mono); font-size: 11px; color: var(--ink-3); margin-left: auto;">Bracket locks {new Date(phase2Status.bracket_deadline).toLocaleString()}</span>
+							{/if}
+						{/if}
+					</div>
+					{#if phase2Status}
+						<div style="display: grid; grid-template-columns: 1fr auto auto; gap: 0 18px; align-items: center;">
+							<div style="font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding-bottom: 6px; border-bottom: 2px solid var(--ink);">Player</div>
+							<div style="font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding-bottom: 6px; border-bottom: 2px solid var(--ink); text-align: center;">Bracket</div>
+							<div style="font-family: var(--mono); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); padding-bottom: 6px; border-bottom: 2px solid var(--ink); text-align: right;">KO scores</div>
+							{#each phase2Status.users as u (u.user_id)}
+								<div style="font-family: var(--body); font-size: 13px; color: var(--ink); padding: 6px 0; border-bottom: 1px dashed var(--paper-3); display: flex; align-items: center; gap: 6px;">
+									{u.name}
+									{#if !u.paid}<span style="font-size: 9px; color: var(--ink-3); border: 1px solid var(--paper-3); border-radius: 3px; padding: 0 3px;">unpaid</span>{/if}
+								</div>
+								<div style="padding: 6px 0; border-bottom: 1px dashed var(--paper-3); text-align: center;">
+									<span style="font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; white-space: nowrap; {p2BadgeStyle(u.bracket_status)}">{p2BadgeText(u)}</span>
+								</div>
+								<div style="padding: 6px 0; border-bottom: 1px dashed var(--paper-3); text-align: right; font-family: var(--mono); font-size: 12px; color: {u.scores_filled === 0 ? 'var(--ink-3)' : 'var(--ink)'};">{u.scores_filled}/{u.scores_total}</div>
+							{/each}
+						</div>
 					{/if}
 				</div>
 			</section>

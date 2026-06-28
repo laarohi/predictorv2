@@ -13,7 +13,7 @@ from app.models._datetime import aware_utc, utc_now
 from app.models.bonus import BonusAnswer
 from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
-from app.models.prediction import MatchPrediction
+from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.score import Score, ScoreSource
 from app.models.user import User
 from app.services.audit_log import build_user_history
@@ -490,6 +490,129 @@ async def update_phase2_deadline(
         "status": "Phase 2 deadline updated",
         "bracket_deadline": request.bracket_deadline.isoformat(),
     }
+
+
+# Phase 2 bracket = R16 onward: round_of_16(16) + QF(8) + SF(4) + final(2) +
+# winner(1). The R32 entrants are known facts (not stored), so a complete
+# Phase 2 bracket is exactly 31 TeamPrediction rows.
+_PHASE2_BRACKET_TOTAL = 31
+
+
+class Phase2UserStatus(BaseModel):
+    user_id: uuid.UUID
+    name: str
+    paid: bool
+    bracket_filled: int
+    bracket_total: int
+    bracket_status: str  # "complete" | "partial" | "none"
+    scores_filled: int
+    scores_total: int
+
+
+class Phase2StatusResponse(BaseModel):
+    is_phase2_active: bool
+    bracket_deadline: datetime | None
+    bracket_total: int
+    knockout_fixture_count: int
+    bracket_not_started: int
+    bracket_complete: int
+    users: list[Phase2UserStatus]
+
+
+@router.get("/phase2/prediction-status", response_model=Phase2StatusResponse)
+async def get_phase2_prediction_status(
+    session: DbSession,
+    _admin: AdminUser,
+) -> Phase2StatusResponse:
+    """Per-player Phase 2 completion (who's filled their bracket + KO scores).
+
+    Returns COMPLETION COUNTS only — never the picks themselves — so the
+    blind pool is untouched. Players are sorted not-started → partial →
+    complete so the admin can chase stragglers from the top of the list.
+    """
+    competition = (
+        await session.execute(select(Competition).where(Competition.is_active == True))  # noqa: E712
+    ).scalar_one_or_none()
+
+    # Scores denominator: knockout fixtures whose teams are resolved (a player
+    # can only predict a match once its real teams are known).
+    knockout_fixture_count = (
+        await session.scalar(
+            select(func.count(Fixture.id)).where(
+                Fixture.stage != "group",
+                Fixture.home_team.not_like("slot:%"),
+            )
+        )
+    ) or 0
+
+    # Bracket fill per user = count of Phase 2 TeamPrediction rows.
+    bracket_rows = (
+        await session.execute(
+            select(TeamPrediction.user_id, func.count(TeamPrediction.id))
+            .where(TeamPrediction.phase == PredictionPhase.PHASE_2)
+            .group_by(TeamPrediction.user_id)
+        )
+    ).all()
+    bracket_by_user = {uid: n for uid, n in bracket_rows}
+
+    # KO score fill per user = Phase 2 MatchPredictions on knockout fixtures.
+    score_rows = (
+        await session.execute(
+            select(MatchPrediction.user_id, func.count(MatchPrediction.id))
+            .join(Fixture, Fixture.id == MatchPrediction.fixture_id)
+            .where(
+                Fixture.stage != "group",
+                MatchPrediction.phase == PredictionPhase.PHASE_2,
+            )
+            .group_by(MatchPrediction.user_id)
+        )
+    ).all()
+    score_by_user = {uid: n for uid, n in score_rows}
+
+    users = (
+        await session.execute(
+            select(User)
+            .where(User.is_ghost == False, User.is_active == True)  # noqa: E712
+            .order_by(User.name)
+        )
+    ).scalars().all()
+
+    statuses: list[Phase2UserStatus] = []
+    not_started = complete = 0
+    for u in users:
+        bf = bracket_by_user.get(u.id, 0)
+        bracket_status = (
+            "complete" if bf >= _PHASE2_BRACKET_TOTAL else "partial" if bf > 0 else "none"
+        )
+        if bracket_status == "none":
+            not_started += 1
+        elif bracket_status == "complete":
+            complete += 1
+        statuses.append(
+            Phase2UserStatus(
+                user_id=u.id,
+                name=u.name,
+                paid=bool(u.paid),
+                bracket_filled=min(bf, _PHASE2_BRACKET_TOTAL),
+                bracket_total=_PHASE2_BRACKET_TOTAL,
+                bracket_status=bracket_status,
+                scores_filled=score_by_user.get(u.id, 0),
+                scores_total=knockout_fixture_count,
+            )
+        )
+
+    order = {"none": 0, "partial": 1, "complete": 2}
+    statuses.sort(key=lambda s: (order[s.bracket_status], s.name.lower()))
+
+    return Phase2StatusResponse(
+        is_phase2_active=bool(competition and competition.is_phase2_active),
+        bracket_deadline=competition.phase2_bracket_deadline if competition else None,
+        bracket_total=_PHASE2_BRACKET_TOTAL,
+        knockout_fixture_count=knockout_fixture_count,
+        bracket_not_started=not_started,
+        bracket_complete=complete,
+        users=statuses,
+    )
 
 
 @router.post("/competition/phase1/deadline")
