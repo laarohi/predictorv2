@@ -584,3 +584,253 @@ async def send_phase1_receipts(
         counts["sent"] += 1
 
     return BatchSendResult(**counts)
+
+
+# ── Phase 2 knockout-bracket receipt ─────────────────────────────────────────
+#
+# Sent when `phase2_bracket_deadline` passes — the inbox-archived snapshot of
+# each player's LOCKED knockout bracket (who advances from R16 → Winner). Same
+# dispute-prevention purpose as the Phase 1 receipt. Bracket only: KO match
+# *scores* lock per-match at each kickoff, not at this single deadline.
+
+DEADLINE_KIND_PHASE_2_BRACKET = "phase2_bracket"
+
+
+async def _load_phase2_bracket_predictions(
+    session: AsyncSession, user_id: uuid.UUID
+) -> list[TeamPrediction]:
+    """The user's Phase 2 (knockout re-pick) bracket rows."""
+    result = await session.execute(
+        select(TeamPrediction)
+        .where(TeamPrediction.user_id == user_id)
+        .where(TeamPrediction.phase == PredictionPhase.PHASE_2)
+    )
+    return list(result.scalars().all())
+
+
+async def build_phase2_bracket_receipt(
+    session: AsyncSession, user: User
+) -> tuple[Receipt, bool]:
+    """Build the user's Phase 2 knockout-bracket receipt.
+
+    Returns ``(receipt, has_bracket)``. ``has_bracket`` is False only when the
+    user has NEITHER a Phase 2 bracket NOR a Phase 1 bracket to carry over —
+    the batch sender skips those (an empty "you predicted nothing" email is
+    noise in a friend group).
+
+    Mirrors the read-time scoring fallback EXACTLY: if the user re-picked (>=1
+    Phase 2 row) we show that; otherwise their Phase 1 bracket carries over and
+    is what actually gets scored, so the receipt shows that bracket with a clear
+    note. Either way the email reflects the truth of what's locked.
+    """
+    phase2_rows = await _load_phase2_bracket_predictions(session, user.id)
+    if phase2_rows:
+        bracket_rows, carried_over = phase2_rows, False
+    else:
+        bracket_rows = await _load_bracket_predictions(session, user.id)
+        carried_over = True
+
+    has_bracket = len(bracket_rows) > 0
+    rendered_at = datetime.now(timezone.utc)
+    subject = "Your World Cup 2026 knockout bracket — locked in"
+    html = _render_phase2_html(user, bracket_rows, carried_over, rendered_at)
+    text = _render_phase2_text(user, bracket_rows, carried_over, rendered_at)
+    return Receipt(subject=subject, html=html, text=text), has_bracket
+
+
+def _phase2_note(carried_over: bool) -> str:
+    if carried_over:
+        return (
+            "You didn't update your bracket after the group stage, so your "
+            "original Phase 1 bracket carries over — this is what will be scored."
+        )
+    return "This is your updated knockout bracket, re-picked against the real Round of 32."
+
+
+def _render_phase2_html(
+    user: User,
+    bracket_rows: list[TeamPrediction],
+    carried_over: bool,
+    rendered_at: datetime,
+) -> str:
+    bracket_html = _html_bracket_section(bracket_rows)
+    rendered_at_str = rendered_at.strftime("%Y-%m-%d %H:%M UTC")
+    note = _phase2_note(carried_over)
+
+    return f"""\
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Your World Cup 2026 knockout bracket — locked in</title>
+</head>
+<body style="margin:0; padding:0; background:{PAPER}; font-family:'Helvetica Neue',Helvetica,Arial,sans-serif; color:{INK};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{PAPER};">
+    <tr>
+      <td align="center" style="padding:24px 12px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px; background:{PAPER}; border:2px solid {INK};">
+          <tr>
+            <td style="padding:18px 22px 14px; border-bottom:2px solid {INK}; background:{PAPER_2};">
+              <div style="font-size:11px; letter-spacing:0.1em; text-transform:uppercase; color:{INK_3};">CxF Predict<span style="color:#d49a2e;">aa</span> · World Cup 2026 · Phase II</div>
+              <div style="font-family:'Archivo Black','Helvetica Neue',Helvetica,Arial,sans-serif; font-size:24px; line-height:1.2; margin-top:4px; letter-spacing:0.01em;">Your knockout bracket is locked in</div>
+              <div style="font-size:13px; color:{INK_2}; margin-top:6px;">Hi {_esc(user.name)}, here's a record of the knockout bracket you have locked for the rest of the tournament.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 22px;">
+              <p style="margin:0 0 14px; font-size:14px; line-height:1.5; color:{INK_2};">
+                {note} <strong>The bracket deadline has passed</strong>, so these advancement picks are final — reply to this email immediately if anything looks wrong. (Knockout match <em>scores</em> are separate and lock per match, 15 minutes before each kickoff.)
+              </p>
+              <div style="font-size:12px; font-family:'IBM Plex Mono',Menlo,Consolas,monospace; color:{INK_3}; margin-bottom:8px;">
+                {len(bracket_rows)} bracket pick{"s" if len(bracket_rows) != 1 else ""} · sent {rendered_at_str}
+              </div>
+            </td>
+          </tr>
+          {bracket_html}
+          <tr>
+            <td style="padding:14px 22px 22px; border-top:2px solid {INK}; background:{PAPER_2}; font-size:11px; color:{INK_3}; letter-spacing:0.03em;">
+              You're receiving this because you registered for CxF Predictaa.
+              <div style="margin-top:6px;"><a href="https://predictor.laarohi.xyz" style="color:{INK_2};">predictor.laarohi.xyz</a></div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>"""
+
+
+def _render_phase2_text(
+    user: User,
+    bracket_rows: list[TeamPrediction],
+    carried_over: bool,
+    rendered_at: datetime,
+) -> str:
+    rendered_at_str = rendered_at.strftime("%Y-%m-%d %H:%M UTC")
+    lines = [
+        "CxF PREDICTAA — WORLD CUP 2026 — PHASE II",
+        "Your knockout bracket is locked in",
+        "",
+        f"Hi {user.name},",
+        "",
+        _phase2_note(carried_over),
+        "The bracket deadline has passed, so these advancement picks are final.",
+        "Reply to this email immediately if anything looks wrong. (Knockout",
+        "match scores are separate and lock per match, 15 min before kickoff.)",
+        "",
+        f"{len(bracket_rows)} bracket pick{'s' if len(bracket_rows) != 1 else ''} · sent {rendered_at_str}",
+        "",
+        "-" * 40,
+        "KNOCKOUT BRACKET",
+        "-" * 40,
+    ]
+    if not bracket_rows:
+        lines.append("(none submitted)")
+    else:
+        by_stage: dict[str, list[str]] = {}
+        winner: str | None = None
+        for pred in bracket_rows:
+            if pred.stage == "winner":
+                winner = pred.team
+            else:
+                by_stage.setdefault(pred.stage, []).append(pred.team)
+        for stage_key in BRACKET_STAGES_IN_ORDER:
+            teams = by_stage.get(stage_key, [])
+            if teams:
+                lines.append(f"  {STAGE_LABELS[stage_key]}: {', '.join(sorted(teams))}")
+        if winner:
+            lines.append(f"  WINNER: {winner}")
+
+    lines += ["", "-" * 40, "predictor.laarohi.xyz", ""]
+    return "\n".join(lines)
+
+
+async def send_phase2_bracket_receipts(
+    session: AsyncSession, competition: Competition
+) -> BatchSendResult:
+    """Send the Phase 2 knockout-bracket receipt to every active user who has a
+    bracket (re-picked OR carried-over Phase 1), idempotent via `email_sends`
+    for (user, competition, "phase2_bracket").
+
+    Same structure as send_phase1_receipts: per-user commit of the idempotency
+    row, transient failures left un-committed for the next tick to retry.
+    """
+    users_result = await session.execute(
+        select(User)
+        .where(User.is_active == True, User.is_ghost == False)  # noqa: E712
+        .order_by(User.id)
+    )
+    users = list(users_result.scalars().all())
+
+    sent_result = await session.execute(
+        select(EmailSend.user_id)
+        .where(EmailSend.competition_id == competition.id)
+        .where(EmailSend.deadline_kind == DEADLINE_KIND_PHASE_2_BRACKET)
+    )
+    already_sent_user_ids = {row for row in sent_result.scalars().all()}
+
+    allowlist = _parse_allowlist(get_settings().email_to_allowlist)
+    if allowlist is not None:
+        logger.warning(
+            "send_phase2_bracket_receipts: EMAIL_TO_ALLOWLIST is active — sends "
+            "restricted to %d address(es)",
+            len(allowlist),
+        )
+
+    counts = {
+        "sent": 0,
+        "skipped_already_sent": 0,
+        "skipped_no_predictions": 0,
+        "skipped_no_api_key": 0,
+        "skipped_not_in_allowlist": 0,
+        "failed": 0,
+    }
+
+    for user in users:
+        if user.id in already_sent_user_ids:
+            counts["skipped_already_sent"] += 1
+            continue
+
+        if allowlist is not None and user.email.lower() not in allowlist:
+            counts["skipped_not_in_allowlist"] += 1
+            continue
+
+        receipt, has_bracket = await build_phase2_bracket_receipt(session, user)
+        if not has_bracket:
+            counts["skipped_no_predictions"] += 1
+            continue
+
+        try:
+            result = await send_email(
+                to=user.email,
+                subject=receipt.subject,
+                html=receipt.html,
+                text=receipt.text,
+            )
+        except EmailSendError as e:
+            logger.error(
+                "send_phase2_bracket_receipts failed for user_id=%s email=%s: %s",
+                user.id, user.email, e,
+            )
+            counts["failed"] += 1
+            continue
+
+        if result.message_id == EMAIL_SKIPPED:
+            counts["skipped_no_api_key"] += 1
+            logger.warning("send_phase2_bracket_receipts: RESEND_API_KEY blank, aborting batch")
+            break
+
+        session.add(
+            EmailSend(
+                user_id=user.id,
+                competition_id=competition.id,
+                deadline_kind=DEADLINE_KIND_PHASE_2_BRACKET,
+                resend_message_id=result.message_id,
+            )
+        )
+        await session.commit()
+        counts["sent"] += 1
+
+    return BatchSendResult(**counts)

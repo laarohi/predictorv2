@@ -21,11 +21,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import get_settings
 from app.database import async_session_maker
-from app.models._datetime import utc_now
+from app.models._datetime import aware_utc, utc_now
 from app.services.knockout_resolver import apply_knockout_resolution
 from app.services.leaderboard import invalidate_cache
 from app.services.locking import get_active_competition
-from app.services.receipts import send_phase1_receipts
+from app.services.receipts import send_phase1_receipts, send_phase2_bracket_receipts
 from app.services.push_triggers import (
     send_daily_drop_notification,
     send_knockout_lock_reminders,
@@ -118,6 +118,11 @@ async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> No
         except Exception:  # noqa: BLE001
             logger.exception("score_scheduler: phase1 receipt tick failed")
 
+        try:
+            await _maybe_send_phase2_bracket_receipts(session)
+        except Exception:  # noqa: BLE001
+            logger.exception("score_scheduler: phase2 bracket receipt tick failed")
+
         # Push-notification triggers — each guarded so one failure can't skip
         # the others. Results run after the score sync above so a match that
         # just finished this tick is picked up immediately.
@@ -172,6 +177,40 @@ async def _maybe_send_phase1_receipts(session: AsyncSession) -> None:
     if result.sent or result.failed:
         logger.info(
             "score_scheduler: phase1 receipts — sent=%d failed=%d "
+            "skipped_already_sent=%d skipped_no_predictions=%d "
+            "skipped_no_api_key=%d skipped_not_in_allowlist=%d",
+            result.sent, result.failed,
+            result.skipped_already_sent, result.skipped_no_predictions,
+            result.skipped_no_api_key, result.skipped_not_in_allowlist,
+        )
+
+
+async def _maybe_send_phase2_bracket_receipts(session: AsyncSession) -> None:
+    """Gate the Phase 2 knockout-bracket receipt on the bracket deadline.
+
+    Four conditions must hold:
+      - There is an active competition.
+      - Phase 2 is active.
+      - It has a phase2_bracket_deadline set.
+      - That deadline is in the past.
+
+    aware_utc() wraps the deadline because aiosqlite drops tzinfo on read —
+    the same defensive compare used by is_phase2_bracket_locked. The batch
+    function is idempotent (email_sends), so re-running every tick after the
+    deadline no-ops once everyone with a bracket has been sent.
+    """
+    competition = await get_active_competition(session)
+    if not competition or not competition.is_phase2_active:
+        return
+    if not competition.phase2_bracket_deadline:
+        return
+    if utc_now() < aware_utc(competition.phase2_bracket_deadline):
+        return
+
+    result = await send_phase2_bracket_receipts(session, competition)
+    if result.sent or result.failed:
+        logger.info(
+            "score_scheduler: phase2 bracket receipts — sent=%d failed=%d "
             "skipped_already_sent=%d skipped_no_predictions=%d "
             "skipped_no_api_key=%d skipped_not_in_allowlist=%d",
             result.sent, result.failed,

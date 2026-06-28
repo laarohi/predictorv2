@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 #
-# Daily Postgres backup → Cloudflare R2.
+# Postgres backup → Cloudflare R2.
 # Runs on the VPS host (not in a container). Designed for cron:
 #   0 3 * * * /home/luke/predictorv2/ops/backup-db.sh >> /home/luke/predictor-backup.log 2>&1
+#
+# Usage:
+#   backup-db.sh                 # daily backup → bucket root, pruned after 14d
+#   backup-db.sh phase2-deadline # PINNED one-off → pinned/ prefix, never pruned
+#
+# A label (arg 1, [a-z0-9-]) marks a permanent safety-net snapshot for a known
+# moment (e.g. a phase deadline): it lands under pinned/ and is exempt from the
+# retention prune. The daily prune also excludes pinned/, so those stay forever.
 #
 # Reads R2_* and DATABASE_PASSWORD from ../.env (the prod .env beside docker-compose.yml).
 # Requires: docker, rclone, gzip (all on the VPS host).
@@ -47,13 +55,28 @@ export RCLONE_CONFIG_R2_ACL=private
 # See https://forum.rclone.org/t/cannot-copy-to-cloudflare-r2-using-copy-failed-to-copy-forbidden-status-code-403-request-id-host-id/41928
 export RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
 
+# Optional label (e.g. "phase2-deadline") → a PINNED, prune-exempt snapshot.
+LABEL="${1:-}"
+if [[ -n "$LABEL" && ! "$LABEL" =~ ^[a-z0-9-]+$ ]]; then
+  echo "ERROR: label must match [a-z0-9-]+ (got '$LABEL')" >&2
+  exit 1
+fi
+
 TIMESTAMP=$(date -u +%Y%m%d-%H%M%SZ)
-DUMP_FILE="/tmp/predictor-${TIMESTAMP}.sql.gz"
 RETENTION_DAYS=14
+PINNED_PREFIX="pinned/"
+
+if [[ -n "$LABEL" ]]; then
+  DUMP_FILE="/tmp/predictor-${LABEL}-${TIMESTAMP}.sql.gz"
+  DEST="r2:${R2_BUCKET}/${PINNED_PREFIX}"
+else
+  DUMP_FILE="/tmp/predictor-${TIMESTAMP}.sql.gz"
+  DEST="r2:${R2_BUCKET}/"
+fi
 
 log() { echo "[$(date -u +%FT%TZ)] $*"; }
 
-log "Starting backup for timestamp $TIMESTAMP"
+log "Starting backup for timestamp $TIMESTAMP${LABEL:+ (pinned label=$LABEL)}"
 
 # Dump from inside the db container, gzip on the host.
 # --clean --if-exists makes the dump self-contained for restore.
@@ -68,14 +91,21 @@ DUMP_SIZE_H=$(numfmt --to=iec "$DUMP_SIZE")
 log "Dump created: $DUMP_FILE ($DUMP_SIZE_H)"
 
 # Upload. rclone copy is idempotent — re-uploading same path is a no-op.
-rclone copy --quiet "$DUMP_FILE" "r2:${R2_BUCKET}/"
-log "Uploaded to r2:${R2_BUCKET}/predictor-${TIMESTAMP}.sql.gz"
+DUMP_BASENAME="$(basename "$DUMP_FILE")"
+rclone copy --quiet "$DUMP_FILE" "$DEST"
+log "Uploaded to ${DEST}${DUMP_BASENAME}"
 
 # Local cleanup.
 rm -f "$DUMP_FILE"
 
-# Prune old backups in R2. --min-age uses object age, not filename date.
-PRUNED=$(rclone delete --min-age "${RETENTION_DAYS}d" --verbose "r2:${R2_BUCKET}/" 2>&1 | grep -c "Deleted" || true)
-log "Pruned $PRUNED objects older than ${RETENTION_DAYS}d"
+if [[ -n "$LABEL" ]]; then
+  # Pinned snapshots are permanent safety nets — never pruned.
+  log "Pinned snapshot (label=$LABEL) retained indefinitely; prune skipped."
+else
+  # Prune old DAILY backups. --min-age uses object age, not filename date.
+  # Exclude the pinned/ prefix so deadline snapshots are never deleted.
+  PRUNED=$(rclone delete --min-age "${RETENTION_DAYS}d" --exclude "${PINNED_PREFIX}**" --verbose "r2:${R2_BUCKET}/" 2>&1 | grep -c "Deleted" || true)
+  log "Pruned $PRUNED daily objects older than ${RETENTION_DAYS}d (pinned/ excluded)"
+fi
 
 log "Backup complete."
