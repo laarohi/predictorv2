@@ -116,6 +116,47 @@ async def test_roster_categorises_sorts_and_excludes(session):
 
 
 @pytest.mark.asyncio
+async def test_scores_numerator_excludes_placeholder_fixtures(session):
+    """A Phase-2 prediction on an UNRESOLVED placeholder KO fixture must NOT
+    count toward scores_filled — it isn't in the resolved-fixture denominator,
+    so counting it overflowed the fraction (the live 17/16 bug)."""
+    now = utc_now()
+    comp = Competition(name="WC", is_active=True, is_phase2_active=True)
+    session.add(comp)
+    await session.commit()
+    await session.refresh(comp)
+
+    resolved = Fixture(competition_id=comp.id, home_team="Brazil", away_team="Japan",
+                       kickoff=now + timedelta(days=1), stage="round_of_32",
+                       status=MatchStatus.SCHEDULED)
+    placeholder = Fixture(competition_id=comp.id,
+                          home_team="slot:round_of_16:537376:home",
+                          away_team="slot:round_of_16:537376:away",
+                          kickoff=now + timedelta(days=2), stage="round_of_16",
+                          status=MatchStatus.SCHEDULED)
+    session.add_all([resolved, placeholder])
+    await session.commit()
+    await session.refresh(resolved)
+    await session.refresh(placeholder)
+
+    jeremy = await _user(session, "Jeremy")
+    # One real R32 score + one stray placeholder R16 score (the prod bug shape).
+    session.add(MatchPrediction(user_id=jeremy.id, fixture_id=resolved.id,
+                home_score=2, away_score=0, phase=PredictionPhase.PHASE_2))
+    session.add(MatchPrediction(user_id=jeremy.id, fixture_id=placeholder.id,
+                home_score=0, away_score=0, phase=PredictionPhase.PHASE_2))
+    await session.commit()
+
+    resp = await get_phase2_prediction_status(session, _admin())
+
+    assert resp.knockout_fixture_count == 1  # only the resolved R32 counts
+    by = {u.name: u for u in resp.users}
+    # Numerator excludes the placeholder prediction → 1/1, never 2/1.
+    assert by["Jeremy"].scores_filled == 1
+    assert by["Jeremy"].scores_total == 1
+
+
+@pytest.mark.asyncio
 async def test_inactive_competition_still_lists_users(session):
     """Endpoint works even before/without Phase 2 activation (is_phase2_active
     flag reflects state; everyone reads as not-started)."""

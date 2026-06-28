@@ -556,12 +556,16 @@ async def get_phase2_prediction_status(
     bracket_by_user = {uid: n for uid, n in bracket_rows}
 
     # KO score fill per user = Phase 2 MatchPredictions on knockout fixtures.
+    # Must apply the SAME resolved-fixture filter as the denominator above
+    # (not_like 'slot:%'), or a stray prediction on an unresolved placeholder
+    # fixture inflates the numerator past the total (e.g. 17/16).
     score_rows = (
         await session.execute(
             select(MatchPrediction.user_id, func.count(MatchPrediction.id))
             .join(Fixture, Fixture.id == MatchPrediction.fixture_id)
             .where(
                 Fixture.stage != "group",
+                Fixture.home_team.not_like("slot:%"),
                 MatchPrediction.phase == PredictionPhase.PHASE_2,
             )
             .group_by(MatchPrediction.user_id)

@@ -360,6 +360,25 @@
 	// Overview page's "Your picks" tab and lock-card CTA) always shows the wizard.
 	const isRealTeam = (t: string) => !!t && t !== 'TBD' && !t.toLowerCase().startsWith('slot:');
 
+	// Draft hygiene: a score may only exist for a fixture whose teams are known.
+	// The KO grid already hides 'slot:' placeholder fixtures (no input is ever
+	// rendered for them), but the silent localStorage draft mirror can re-overlay
+	// a stale entry for one — which the next save would persist as a phantom 0-0
+	// on a TBD match (then silently become a scored pick once it resolves). Drop
+	// any draft keyed to an unresolved knockout fixture before it can be saved.
+	$: koPlaceholderIds = new Set(
+		$actualKnockoutFixtures
+			.filter((f) => !isRealTeam(f.home_team) || !isRealTeam(f.away_team))
+			.map((f) => f.id)
+	);
+	$: if (koPlaceholderIds.size) {
+		const entries = Object.entries($unsavedChanges);
+		const kept = entries.filter(([id]) => !koPlaceholderIds.has(id));
+		if (kept.length !== entries.length) {
+			unsavedChanges.set(Object.fromEntries(kept));
+		}
+	}
+
 	// Decide once per visit, and only when the inputs it depends on have
 	// actually arrived (phaseStatus hydrates async). replaceState keeps the
 	// bare /predictions entry out of history so Back doesn't bounce.

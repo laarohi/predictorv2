@@ -264,6 +264,16 @@ async def update_match_prediction(
             detail="Predictions are locked for this match",
         )
 
+    # A score can't be predicted for a match whose teams aren't decided yet —
+    # a knockout fixture still carrying 'slot:' placeholders. Reject rather than
+    # store a meaningless row that would silently become a scored pick once the
+    # fixture resolves. (Mirrors the overview endpoint's placeholder guard.)
+    if fixture.home_team.startswith("slot:") or fixture.away_team.startswith("slot:"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot predict a match whose teams are not yet decided",
+        )
+
     # Get existing prediction or create new
     result = await session.execute(
         select(MatchPrediction).where(
@@ -375,6 +385,13 @@ async def batch_update_predictions(
         # Per-match lock.
         if check_fixture_locked(fixture):
             continue  # Skip locked fixtures
+
+        # Skip knockout fixtures whose teams aren't resolved yet ('slot:'
+        # placeholders): a score for a TBD match is meaningless and would later
+        # resolve into a phantom scored pick. The batch endpoint already skips
+        # locked/unknown fixtures, so the frontend treats this the same way.
+        if fixture.home_team.startswith("slot:") or fixture.away_team.startswith("slot:"):
+            continue
 
         # Derive phase from the fixture, not from global state — see the
         # corresponding note in update_match_prediction.

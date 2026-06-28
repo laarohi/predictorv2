@@ -137,6 +137,29 @@ class TestUpdateMatchPredictionGuards:
 
     @pytest.mark.asyncio
     @patch("app.api.predictions.is_phase1_locked", new_callable=AsyncMock)
+    async def test_unresolved_placeholder_fixture_rejected(self, mock_phase1):
+        """A knockout fixture whose teams are still 'slot:' placeholders can't be
+        predicted — the score would be meaningless and later resolve into a
+        phantom scored pick (the 17/16 admin-roster bug)."""
+        mock_phase1.return_value = False
+        fixture = _knockout_fixture()
+        fixture.home_team = "slot:round_of_16:537376:home"
+        fixture.away_team = "slot:round_of_16:537376:away"
+        session = _session_with_fixture(fixture)
+
+        with pytest.raises(HTTPException) as exc:
+            await update_match_prediction(
+                fixture_id=fixture.id,
+                prediction_data=MatchPredictionUpdate(home_score=0, away_score=0),
+                session=session,
+                current_user=_user(),
+                ctx=_ctx(),
+            )
+        assert exc.value.status_code == 400
+        assert "not yet decided" in exc.value.detail.lower()
+
+    @pytest.mark.asyncio
+    @patch("app.api.predictions.is_phase1_locked", new_callable=AsyncMock)
     async def test_per_fixture_lock_still_applies(self, mock_phase1):
         """If Phase 1 isn't locked but the per-fixture T-lock has fired, still deny."""
         mock_phase1.return_value = False
@@ -249,6 +272,48 @@ class TestBatchUpdatePredictionsGuards:
         # Group fixture was skipped; only the knockout one came back.
         assert len(results) == 1
         assert results[0].fixture_id == knockout_fix.id
+
+    @pytest.mark.asyncio
+    @patch("app.api.predictions.is_phase1_locked", new_callable=AsyncMock)
+    @patch("app.api.predictions.get_current_phase", new_callable=AsyncMock)
+    async def test_unresolved_placeholder_fixtures_skipped(self, mock_phase, mock_phase1):
+        """Batch save silently skips knockout fixtures whose teams aren't
+        resolved yet ('slot:' placeholders) — same partial-success UX as the
+        locked-fixture skip, so a stale draft can't persist a phantom pick."""
+        mock_phase1.return_value = False
+        mock_phase.return_value = PredictionPhase.PHASE_2
+
+        placeholder = _knockout_fixture()
+        placeholder.home_team = "slot:round_of_16:537376:home"
+        placeholder.away_team = "slot:round_of_16:537376:away"
+        resolved = _knockout_fixture()  # Brazil vs Germany (real teams)
+
+        # placeholder is rejected before its prediction lookup (1 execute);
+        # resolved burns two (fixture load + existing-prediction lookup).
+        session = AsyncMock()
+        ph_lookup = MagicMock()
+        ph_lookup.scalar_one_or_none.return_value = placeholder
+        res_lookup = MagicMock()
+        res_lookup.scalar_one_or_none.return_value = resolved
+        existing_pred = MagicMock()
+        existing_pred.scalar_one_or_none.return_value = None
+        session.execute.side_effect = [ph_lookup, res_lookup, existing_pred]
+        session.refresh = AsyncMock()
+        session.add = MagicMock()
+
+        results = await batch_update_predictions(
+            predictions_data=[
+                MatchPredictionCreate(fixture_id=placeholder.id, home_score=0, away_score=0),
+                MatchPredictionCreate(fixture_id=resolved.id, home_score=2, away_score=1),
+            ],
+            session=session,
+            current_user=_user(),
+            ctx=_ctx(),
+        )
+
+        # Placeholder was skipped; only the resolved fixture came back.
+        assert len(results) == 1
+        assert results[0].fixture_id == resolved.id
 
 
 class TestUpdateBracketPredictionsGuards:
