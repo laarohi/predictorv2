@@ -33,6 +33,15 @@
 	} from '$stores/leaderboard';
 	import { humanEntries } from '$lib/utils/ghosts';
 	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
+	// Phase-2 bracket lock countdown (between-phases window only). Reuses the
+	// already-ticking currentTime + the deadline/lock derived stores so the
+	// clock is live without any new timer.
+	import {
+		uxPhase,
+		phase2BracketDeadline,
+		isPhase2BracketLocked,
+		currentTime
+	} from '$stores/phase';
 	import { getMyRankTrajectory, type RankTrajectoryResponse } from '$api/leaderboard';
 	import {
 		getAgreements,
@@ -427,6 +436,31 @@
 		};
 	})();
 
+	// ---- Phase 2 bracket lock countdown (between-phases only) -------------
+	// This dashboard serves BOTH group_stage and between_phases. Once Phase 2
+	// is active but the bracket hasn't locked, the salient deadline is the
+	// bracket re-pick — not the next KO kickoff — so we surface a live clock
+	// (modelled on the pre-tournament hero) and repoint the masthead lock strip
+	// at it for this window. Digits mirror DashboardPre's countdown exactly.
+	const pad2 = (n: number) => String(Math.max(0, Math.floor(n))).padStart(2, '0');
+	$: isBetween = $uxPhase === 'between_phases';
+	$: bracketCountdown = (() => {
+		if (!$phase2BracketDeadline) return { d: 0, h: 0, m: 0, s: 0 };
+		const diff = new Date($phase2BracketDeadline).getTime() - $currentTime.getTime();
+		if (diff <= 0) return { d: 0, h: 0, m: 0, s: 0 };
+		return {
+			d: Math.floor(diff / 86400000),
+			h: Math.floor((diff % 86400000) / 3600000),
+			m: Math.floor((diff % 3600000) / 60000),
+			s: Math.floor((diff % 60000) / 1000)
+		};
+	})();
+	$: showBracketCountdown =
+		isBetween && $phase2BracketDeadline !== null && !$isPhase2BracketLocked;
+	$: bracketLockStrip = showBracketCountdown
+		? `<b>Phase 2 bracket locks</b> · ${bracketCountdown.d}d ${bracketCountdown.h}h ${bracketCountdown.m}m`
+		: null;
+
 	// ---- Strip labels (legacy chrome — kept while we have PnStrip) ---------
 	$: stripYou = rank
 		? `<b>You</b> · ${rank}${ordinal(rank)} of ${rankOf} · ${total} pts${rankDelta !== 0 ? ` · ${rankDelta > 0 ? '▲' : '▼'}${Math.abs(rankDelta)}` : ''}`
@@ -446,9 +480,29 @@
 	<title>Dashboard — Group stage</title>
 </svelte:head>
 
-<PnPageShell liveLabel={stripLive} lockLabel={stripLock} youLabel={stripYou}>
+<PnPageShell liveLabel={stripLive} lockLabel={bracketLockStrip ?? stripLock} youLabel={stripYou}>
 	<div class="pn-dash-v4">
 		<DwBackPageReplay />
+
+		{#if showBracketCountdown}
+			<div class="pn-p2-cd">
+				<div class="cd-info">
+					<div class="cd-label"><span class="pip"></span> Phase 2 — Bracket re-pick due</div>
+					<div class="cd-title">The real <em>Round of 32</em> is set.</div>
+					<p class="cd-lede">
+						Your Phase 1 bracket carries over until you update it — re-pick against the
+						actual knockout matchups before it locks.
+					</p>
+					<a class="cd-cta" href="/predictions?view=picks">Update your bracket →</a>
+				</div>
+				<div class="clock">
+					<div class="digit">{bracketCountdown.d}<span class="u">DAYS</span></div>
+					<div class="digit">{pad2(bracketCountdown.h)}<span class="u">HRS</span></div>
+					<div class="digit">{pad2(bracketCountdown.m)}<span class="u">MIN</span></div>
+					<div class="digit">{pad2(bracketCountdown.s)}<span class="u">SEC</span></div>
+				</div>
+			</div>
+		{/if}
 
 		<DwKpiRow
 			{rank}

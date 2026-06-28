@@ -1082,6 +1082,131 @@
 	.pn .pn-hero-v4.side h1 { font-size: 26px; }
 }
 
+/* Phase 2 — between-phases bracket re-pick countdown banner. Modelled on the
+ * pre-tournament hero clock but COMPACT: it sits above the group-summary
+ * dashboard (the group view stays the main content through the ~15h window)
+ * and counts down to the bracket lock — the salient deadline once Phase 2 is
+ * active but the bracket hasn't locked. Self-contained (not nested under
+ * .pn-hero-v4) so it never inherits the full hero's padding/type scale. */
+.pn .pn-p2-cd {
+	background: var(--ink);
+	color: var(--paper);
+	border: 3px solid var(--ink);
+	box-shadow: 8px 8px 0 var(--red);
+	padding: 20px 26px 18px;
+	margin-bottom: 22px;
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 28px;
+	align-items: center;
+	position: relative;
+	overflow: hidden;
+}
+.pn .pn-p2-cd::after {
+	content: '';
+	position: absolute;
+	right: -40px;
+	top: -40px;
+	width: 200px;
+	height: 200px;
+	background-image: repeating-linear-gradient(45deg, transparent 0 14px, rgba(212, 154, 46, 0.18) 14px 16px);
+	pointer-events: none;
+}
+.pn .pn-p2-cd .cd-info { position: relative; z-index: 1; }
+.pn .pn-p2-cd .cd-label {
+	font-family: var(--mono);
+	font-size: 11px;
+	letter-spacing: 0.16em;
+	text-transform: uppercase;
+	color: var(--gold);
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-bottom: 10px;
+}
+.pn .pn-p2-cd .cd-label .pip {
+	width: 8px;
+	height: 8px;
+	background: var(--red);
+	border-radius: 50%;
+}
+.pn .pn-p2-cd .cd-title {
+	font-family: var(--display);
+	font-size: 32px;
+	line-height: 0.95;
+	letter-spacing: -0.015em;
+	text-transform: uppercase;
+	margin: 0 0 8px;
+	color: var(--paper);
+}
+.pn .pn-p2-cd .cd-title em { color: var(--gold); font-style: normal; }
+.pn .pn-p2-cd .cd-lede {
+	font-family: var(--mono);
+	font-size: 12px;
+	letter-spacing: 0.06em;
+	color: var(--paper-3);
+	max-width: 460px;
+	line-height: 1.5;
+	margin: 0 0 14px;
+}
+.pn .pn-p2-cd .cd-cta {
+	display: inline-block;
+	font-family: var(--mono);
+	font-size: 12px;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	color: var(--ink);
+	background: var(--gold);
+	border: 2.5px solid var(--ink);
+	box-shadow: 3px 3px 0 var(--ink);
+	padding: 9px 16px;
+	text-decoration: none;
+}
+.pn .pn-p2-cd .cd-cta:hover { background: var(--paper); }
+.pn .pn-p2-cd .clock {
+	display: flex;
+	gap: 6px;
+	position: relative;
+	z-index: 1;
+}
+.pn .pn-p2-cd .clock .digit {
+	background: var(--paper);
+	color: var(--ink);
+	padding: 14px 12px 10px;
+	font-family: var(--display);
+	font-size: 40px;
+	line-height: 1;
+	min-width: 54px;
+	text-align: center;
+	border: 2.5px solid var(--ink);
+	box-shadow: 3px 3px 0 var(--gold);
+}
+.pn .pn-p2-cd .clock .digit .u {
+	display: block;
+	margin-top: 6px;
+	font-family: var(--mono);
+	font-size: 9px;
+	color: var(--ink-3);
+	letter-spacing: 0.12em;
+}
+@media (max-width: 760px) {
+	.pn .pn-p2-cd {
+		grid-template-columns: 1fr;
+		gap: 18px;
+	}
+	.pn .pn-p2-cd .clock {
+		display: grid;
+		grid-template-columns: repeat(4, 1fr);
+		gap: 8px;
+	}
+	.pn .pn-p2-cd .clock .digit {
+		font-size: 30px;
+		min-width: 0;
+		padding: 8px 8px 6px;
+	}
+	.pn .pn-p2-cd .cd-title { font-size: 26px; }
+}
+
 .pn .pn-hero-v4 .progress-block {
 	margin-top: 22px;
 	position: relative;
