@@ -39,15 +39,25 @@
 	import { humanEntries } from '$lib/utils/ghosts';
 	import { fetchMatchPredictions, predictionsByFixture } from '$stores/predictions';
 	import { getMyRankTrajectory, type RankTrajectoryResponse } from '$api/leaderboard';
-	import { getBracketExposure, type BracketExposureResponse } from '$api/predictions';
+	import {
+		getBracketExposure,
+		getAgreements,
+		type BracketExposureResponse,
+		type FixtureAgreement
+	} from '$api/predictions';
+	import { getScoringConfig, type ScoringConfig } from '$api/competition';
 	import { teamCode } from '$lib/utils/teamCodes';
 	import { goto } from '$app/navigation';
-	import { koChipLabel, wizardHref } from '$lib/utils/matchBreakdown';
-	import type { Fixture } from '$types';
+	import { koChipLabel, computeMatchPoints, wizardHref } from '$lib/utils/matchBreakdown';
+	import type { Fixture, MatchPrediction } from '$types';
 
 	let trajectoryData: RankTrajectoryResponse | null = null;
 	let p1Exposure: BracketExposureResponse | null = null;
 	let p2Exposure: BracketExposureResponse | null = null;
+	// Per-fixture predictor counts + scoring config — needed to fold the rarity
+	// (hybrid) bonus into the KO match-table points, matching the leaderboard.
+	let agreements: FixtureAgreement[] = [];
+	let scoringConfig: ScoringConfig | null = null;
 
 	onMount(async () => {
 		fetchAllFixtures();
@@ -62,11 +72,20 @@
 		} catch {
 			trajectoryData = null;
 		}
+		try {
+			// Independent of the above: a failure here just leaves the KO match
+			// points on outcome+exact (no rarity) rather than blanking them.
+			const [agg, cfg] = await Promise.all([getAgreements(), getScoringConfig()]);
+			agreements = agg;
+			scoringConfig = cfg;
+		} catch {
+			/* keep the flat fallback */
+		}
 	});
 
 	// ---- Constants ---------------------------------------------------------
 	const POINTS_PER_OUTCOME = 5;
-	const POINTS_PER_EXACT_TOTAL = 15;
+	const POINTS_PER_EXACT_BONUS = 10;
 	const STAGE_TO_KEY: Record<string, 'r16' | 'qf' | 'sf' | 'f' | 'w'> = {
 		round_of_16: 'r16',
 		quarter_final: 'qf',
@@ -100,11 +119,6 @@
 		if (outcomeOf(p.home_score, p.away_score) === outcomeOf(fh, fa)) return 'outc';
 		return 'miss';
 	}
-	function pointsFor(r: ReturnType<typeof pickResult>): number {
-		if (r === 'exact') return POINTS_PER_EXACT_TOTAL;
-		if (r === 'outc') return POINTS_PER_OUTCOME;
-		return 0;
-	}
 	function shortRoundLabel(f: Fixture): string {
 		const map: Record<string, string> = {
 			round_of_16: 'R16',
@@ -135,16 +149,47 @@
 		return 'miss';
 	}
 
-	function pointsForResult(r: 'exact' | 'outc' | 'miss' | null): string {
-		if (r === 'exact') return `+${POINTS_PER_EXACT_TOTAL}`;
-		if (r === 'outc')  return `+${POINTS_PER_OUTCOME}`;
-		return '0';
+	// Split a finished/live KO match into outcome / exact / rarity-bonus via the
+	// shared computeMatchPoints — so KO match points reconcile with the
+	// leaderboard (knockout scores carry the same hybrid/logarithmic rarity as
+	// the group stage). cfg null degrades to 'fixed' (base only) until config
+	// loads; bonus then fills in once agreements arrive.
+	function matchSplit(
+		f: Fixture,
+		pred: MatchPrediction | undefined,
+		cfg: ScoringConfig | null,
+		ag: FixtureAgreement | undefined
+	): { outcome: number; exact: number; bonus: number } {
+		if (!pred || !f.score) {
+			return { outcome: 0, exact: 0, bonus: 0 };
+		}
+		const outcomePts = cfg?.outcome_points ?? POINTS_PER_OUTCOME;
+		const exactPts = cfg?.exact_points ?? POINTS_PER_EXACT_BONUS;
+		const res = computeMatchPoints({
+			mode: cfg?.mode ?? 'fixed',
+			predictedHome: pred.home_score,
+			predictedAway: pred.away_score,
+			actualHome: f.score.home_score,
+			actualAway: f.score.away_score,
+			totalPredictors: ag?.total ?? 0,
+			correctPredictors: ag?.agrees_outcome ?? 0,
+			outcomePoints: outcomePts,
+			exactPoints: exactPts,
+			cap: cfg?.rarity_cap ?? 10
+		});
+		const outcome = res.correctOutcome ? outcomePts : 0;
+		const exact = res.exactScore ? exactPts : 0;
+		return { outcome, exact, bonus: res.points - outcome - exact };
 	}
 
 	// Translate a KO fixture into a DwMatchTable row. Mirrors the helper
 	// in DashGroupStage; differs only in the grpLabel (R16/QF/SF/F/W
 	// instead of A-L).
-	function buildRow(f: Fixture): MatchTableRow {
+	function buildRow(
+		f: Fixture,
+		cfg: ScoringConfig | null,
+		agMap: Map<string, FixtureAgreement>
+	): MatchTableRow {
 		const score = scoreTuple(f);
 		const pick = pickTuple(f);
 		const id = f.id;
@@ -153,13 +198,21 @@
 		const grpLabel = shortRoundLabel(f);
 		const navigate = () => void goto(`/results/${id}`);
 
+		// Points string incl. the rarity bonus (see matchSplit), so KO recent
+		// matches reconcile with the leaderboard instead of showing base only.
+		const fullPts = (): string => {
+			const part = matchSplit(f, $predictionsByFixture.get(f.id), cfg, agMap.get(f.id));
+			const t = part.outcome + part.exact + part.bonus;
+			return t > 0 ? `+${t}` : '0';
+		};
+
 		if (f.status === 'finished') {
 			const result = classifyPick(score, pick);
 			return {
 				id, kind: 'finished',
 				statusText: 'FT', statusVariant: 'ft',
 				grpLabel, home, away, score, pick, pickResult: result,
-				pointsText: pointsForResult(result),
+				pointsText: fullPts(),
 				pointsVariant: (result ?? 'miss') as PtsVariant,
 				onClick: navigate
 			};
@@ -172,7 +225,7 @@
 				statusText: String(f.minute ?? 0),
 				statusVariant: 'live',
 				grpLabel, home, away, score, pick, pickResult: null,
-				pointsText: showPending ? pointsForResult(projected) : null,
+				pointsText: showPending ? fullPts() : null,
 				pointsVariant: showPending ? (`pending-${projected}` as PtsVariant) : '',
 				onClick: navigate
 			};
@@ -199,6 +252,8 @@
 
 	// ---- Knockout filter (excludes group stage) ---------------------------
 	$: knockoutFixtures = $fixtures.filter((f) => f.stage !== 'group');
+	// Per-fixture predictor counts, keyed for the rarity-bonus lookup.
+	$: agreementMap = new Map(agreements.map((a) => [a.fixture_id, a]));
 
 	// ---- Past 4 / Upcoming 4 (fixed-count windows) -------------------------
 	// Same rationale as DashGroupStage — predictable column height beats a
@@ -212,7 +267,12 @@
 		.filter((f) => f.status === 'finished')
 		.sort((a, b) => new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime())
 		.slice(0, PAST_SHOW);
-	$: pastTotalPts = pastFinished.reduce((acc, f) => acc + pointsFor(pickResult(f)), 0);
+	// Sum incl. the rarity bonus (matchSplit routes through computeMatchPoints),
+	// so the "+N pts" header + trajectory reconcile with the per-row points.
+	$: pastTotalPts = pastFinished.reduce((acc, f) => {
+		const part = matchSplit(f, $predictionsByFixture.get(f.id), scoringConfig, agreementMap.get(f.id));
+		return acc + part.outcome + part.exact + part.bonus;
+	}, 0);
 
 	$: upcoming = knockoutFixtures
 		.filter(
@@ -390,7 +450,7 @@
 				</div>
 				<DwMatchTable
 					groupColumnLabel="Rnd"
-					rows={pastFinished.map(buildRow)}
+					rows={pastFinished.map((f) => buildRow(f, scoringConfig, agreementMap))}
 					emptyText="No KO matches finished yet."
 				/>
 			</div>
@@ -407,7 +467,7 @@
 				</div>
 				<DwMatchTable
 					groupColumnLabel="Rnd"
-					rows={upcoming.map(buildRow)}
+					rows={upcoming.map((f) => buildRow(f, scoringConfig, agreementMap))}
 					emptyText="No upcoming KO matches."
 				/>
 			</div>

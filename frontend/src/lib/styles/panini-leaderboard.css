@@ -95,7 +95,7 @@
 .pn .pn-lb-card .pn-card-body { padding: 0; overflow-x: auto; }
 .pn .pn-lb-table {
 	width: 100%;
-	min-width: 720px;
+	min-width: 780px;
 	border-collapse: collapse;
 }
 .pn .pn-lb-table th {
@@ -177,7 +177,11 @@
 	font-variant-numeric: tabular-nums;
 }
 .pn .pn-lb-table td.c.exact { color: var(--green); font-weight: 600; }
-.pn .pn-lb-table td.c.bonus { color: var(--gold); font-weight: 600; }
+/* Rarity (match rarity bonus) keeps the gold the old "Bonus" column used;
+   the new Bonus-questions column gets a distinct deep red so the two
+   separate mechanisms read apart at a glance. */
+.pn .pn-lb-table td.c.rarity { color: var(--gold); font-weight: 600; }
+.pn .pn-lb-table td.c.bonusq { color: var(--red-deep); font-weight: 600; }
 .pn .pn-lb-table td.c.bracket { color: var(--navy); font-weight: 600; }
 .pn .pn-lb-table td.r { text-align: right; }
 .pn .pn-lb-table td.total {
@@ -270,8 +274,24 @@
 	margin-top: 2px;
 }
 .pn .pn-lb-detail .cell .v.exact { color: var(--green); }
-.pn .pn-lb-detail .cell .v.bonus { color: var(--gold); }
+.pn .pn-lb-detail .cell .v.rarity { color: var(--gold); }
 .pn .pn-lb-detail .cell .v.bracket { color: var(--navy); }
+
+/* Cross-phase Bonus Questions card (Golden Ball / group / top-flop) — a peer
+   of the phase cards in the expander grid. Deep-red value mirrors the
+   aggregate Bonus column; the note line explains what feeds it. Shared rules
+   cover the desktop and mobile expanders. */
+.pn .pn-lb-detail .phase.bonusq .ph-h b,
+.pn .pn-m-lb-detail .phase.bonusq .ph-h b { color: var(--red-deep); }
+.pn .pn-lb-detail .phase.bonusq .bq-note,
+.pn .pn-m-lb-detail .phase.bonusq .bq-note {
+	font-family: var(--mono);
+	font-size: 9px;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	color: var(--ink-3);
+	margin-top: 2px;
+}
 
 /* Per-stage bracket strip inside the expander (replaces the single Bracket cell) */
 .pn .pn-lb-detail .brk {
@@ -385,7 +405,7 @@
 	color: var(--ink);
 }
 .pn .pn-m-lb-detail .cell .v.exact { color: var(--green); }
-.pn .pn-m-lb-detail .cell .v.bonus { color: var(--gold); }
+.pn .pn-m-lb-detail .cell .v.rarity { color: var(--gold); }
 .pn .pn-m-lb-detail .cell .v.bracket { color: var(--navy); }
 .pn .pn-m-lb-detail .brk {
 	margin-top: 8px;

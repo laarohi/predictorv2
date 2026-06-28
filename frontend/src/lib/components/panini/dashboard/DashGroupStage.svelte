@@ -95,7 +95,6 @@
 	// ---- Scoring constants (kept in sync with config/worldcup2026.yml) ----
 	const POINTS_PER_OUTCOME = 5;
 	const POINTS_PER_EXACT_BONUS = 10;
-	const POINTS_PER_EXACT_TOTAL = POINTS_PER_OUTCOME + POINTS_PER_EXACT_BONUS;
 
 	// ---- Helpers ----------------------------------------------------------
 	function ordinal(n: number): string {
@@ -124,11 +123,6 @@
 		if (outcomeOf(p.home_score, p.away_score) === outcomeOf(fh, fa)) return 'outc';
 		return 'miss';
 	}
-	function pointsFor(result: ReturnType<typeof pickResult>): number {
-		if (result === 'exact') return POINTS_PER_EXACT_TOTAL;
-		if (result === 'outc') return POINTS_PER_OUTCOME;
-		return 0;
-	}
 	function pickTuple(f: Fixture): [number, number] | null {
 		const p = $predictionsByFixture.get(f.id);
 		if (!p) return null;
@@ -151,18 +145,16 @@
 		return 'miss';
 	}
 
-	function pointsForResult(r: 'exact' | 'outc' | 'miss' | null): string {
-		if (r === 'exact') return `+${POINTS_PER_EXACT_TOTAL}`;
-		if (r === 'outc')  return `+${POINTS_PER_OUTCOME}`;
-		return '0';
-	}
-
 	// ---- buildRow — drive DwMatchTable from a Fixture --------------------
 	// Single source of truth that translates each fixture's runtime state
 	// into the row shape the table widget consumes. The widget is purely
 	// presentational; every status string, pill colour, and CTA choice
 	// originates here.
-	function buildRow(f: Fixture): MatchTableRow {
+	function buildRow(
+		f: Fixture,
+		cfg: ScoringConfig | null,
+		agMap: Map<string, FixtureAgreement>
+	): MatchTableRow {
 		const score = scoreTuple(f);
 		const pick = pickTuple(f);
 		const id = f.id;
@@ -171,13 +163,24 @@
 		const grpLabel = f.group ?? '?';
 		const navigate = () => void goto(`/results/${id}`);
 
+		// Points string incl. the rarity (hybrid) bonus — routed through the
+		// SAME matchSplit/computeMatchPoints path as the group-summary totals
+		// and the Results page, so the table reconciles with the leaderboard
+		// instead of showing flat outcome+exact. With cfg still null it degrades
+		// to 'fixed' (base only) and fills in rarity once agreements load.
+		const fullPts = (): string => {
+			const part = matchSplit(f, $predictionsByFixture.get(f.id), cfg, agMap.get(f.id));
+			const t = part.outcome + part.exact + part.bonus;
+			return t > 0 ? `+${t}` : '0';
+		};
+
 		if (f.status === 'finished') {
 			const result = classifyPick(score, pick);
 			return {
 				id, kind: 'finished',
 				statusText: 'FT', statusVariant: 'ft',
 				grpLabel, home, away, score, pick, pickResult: result,
-				pointsText: pointsForResult(result),
+				pointsText: fullPts(),
 				pointsVariant: (result ?? 'miss') as PtsVariant,
 				onClick: navigate
 			};
@@ -190,7 +193,7 @@
 				statusText: String(f.minute ?? 0),
 				statusVariant: 'live',
 				grpLabel, home, away, score, pick, pickResult: null,
-				pointsText: showPending ? pointsForResult(projected) : null,
+				pointsText: showPending ? fullPts() : null,
 				pointsVariant: showPending ? (`pending-${projected}` as PtsVariant) : '',
 				onClick: navigate
 			};
@@ -240,7 +243,13 @@
 		.sort((a, b) => new Date(b.kickoff).getTime() - new Date(a.kickoff).getTime())
 		.slice(0, PAST_SHOW);
 
-	$: pastTotalPts = pastFinished.reduce((acc, f) => acc + pointsFor(pickResult(f)), 0);
+	// Sum incl. the rarity bonus (matchSplit routes through computeMatchPoints),
+	// so the "+N pts" header + trajectory reconcile with the per-row points and
+	// the leaderboard rather than under-reporting by the rarity component.
+	$: pastTotalPts = pastFinished.reduce((acc, f) => {
+		const part = matchSplit(f, $predictionsByFixture.get(f.id), scoringConfig, agreementMap.get(f.id));
+		return acc + part.outcome + part.exact + part.bonus;
+	}, 0);
 
 	$: upcoming = $fixtures
 		.filter((f) => f.stage === 'group')
@@ -296,7 +305,10 @@
 		cfg: ScoringConfig | null,
 		ag: FixtureAgreement | undefined
 	): { outcome: number; exact: number; bonus: number } {
-		if (!pred || f.status !== 'finished' || !f.score) {
+		// Scores finished matches AND live ones (projected "if FT now" off the
+		// current score). buildMatchRows pre-filters to finished; the dashboard
+		// match-table also routes live fixtures through here for the projection.
+		if (!pred || !f.score) {
 			return { outcome: 0, exact: 0, bonus: 0 };
 		}
 		const outcomePts = cfg?.outcome_points ?? POINTS_PER_OUTCOME;
@@ -489,7 +501,7 @@
 				</div>
 				<DwMatchTable
 					groupColumnLabel="Grp"
-					rows={pastFinished.map(buildRow)}
+					rows={pastFinished.map((f) => buildRow(f, scoringConfig, agreementMap))}
 					emptyText="No matches finished yet."
 					targetRows={5}
 				/>
@@ -507,7 +519,7 @@
 				</div>
 				<DwMatchTable
 					groupColumnLabel="Grp"
-					rows={upcoming.map(buildRow)}
+					rows={upcoming.map((f) => buildRow(f, scoringConfig, agreementMap))}
 					emptyText="No upcoming matches."
 					targetRows={5}
 				/>

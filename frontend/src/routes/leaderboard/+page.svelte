@@ -78,16 +78,22 @@
 		if (phase === 'phase_2') return b.phase2.match_outcome_points;
 		return b.match_outcome_points;
 	}
-	function bonusPts(b: PointBreakdown, phase: LeaderboardPhase): number {
+	// "Rarity" column = the match rarity (hybrid) bonus ONLY — per-phase in the
+	// phase tabs, the cross-phase aggregate in Overall. This is the reward for a
+	// correct outcome few others picked; it lives inside the match score.
+	function rarityPts(b: PointBreakdown, phase: LeaderboardPhase): number {
 		if (phase === 'phase_1') return b.phase1.hybrid_bonus_points;
 		if (phase === 'phase_2') return b.phase2.hybrid_bonus_points;
-		// Overall "Bonus" = match rarity bonus + bonus-question points. The latter
-		// is cross-phase (locked with Phase I, scored when the admin reveals award
-		// answers) and is part of total_points — so without it here the row's
-		// visible columns don't reconcile with its Total (e.g. 0+5+0+0 shown but
-		// Total 20). Phase tabs keep only the per-phase rarity bonus, since
-		// bonus-question points aren't attributed to a single phase.
-		return b.hybrid_bonus_points + b.bonus_question_points;
+		return b.hybrid_bonus_points;
+	}
+	// "Bonus" column = bonus-question points (Golden Ball / group / top-flop) —
+	// a SEPARATE mechanism from the rarity bonus. They're cross-phase (locked
+	// with Phase I, scored when the admin reveals answers) and sit OUTSIDE both
+	// phases' match/bracket totals, so they only populate the Overall column —
+	// where Total includes them. In the phase tabs they're 0, keeping each
+	// phase's visible columns reconciled with that phase's total.
+	function questionPts(b: PointBreakdown, phase: LeaderboardPhase): number {
+		return phase === 'overall' ? b.bonus_question_points : 0;
 	}
 	function bracketPts(b: PointBreakdown, phase: LeaderboardPhase): number {
 		if (phase === 'phase_1') return getGroupTotal(b.phase1) + b.phase1.round_of_32_points + b.phase1.round_of_16_points + b.phase1.quarter_final_points + b.phase1.semi_final_points + b.phase1.final_points + b.phase1.winner_points;
@@ -179,6 +185,9 @@
 		phase1: STAGE_DEFS.filter((s) => $leaderboard.some((r) => s.get(r.breakdown.phase1) > 0)),
 		phase2: STAGE_DEFS.filter((s) => $leaderboard.some((r) => s.get(r.breakdown.phase2) > 0))
 	};
+	// Same auto-hide rule for the cross-phase Bonus Questions card: shown in the
+	// expander only once someone on the board has scored a bonus question.
+	$: bonusQVisible = $leaderboard.some((r) => r.breakdown.bonus_question_points > 0);
 
 	$: yourRank = $currentUserPosition?.position ?? 0;
 	$: yourPoints = $currentUserPosition?.total_points ?? 0;
@@ -266,6 +275,7 @@
 								<th>Player</th>
 								<th class="c">Outcome</th>
 								<th class="c">Exact</th>
+								<th class="c">Rarity</th>
 								<th class="c">Bonus</th>
 								<th class="c">Bracket</th>
 								<th class="r">Total</th>
@@ -293,7 +303,8 @@
 									</td>
 									<td class="c">{outcomePts(r.breakdown, $leaderboardPhase)}</td>
 									<td class="c exact">{exactPts(r.breakdown, $leaderboardPhase)}</td>
-									<td class="c bonus">{bonusPts(r.breakdown, $leaderboardPhase)}</td>
+									<td class="c rarity">{rarityPts(r.breakdown, $leaderboardPhase)}</td>
+									<td class="c bonusq">{questionPts(r.breakdown, $leaderboardPhase)}</td>
 									<td class="c bracket">{bracketPts(r.breakdown, $leaderboardPhase)}</td>
 									<td class="r total">{#if isYou}<em>{r.total_points}</em>{:else}{r.total_points}{/if}</td>
 									<td class="r mv">
@@ -305,7 +316,7 @@
 								</tr>
 								{#if isOpen}
 									<tr class="detail">
-										<td colspan="9">
+										<td colspan="10">
 											<div class="pn-lb-detail">
 												{#each DETAIL_PHASES as ph (ph.k)}
 													{#if phaseVisible[ph.k]}
@@ -318,7 +329,7 @@
 															<div class="grid">
 																<div class="cell"><div class="l">Outcome</div><div class="v">{p.match_outcome_points}</div></div>
 																<div class="cell"><div class="l">Exact</div><div class="v exact">{p.exact_score_points}</div></div>
-																<div class="cell"><div class="l">Bonus</div><div class="v bonus">{p.hybrid_bonus_points}</div></div>
+																<div class="cell"><div class="l">Rarity</div><div class="v rarity">{p.hybrid_bonus_points}</div></div>
 															</div>
 															{#if stageVisible[ph.k].length}
 																<div class="brk">
@@ -333,12 +344,21 @@
 														</div>
 													{/if}
 												{/each}
+												{#if bonusQVisible}
+													<div class="phase bonusq">
+														<div class="ph-h">
+															<span>Bonus Questions</span>
+															<b>{r.breakdown.bonus_question_points} pts</b>
+														</div>
+														<div class="bq-note">Golden Ball · group · top/flop</div>
+													</div>
+												{/if}
 											</div>
 										</td>
 									</tr>
 								{/if}
 							{:else}
-								<tr><td colspan="9" style="padding: 24px; text-align: center; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No standings yet</td></tr>
+								<tr><td colspan="10" style="padding: 24px; text-align: center; font-family: var(--mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: 0.08em;">No standings yet</td></tr>
 							{/each}
 						</tbody>
 					</table>
@@ -445,7 +465,7 @@
 										<div class="grid">
 											<div class="cell"><div class="l">Out</div><div class="v">{p.match_outcome_points}</div></div>
 											<div class="cell"><div class="l">Exact</div><div class="v exact">{p.exact_score_points}</div></div>
-											<div class="cell"><div class="l">Bonus</div><div class="v bonus">{p.hybrid_bonus_points}</div></div>
+											<div class="cell"><div class="l">Rarity</div><div class="v rarity">{p.hybrid_bonus_points}</div></div>
 										</div>
 										{#if stageVisible[ph.k].length}
 											<div class="brk">
@@ -460,6 +480,15 @@
 									</div>
 								{/if}
 							{/each}
+							{#if bonusQVisible}
+								<div class="phase bonusq">
+									<div class="ph-h">
+										<span>Bonus Questions</span>
+										<b>{r.breakdown.bonus_question_points} pts</b>
+									</div>
+									<div class="bq-note">Golden Ball · group · top/flop</div>
+								</div>
+							{/if}
 						</div>
 					{/if}
 				{:else}
