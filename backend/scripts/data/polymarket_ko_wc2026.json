@@ -1,0 +1,511 @@
+{
+ "snapshot_at": "2026-06-29 14:57:36.414406+02:00",
+ "match_scores": [
+  {
+   "home": "Argentina",
+   "away": "Cape Verde Islands",
+   "score": [
+    2,
+    0
+   ]
+  },
+  {
+   "home": "Australia",
+   "away": "Egypt",
+   "score": [
+    0,
+    1
+   ]
+  },
+  {
+   "home": "Belgium",
+   "away": "Senegal",
+   "score": [
+    1,
+    0
+   ]
+  },
+  {
+   "home": "Brazil",
+   "away": "Japan",
+   "score": [
+    1,
+    0
+   ]
+  },
+  {
+   "home": "Colombia",
+   "away": "Ghana",
+   "score": [
+    1,
+    0
+   ]
+  },
+  {
+   "home": "England",
+   "away": "Congo DR",
+   "score": [
+    2,
+    0
+   ]
+  },
+  {
+   "home": "France",
+   "away": "Sweden",
+   "score": [
+    2,
+    0
+   ]
+  },
+  {
+   "home": "Germany",
+   "away": "Paraguay",
+   "score": [
+    2,
+    0
+   ]
+  },
+  {
+   "home": "Ivory Coast",
+   "away": "Norway",
+   "score": [
+    0,
+    1
+   ]
+  },
+  {
+   "home": "Mexico",
+   "away": "Ecuador",
+   "score": [
+    1,
+    0
+   ]
+  },
+  {
+   "home": "Netherlands",
+   "away": "Morocco",
+   "score": [
+    1,
+    0
+   ]
+  },
+  {
+   "home": "Portugal",
+   "away": "Croatia",
+   "score": [
+    1,
+    0
+   ]
+  },
+  {
+   "home": "Spain",
+   "away": "Austria",
+   "score": [
+    2,
+    0
+   ]
+  },
+  {
+   "home": "Switzerland",
+   "away": "Algeria",
+   "score": [
+    1,
+    0
+   ]
+  },
+  {
+   "home": "United States",
+   "away": "Bosnia-Herzegovina",
+   "score": [
+    2,
+    0
+   ]
+  }
+ ],
+ "team_stage_probs": {
+  "Spain": {
+   "winner": 0.1105,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.855,
+   "quarter_final": 0.595,
+   "semi_final": 0.42,
+   "final": 0.225
+  },
+  "New Zealand": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Switzerland": {
+   "winner": 0.0095,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.675,
+   "quarter_final": 0.31,
+   "semi_final": 0.08499999999999999,
+   "final": 0.0335
+  },
+  "England": {
+   "winner": 0.1025,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.885,
+   "quarter_final": 0.61,
+   "semi_final": 0.365,
+   "final": 0.215
+  },
+  "France": {
+   "winner": 0.2335,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.885,
+   "quarter_final": 0.665,
+   "semi_final": 0.51,
+   "final": 0.375
+  },
+  "South Korea": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Haiti": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Brazil": {
+   "winner": 0.0575,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.735,
+   "quarter_final": 0.495,
+   "semi_final": 0.28500000000000003,
+   "final": 0.14500000000000002
+  },
+  "Jordan": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Curaçao": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Argentina": {
+   "winner": 0.2085,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.9299999999999999,
+   "quarter_final": 0.815,
+   "semi_final": 0.605,
+   "final": 0.365
+  },
+  "Germany": {
+   "winner": 0.0395,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.855,
+   "quarter_final": 0.29000000000000004,
+   "semi_final": 0.175,
+   "final": 0.08499999999999999
+  },
+  "Colombia": {
+   "winner": 0.025500000000000002,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.775,
+   "quarter_final": 0.5,
+   "semi_final": 0.19,
+   "final": 0.09
+  },
+  "Iran": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Portugal": {
+   "winner": 0.0655,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.685,
+   "quarter_final": 0.29000000000000004,
+   "semi_final": 0.21000000000000002,
+   "final": 0.125
+  },
+  "Ghana": {
+   "winner": 0.0015,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.225,
+   "quarter_final": 0.098,
+   "semi_final": 0.0325,
+   "final": 0.013000000000000001
+  },
+  "Netherlands": {
+   "winner": 0.0505,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.615,
+   "quarter_final": 0.485,
+   "semi_final": 0.22,
+   "final": 0.125
+  },
+  "Algeria": {
+   "winner": 0.0015,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.335,
+   "quarter_final": 0.1,
+   "semi_final": 0.0235,
+   "final": 0.0155
+  },
+  "Bosnia-Herzegovina": {
+   "winner": 0.0005,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.175,
+   "quarter_final": 0.0455,
+   "semi_final": 0.015,
+   "final": 0.0035
+  },
+  "United States": {
+   "winner": 0.0225,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.83,
+   "quarter_final": 0.46499999999999997,
+   "semi_final": 0.16999999999999998,
+   "final": 0.0505
+  },
+  "Canada": {
+   "winner": 0.0025,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.9995,
+   "quarter_final": 0.255,
+   "semi_final": 0.039999999999999994,
+   "final": 0.0165
+  },
+  "Turkey": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Uruguay": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Mexico": {
+   "winner": 0.0115,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.615,
+   "quarter_final": 0.265,
+   "semi_final": 0.14,
+   "final": 0.065
+  },
+  "Paraguay": {
+   "winner": 0.0005,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.14500000000000002,
+   "quarter_final": 0.027999999999999997,
+   "semi_final": 0.014,
+   "final": 0.0155
+  },
+  "Scotland": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Japan": {
+   "winner": 0.010499999999999999,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.27,
+   "quarter_final": 0.15000000000000002,
+   "semi_final": 0.07,
+   "final": 0.0375
+  },
+  "Norway": {
+   "winner": 0.0185,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.645,
+   "quarter_final": 0.28500000000000003,
+   "semi_final": 0.14500000000000002,
+   "final": 0.07500000000000001
+  },
+  "Tunisia": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Ecuador": {
+   "winner": 0.0055,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.375,
+   "quarter_final": 0.1175,
+   "semi_final": 0.0475,
+   "final": 0.0155
+  },
+  "Uzbekistan": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Morocco": {
+   "winner": 0.0135,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.39,
+   "quarter_final": 0.295,
+   "semi_final": 0.09,
+   "final": 0.0485
+  },
+  "Panama": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Iraq": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "South Africa": {
+   "winner": 0.0,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Senegal": {
+   "winner": 0.0045000000000000005,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.405,
+   "quarter_final": 0.165,
+   "semi_final": 0.055499999999999994,
+   "final": 0.0225
+  },
+  "Ivory Coast": {
+   "winner": 0.0025,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.345,
+   "quarter_final": 0.10500000000000001,
+   "semi_final": 0.027999999999999997,
+   "final": 0.0165
+  },
+  "Congo DR": {
+   "winner": 0.0005,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.11,
+   "quarter_final": 0.045,
+   "semi_final": 0.011,
+   "final": 0.0035
+  },
+  "Cape Verde Islands": {
+   "winner": 0.0005,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.079,
+   "quarter_final": 0.0155,
+   "semi_final": 0.011,
+   "final": 0.002
+  },
+  "Czechia": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Qatar": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Belgium": {
+   "winner": 0.0135,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.605,
+   "quarter_final": 0.315,
+   "semi_final": 0.10500000000000001,
+   "final": 0.0405
+  },
+  "Australia": {
+   "winner": 0.0015,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.44,
+   "quarter_final": 0.0825,
+   "semi_final": 0.019000000000000003,
+   "final": 0.0175
+  },
+  "Saudi Arabia": {
+   "winner": 0.0,
+   "round_of_32": 0.0,
+   "round_of_16": 0.0,
+   "quarter_final": 0.0,
+   "semi_final": 0.0,
+   "final": 0.0
+  },
+  "Austria": {
+   "winner": 0.0015,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.1345,
+   "quarter_final": 0.044,
+   "semi_final": 0.025,
+   "final": 0.0155
+  },
+  "Croatia": {
+   "winner": 0.0035,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.305,
+   "quarter_final": 0.08499999999999999,
+   "semi_final": 0.0405,
+   "final": 0.018
+  },
+  "Egypt": {
+   "winner": 0.0015,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.5700000000000001,
+   "quarter_final": 0.11499999999999999,
+   "semi_final": 0.036500000000000005,
+   "final": 0.014499999999999999
+  },
+  "Sweden": {
+   "winner": 0.0015,
+   "round_of_32": 0.9995,
+   "round_of_16": 0.11499999999999999,
+   "quarter_final": 0.0295,
+   "semi_final": 0.0155,
+   "final": 0.007
+  }
+ }
+}

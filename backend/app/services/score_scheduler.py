@@ -44,6 +44,13 @@ logger = logging.getLogger(__name__)
 # so users see fresh scores within one frontend refresh.
 POLL_INTERVAL_SECONDS = 60.0
 
+# Ghost entrants' Phase-2 KO match predictions are refreshed on a slower
+# cadence than the 60 s score poll — the crowd modal and committed market
+# snapshot don't change minute-to-minute, and the seeding is lock-aware so a
+# fixture's pick freezes the moment it locks regardless of when we last ran.
+_GHOST_KO_REFRESH_INTERVAL_S = 600.0  # 10 min
+_last_ghost_ko_refresh = None
+
 
 async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> None:
     """One iteration of the loop. Wraps each tick in its own session so a
@@ -150,6 +157,31 @@ async def _run_one_tick(session_factory: async_sessionmaker[AsyncSession]) -> No
             await send_daily_drop_notification(session)
         except Exception:  # noqa: BLE001
             logger.exception("score_scheduler: daily-drop broadcast tick failed")
+
+        # Ghost entrants' Phase-2 KO match predictions — keep the crowd ghost's
+        # modal current and re-apply the latest committed Polymarket snapshot.
+        # Lock-aware + idempotent (never rewrites a locked pick), throttled so
+        # we don't churn the DB every minute. The bracket is one-time and NOT
+        # rebuilt here. Failures are isolated and can't break other ticks.
+        global _last_ghost_ko_refresh
+        _now = utc_now()
+        if (_last_ghost_ko_refresh is None
+                or (_now - _last_ghost_ko_refresh).total_seconds() >= _GHOST_KO_REFRESH_INTERVAL_S):
+            try:
+                # backend root holds scripts/ — make it importable from uvicorn.
+                import sys as _sys
+                from pathlib import Path as _Path
+                _root = str(_Path(__file__).resolve().parents[2])
+                if _root not in _sys.path:
+                    _sys.path.insert(0, _root)
+                from scripts.seed_ghosts_ko import refresh_phase2_matches
+
+                await refresh_phase2_matches(
+                    session, log=lambda m: logger.info("score_scheduler: ghost KO — %s", m)
+                )
+                _last_ghost_ko_refresh = _now
+            except Exception:  # noqa: BLE001
+                logger.exception("score_scheduler: ghost KO refresh tick failed")
 
 
 async def _maybe_send_phase1_receipts(session: AsyncSession) -> None:
