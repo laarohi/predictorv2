@@ -358,11 +358,20 @@
  * targeted a 980px single column) so each table fits inside the
  * dashboard's ~450px 1/3-grid slot without horizontal scroll.
  * ============================================================ */
-/* `.mtab` is the grid container that drives column sizing. Each column
- * is `minmax(min-content, 1fr)` — every column gets an equal 1fr share
- * of available space, but no column shrinks below its own min-content
- * (so wide content like the MATCH cell expands and the other columns
- * absorb the squeeze instead of overflowing).
+/* `.mtab` is the grid container that drives column sizing. The four narrow
+ * columns (Status / Grp / Pick / Points) are `auto` — sized to their own
+ * content, with NO claim on free space. The MATCH column is the single
+ * flexible track AND the sole shrink point: `minmax(0, 1fr)`. It soaks up
+ * all the slack on a wide layout, and its min of 0 means that when the row
+ * can't fit (e.g. a live/FT match adds the Status column on a ~375px phone)
+ * MATCH absorbs the squeeze instead of the whole grid overflowing its
+ * `overflow: hidden` box and clipping the POINTS column off the right edge.
+ *
+ * This is the layout the design comment above intended ([fixed][fixed]
+ * [Match 1fr][fixed][fixed]). An earlier `repeat(5, minmax(min-content,
+ * 1fr))` gave every column equal 1fr weight, so the narrow columns
+ * ballooned past their content and the grid could grow unbounded —
+ * clipping POINTS when a live row appeared on mobile.
  *
  * Each `.mtab` is its own grid, so two tables (e.g. Past + Upcoming)
  * compute their column widths independently. `.no-status` drops the
@@ -374,7 +383,12 @@
  * with their own horizontal padding would break subgrid alignment. */
 .pn .mtab {
 	display: grid;
-	grid-template-columns: repeat(5, minmax(min-content, 1fr));
+	grid-template-columns:
+		auto /* Status */
+		auto /* Grp */
+		minmax(0, 1fr) /* Match — flexes + sole shrink point */
+		auto /* Pick */
+		auto; /* Points */
 	column-gap: 12px;
 	padding: 0 12px;
 	background: var(--paper);
@@ -385,7 +399,11 @@
 	overflow: hidden;
 }
 .pn .mtab.no-status {
-	grid-template-columns: repeat(4, minmax(min-content, 1fr));
+	grid-template-columns:
+		auto /* Grp */
+		minmax(0, 1fr) /* Match — flexes + sole shrink point */
+		auto /* Pick */
+		auto; /* Points */
 }
 
 /* Head + rows are subgrid items spanning the full table width. They
