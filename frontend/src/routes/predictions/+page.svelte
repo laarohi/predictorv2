@@ -718,7 +718,10 @@
 	// prev/next arrows) swaps which round's knockout score cards are shown —
 	// exactly like the group A–L picker in Phase 1.
 	type Phase2Section = 'bracket' | 'matches';
-	let phase2Section: Phase2Section = 'bracket';
+	// Default Phase 2 view is Matches (knockout score picks) — that's the live,
+	// per-match action surface during the knockout stage. Bracket is still one
+	// tap away via the section toggle.
+	let phase2Section: Phase2Section = 'matches';
 
 	const KO_STAGES = [
 		{ key: 'round_of_32', label: 'Round of 32', short: 'R32' },
