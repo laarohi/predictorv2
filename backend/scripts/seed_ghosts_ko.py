@@ -66,7 +66,7 @@ KO_DATA = Path(__file__).parent / "data" / "polymarket_ko_wc2026.json"
 # by hand, in OUR fixture orientation. "Canada to pass 1-0": Canada is away, so
 # 0-1. VERIFY each fixture's home/away on the target DB.
 POLY_BACKFILL: dict[tuple[str, str], tuple[int, int]] = {
-    ("South Korea", "Canada"): (0, 1),
+    ("South Africa", "Canada"): (0, 1),  # "Canada to pass 1-0"; Canada is away
 }
 
 # Bracket re-pick covers R16→winner; R32 is the known actual lineup (0 pts in
@@ -304,14 +304,18 @@ async def seed_phase2_brackets(session: AsyncSession, *, force: bool = False, lo
 
 
 async def main() -> None:
-    if len(sys.argv) != 2 or sys.argv[1] not in ("brackets", "matches", "both"):
+    args = sys.argv[1:]
+    if not args or args[0] not in ("brackets", "matches", "both"):
         raise SystemExit(__doc__)
-    which = sys.argv[1]
+    which = args[0]
+    # `force` overrides the locked-bracket guard — use only to seed a bracket
+    # the ghosts missed before the Phase-2 deadline (a deliberate backfill).
+    force = "force" in args[1:]
     engine = _engine()
     factory = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with factory() as session:
         if which in ("brackets", "both"):
-            await seed_phase2_brackets(session)
+            await seed_phase2_brackets(session, force=force)
         if which in ("matches", "both"):
             await refresh_phase2_matches(session)
     await engine.dispose()
