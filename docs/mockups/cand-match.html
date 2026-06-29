@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>KO Matches — so far (mockup)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: #cabfa6;
+    min-height: 100vh;
+    padding: 28px 16px 64px;
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    color: #0e1d40;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  .pn { min-width: 0; }
+
+  /* ---- mockup chrome (not part of the widget) ---- */
+  .mock-title {
+    font-family: 'Archivo Black','Impact',sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    font-size: 15px;
+    color: #0e1d40;
+    margin: 0 0 4px;
+  }
+  .mock-cap {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: #5d5847;
+    margin: 0 0 20px;
+  }
+
+  /* ============================================================
+   * .pn token block — VERBATIM
+   * ============================================================ */
+  .pn{
+    --paper:#f1ebde; --paper-2:#e9e1cf; --paper-3:#dfd4ba;
+    --ink:#0e1d40; --ink-2:#514a3d; --ink-3:#6e6754;
+    --red:#c8281f; --red-deep:#8a1610;
+    --gold:#d49a2e; --gold-soft:#e9c478; --green:#1b6c3e; --green-soft:#3f9a63;
+    --navy:#1a3168; --navy-deep:#0a1733;
+    --display:'Archivo Black','Impact',sans-serif;
+    --display2:'Archivo',system-ui,sans-serif;
+    --body:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',monospace;
+  }
+
+  /* ============================================================
+   * KO-MATCH SKINNY STRIP — sibling of .pn-gss (Groups so far)
+   * Reuses the gss label/cell/tooltip metaphor; adds the
+   * played(green=banked) vs upcoming(gold=≤ in-play ceiling) split.
+   * ============================================================ */
+  .pn .pn-kms {
+    background: var(--paper);
+    border: 2.5px solid var(--ink);
+    box-shadow: 5px 5px 0 var(--ink);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0;
+    align-items: stretch;
+  }
+
+  /* navy ink label block ---------------------------------------- */
+  .pn .pn-kms .kms-lbl {
+    padding: 0 16px;
+    background: var(--ink);
+    color: var(--paper);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    border-right: 2.5px solid var(--ink);
+    min-width: 104px;
+  }
+  .pn .pn-kms .kms-lbl .ttl {
+    font-family: var(--display);
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    line-height: 1.04;
+  }
+  .pn .pn-kms .kms-lbl .ttl em {
+    color: var(--gold);
+    font-style: normal;
+  }
+  .pn .pn-kms .kms-lbl .sub {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--paper-3);
+    margin-top: 4px;
+  }
+
+  /* round cells ------------------------------------------------- */
+  .pn .pn-kms .kms-cells {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    min-width: 0;
+  }
+  .pn .pn-kms .kms-cell {
+    padding: 9px 6px 10px;
+    text-align: center;
+    border-right: 1.5px dashed var(--paper-3);
+    position: relative;
+    cursor: pointer;
+    transition: background 0.12s;
+    outline: none;
+    min-width: 0;
+  }
+  .pn .pn-kms .kms-cell:hover { background: var(--paper-2); }
+  .pn .pn-kms .kms-cell:focus-visible { background: var(--paper-2); }
+  .pn .pn-kms .kms-cell:last-child { border-right: 0; }
+
+  /* round label */
+  .pn .pn-kms .kms-cell .g {
+    font-family: var(--display);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    line-height: 1;
+  }
+
+  /* value row: optional ≤ ceiling glyph + number */
+  .pn .pn-kms .kms-cell .v {
+    font-family: var(--display);
+    font-size: 22px;
+    letter-spacing: -0.02em;
+    line-height: 1;
+    margin-top: 7px;
+    color: var(--ink);
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 1px;
+  }
+  .pn .pn-kms .kms-cell .v .lte {
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0;
+    line-height: 1;
+    transform: translateY(-1px);
+  }
+
+  /* PLAYED tone — banked points (green semantics) */
+  .pn .pn-kms .kms-cell.banked .v { color: var(--green); }
+  .pn .pn-kms .kms-cell.banked.hi .v { color: var(--gold); }   /* high-density round pops gold */
+  .pn .pn-kms .kms-cell.banked.lo .v { color: var(--paper-3); } /* faint/low round */
+
+  /* UPCOMING tone — ≤ in-play best-case ceiling (gold semantics) */
+  .pn .pn-kms .kms-cell.live .v,
+  .pn .pn-kms .kms-cell.live .v .lte { color: var(--gold); }
+
+  /* mini density bar */
+  .pn .pn-kms .kms-cell .mini {
+    height: 3px;
+    width: 78%;
+    margin: 6px auto 0;
+    background: var(--paper-3);
+    position: relative;
+    overflow: hidden;
+  }
+  .pn .pn-kms .kms-cell .mini .fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    background: var(--green);
+  }
+  .pn .pn-kms .kms-cell.banked.hi .mini .fill { background: var(--gold); }
+  .pn .pn-kms .kms-cell.banked.lo .mini .fill { background: var(--paper-3); }
+  /* upcoming: gold hatched ceiling bar (visually distinct from a solid fill) */
+  .pn .pn-kms .kms-cell.live .mini {
+    background:
+      repeating-linear-gradient(
+        -45deg,
+        var(--gold) 0, var(--gold) 2px,
+        transparent 2px, transparent 5px
+      ),
+      var(--paper-2);
+  }
+  .pn .pn-kms .kms-cell.live .mini .fill { display: none; }
+
+  /* total cap on the right ------------------------------------- */
+  .pn .pn-kms .kms-tot {
+    padding: 0 15px;
+    background: var(--paper-2);
+    border-left: 2.5px solid var(--ink);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: right;
+    min-width: 92px;
+  }
+  .pn .pn-kms .kms-tot .lab {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    line-height: 1;
+  }
+  .pn .pn-kms .kms-tot .banked-tot {
+    font-family: var(--display);
+    font-size: 24px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--green);
+    margin-top: 3px;
+  }
+  .pn .pn-kms .kms-tot .live-tot {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    color: var(--gold);
+    margin-top: 4px;
+  }
+  .pn .pn-kms .kms-tot .live-tot b {
+    font-family: var(--display);
+    font-weight: 400;
+    font-size: 13px;
+  }
+
+  /* tooltip (dark house style) — shared with .pn-gss -------------- */
+  .pn .pn-kms .kms-cell .kms-tip {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 8px);
+    transform: translateX(-50%) translateY(4px);
+    min-width: 152px;
+    background: var(--ink);
+    color: var(--paper);
+    border: 2px solid var(--ink);
+    box-shadow: 4px 4px 0 rgba(14, 29, 64, 0.30);
+    padding: 7px 9px 8px;
+    z-index: 50;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    text-align: left;
+  }
+  .pn .pn-kms .kms-cell:hover .kms-tip,
+  .pn .pn-kms .kms-cell:focus .kms-tip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
+  /* clamp the edge tooltips so they don't bleed off the strip */
+  .pn .pn-kms .kms-cell:first-child .kms-tip { left: 0; transform: translateX(0) translateY(4px); }
+  .pn .pn-kms .kms-cell:first-child:hover .kms-tip,
+  .pn .pn-kms .kms-cell:first-child:focus .kms-tip { transform: translateX(0) translateY(0); }
+  .pn .pn-kms .kms-cell:nth-last-child(2) .kms-tip { left: auto; right: 0; transform: translateX(0) translateY(4px); }
+  .pn .pn-kms .kms-cell:nth-last-child(2):hover .kms-tip,
+  .pn .pn-kms .kms-cell:nth-last-child(2):focus .kms-tip { transform: translateX(0) translateY(0); }
+  .pn .pn-kms .kms-cell:last-child .kms-tip { left: auto; right: 0; transform: translateX(0) translateY(4px); }
+  .pn .pn-kms .kms-cell:last-child:hover .kms-tip,
+  .pn .pn-kms .kms-cell:last-child:focus .kms-tip { transform: translateX(0) translateY(0); }
+
+  .pn .pn-kms .kms-cell .kms-tip::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--ink);
+  }
+  .pn .pn-kms .kms-cell:first-child .kms-tip::after { left: 28px; }
+  .pn .pn-kms .kms-cell:nth-last-child(2) .kms-tip::after,
+  .pn .pn-kms .kms-cell:last-child .kms-tip::after { left: auto; right: 24px; }
+
+  .pn .pn-kms .kms-tip .tip-h {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    font-family: var(--display);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding-bottom: 5px;
+    margin-bottom: 6px;
+    border-bottom: 1px solid rgba(241, 235, 222, 0.22);
+  }
+  .pn .pn-kms .kms-tip .tip-h b { color: var(--green); font-weight: 400; }
+  .pn .pn-kms .kms-cell.live .kms-tip .tip-h b { color: var(--gold); }
+
+  .pn .pn-kms .kms-tip ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .pn .pn-kms .kms-tip li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.02em;
+  }
+  .pn .pn-kms .kms-tip li .fx { color: var(--paper); text-transform: none; }
+  .pn .pn-kms .kms-tip li .pt {
+    font-family: var(--display);
+    font-size: 12px;
+    font-weight: 400;
+    min-width: 30px;
+    text-align: right;
+  }
+  /* per-fixture result colours: exact=gold, outcome=green, miss=faint */
+  .pn .pn-kms .kms-tip li.exact .pt { color: var(--gold); }
+  .pn .pn-kms .kms-tip li.outcome .pt { color: var(--green-soft); }
+  .pn .pn-kms .kms-tip li.miss .pt { color: var(--ink-3); }
+  .pn .pn-kms .kms-tip li.miss .fx { color: var(--paper-3); }
+  /* upcoming fixture lines: your pick, no result yet */
+  .pn .pn-kms .kms-tip li.pick .pt { color: var(--gold-soft); font-family: var(--mono); font-size: 10.5px; }
+  .pn .pn-kms .kms-tip li.pick .fx { color: var(--paper-3); }
+  .pn .pn-kms .kms-tip .tip-more {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--paper-3);
+    margin-top: 6px;
+    padding-top: 5px;
+    border-top: 1px solid rgba(241, 235, 222, 0.18);
+  }
+
+  /* caption under the strip ------------------------------------- */
+  .pn .kms-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px 16px;
+    margin-top: 9px;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    color: var(--ink-2);
+  }
+  .pn .kms-foot .key { display: inline-flex; align-items: center; gap: 5px; }
+  .pn .kms-foot .sw { width: 11px; height: 11px; border: 1.5px solid var(--ink); display: inline-block; }
+  .pn .kms-foot .sw.green { background: var(--green); }
+  .pn .kms-foot .sw.gold {
+    background:
+      repeating-linear-gradient(-45deg, var(--gold) 0, var(--gold) 2px, var(--paper) 2px, var(--paper) 4px);
+  }
+  .pn .kms-foot .note { color: var(--ink-3); }
+
+  /* ============================================================
+   * Mobile (375px) — collapse to stacked bars like .pn-gss
+   * ============================================================ */
+  @media (max-width: 560px) {
+    .pn .pn-kms {
+      grid-template-columns: 1fr;
+    }
+    .pn .pn-kms .kms-lbl {
+      min-width: 0;
+      border-right: 0;
+      border-bottom: 2.5px solid var(--ink);
+      padding: 8px 14px;
+      flex-direction: row;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .pn .pn-kms .kms-lbl .sub { margin-top: 0; white-space: nowrap; }
+    .pn .pn-kms .kms-cells {
+      grid-template-columns: repeat(5, 1fr);
+    }
+    .pn .pn-kms .kms-cell { padding: 8px 2px 9px; }
+    .pn .pn-kms .kms-cell .g { font-size: 11px; }
+    .pn .pn-kms .kms-cell .v { font-size: 19px; margin-top: 6px; }
+    .pn .pn-kms .kms-cell .v .lte { font-size: 11px; }
+    .pn .pn-kms .kms-cell .mini { width: 84%; }
+    .pn .pn-kms .kms-tot {
+      min-width: 0;
+      border-left: 0;
+      border-top: 2.5px solid var(--ink);
+      padding: 7px 14px;
+      flex-direction: row;
+      align-items: baseline;
+      justify-content: flex-start;
+      gap: 9px;
+      text-align: left;
+    }
+    .pn .pn-kms .kms-tot .lab { align-self: center; }
+    .pn .pn-kms .kms-tot .banked-tot { margin-top: 0; }
+    .pn .pn-kms .kms-tot .live-tot { margin-top: 0; margin-left: auto; }
+    /* keep tooltips inside the narrow viewport */
+    .pn .pn-kms .kms-cell .kms-tip { min-width: 132px; }
+    /* legend wraps to its own lines comfortably */
+    .pn .kms-foot { gap: 7px 14px; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 class="mock-title">Encoding: KO-Match round strip — banked vs ≤ in-play ceiling</h1>
+    <p class="mock-cap">Illustrative sample data — not a live standing.</p>
+
+    <div class="pn">
+      <div class="pn-kms" role="group" aria-label="Knockout match points by round">
+
+        <!-- navy label block -->
+        <div class="kms-lbl">
+          <div class="ttl">KO matches <em>so&nbsp;far</em></div>
+          <div class="sub">Phase 2 · scores</div>
+        </div>
+
+        <!-- round cells -->
+        <div class="kms-cells">
+
+          <!-- R32 · played · banked 40 · mid density -->
+          <div class="kms-cell banked"
+               role="button" tabindex="0"
+               aria-label="Round of 32: 40 points banked across 16 fixtures">
+            <div class="g">R32</div>
+            <div class="v">40</div>
+            <div class="mini"><div class="fill" style="width:67%"></div></div>
+            <div class="kms-tip" role="tooltip">
+              <div class="tip-h"><span>R32</span><b>40 pts</b></div>
+              <ul>
+                <li class="exact"><span class="fx">BRA–KOR</span><span class="pt">+15</span></li>
+                <li class="exact"><span class="fx">ARG–AUS</span><span class="pt">+15</span></li>
+                <li class="outcome"><span class="fx">FRA–SEN</span><span class="pt">+5</span></li>
+                <li class="miss"><span class="fx">NED–ENG</span><span class="pt">0</span></li>
+              </ul>
+              <div class="tip-more">+12 more fixtures · 16 played</div>
+            </div>
+          </div>
+
+          <!-- R16 · played · banked 20 · low density -->
+          <div class="kms-cell banked lo"
+               role="button" tabindex="0"
+               aria-label="Round of 16: 20 points banked across 8 fixtures">
+            <div class="g">R16</div>
+            <div class="v">20</div>
+            <div class="mini"><div class="fill" style="width:33%"></div></div>
+            <div class="kms-tip" role="tooltip">
+              <div class="tip-h"><span>R16</span><b>20 pts</b></div>
+              <ul>
+                <li class="exact"><span class="fx">ESP–CRO</span><span class="pt">+15</span></li>
+                <li class="outcome"><span class="fx">POR–SUI</span><span class="pt">+5</span></li>
+                <li class="miss"><span class="fx">ARG–BEL</span><span class="pt">0</span></li>
+              </ul>
+              <div class="tip-more">+5 more fixtures · 8 played</div>
+            </div>
+          </div>
+
+          <!-- QF · upcoming · ≤60 in play -->
+          <div class="kms-cell live"
+               role="button" tabindex="0"
+               aria-label="Quarter-finals: up to 60 points in play across 4 upcoming fixtures">
+            <div class="g">QF</div>
+            <div class="v"><span class="lte">≤</span>60</div>
+            <div class="mini"></div>
+            <div class="kms-tip" role="tooltip">
+              <div class="tip-h"><span>QF · upcoming</span><b>≤60 pts</b></div>
+              <ul>
+                <li class="pick"><span class="fx">BRA–FRA</span><span class="pt">2–1</span></li>
+                <li class="pick"><span class="fx">ESP–GER</span><span class="pt">1–1</span></li>
+              </ul>
+              <div class="tip-more">+2 fixtures · best case only</div>
+            </div>
+          </div>
+
+          <!-- SF · upcoming · ≤30 in play -->
+          <div class="kms-cell live"
+               role="button" tabindex="0"
+               aria-label="Semi-finals: up to 30 points in play across 2 upcoming fixtures">
+            <div class="g">SF</div>
+            <div class="v"><span class="lte">≤</span>30</div>
+            <div class="mini"></div>
+            <div class="kms-tip" role="tooltip">
+              <div class="tip-h"><span>SF · upcoming</span><b>≤30 pts</b></div>
+              <ul>
+                <li class="pick"><span class="fx">2 fixtures</span><span class="pt">TBD</span></li>
+              </ul>
+              <div class="tip-more">picks open · best case only</div>
+            </div>
+          </div>
+
+          <!-- Final · upcoming · ≤15 in play -->
+          <div class="kms-cell live"
+               role="button" tabindex="0"
+               aria-label="Final: up to 15 points in play across 1 upcoming fixture">
+            <div class="g">Final</div>
+            <div class="v"><span class="lte">≤</span>15</div>
+            <div class="mini"></div>
+            <div class="kms-tip" role="tooltip">
+              <div class="tip-h"><span>Final · upcoming</span><b>≤15 pts</b></div>
+              <ul>
+                <li class="pick"><span class="fx">1 fixture</span><span class="pt">TBD</span></li>
+              </ul>
+              <div class="tip-more">picks open · best case only</div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- total cap -->
+        <div class="kms-tot" aria-label="60 points banked, up to 105 in play">
+          <div class="lab">Match pts</div>
+          <div class="banked-tot">60</div>
+          <div class="live-tot">≤&nbsp;<b>105</b> in play</div>
+        </div>
+
+      </div>
+
+      <!-- caption / legend -->
+      <div class="kms-foot">
+        <span class="key"><span class="sw green"></span> banked</span>
+        <span class="key"><span class="sw gold"></span> ≤ in&nbsp;play (best case)</span>
+        <span class="note">Phase 2 only · KO match scores</span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

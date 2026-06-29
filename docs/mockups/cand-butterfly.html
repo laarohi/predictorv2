@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bracket Spread — diverging butterfly</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  .pn{
+    --paper:#f1ebde; --paper-2:#e9e1cf; --paper-3:#dfd4ba;
+    --ink:#0e1d40; --ink-2:#514a3d; --ink-3:#6e6754;
+    --red:#c8281f; --red-deep:#8a1610;
+    --gold:#d49a2e; --gold-soft:#e9c478; --green:#1b6c3e; --green-soft:#3f9a63;
+    --navy:#1a3168; --navy-deep:#0a1733;
+    --display:'Archivo Black','Impact',sans-serif;
+    --display2:'Archivo',system-ui,sans-serif;
+    --body:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:#cabfa6; padding:26px 14px 90px;
+    font-family:'IBM Plex Sans',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  .wrap{ width:100%; max-width:412px; margin:0 auto; }
+  .pn{ color:var(--ink); }
+
+  /* ---- mockup framing (outside the widget) ---- */
+  .m-title{ font-family:var(--display); font-size:19px; letter-spacing:.01em; text-transform:uppercase; margin:0 0 3px; color:var(--ink); }
+  .m-cap{ font-family:var(--mono); font-size:11px; color:#5d564a; margin:0 0 18px; letter-spacing:.02em; }
+
+  /* ===================== WIDGET CARD ===================== */
+  .pn-card{ background:var(--paper); border:2.5px solid var(--ink); box-shadow:5px 5px 0 var(--ink); }
+  .pn-card-h{
+    background:var(--ink); color:var(--paper);
+    padding:9px 13px; display:flex; align-items:center; justify-content:space-between;
+    font-family:var(--display); font-size:13px; letter-spacing:.04em; text-transform:uppercase;
+  }
+  .pn-card-h .right{ font-family:var(--mono); font-size:10px; letter-spacing:.1em; color:var(--paper-3); font-weight:400; display:flex; align-items:center; gap:6px; }
+  .live-dot{ width:7px; height:7px; background:var(--gold); border-radius:50%; display:inline-block; animation:blink 1.4s ease-in-out infinite; }
+  @keyframes blink{ 0%,100%{ opacity:1; } 50%{ opacity:.25; } }
+
+  .pn-card-body{ padding:14px 12px 13px; }
+
+  /* ---- header: per-phase running totals ---- */
+  .totals{ display:flex; gap:7px; margin-bottom:12px; }
+  .tcol{ flex:1 1 0; min-width:0; border:2px solid var(--ink); background:var(--paper-2); padding:7px 9px 8px; position:relative; }
+  .tcol .ph{ font-family:var(--display); font-size:10.5px; letter-spacing:.03em; text-transform:uppercase; color:var(--ink); margin-bottom:6px; display:flex; align-items:center; gap:5px; }
+  .tcol .ph .dot{ width:8px; height:8px; border:1.5px solid var(--ink); display:inline-block; flex:none; }
+  .tcol.p1 .ph .dot{ background:var(--ink); }
+  .tcol.p2 .ph .dot{ background:var(--paper); }
+  .tcol .ph .sub{ font-family:var(--mono); font-size:7.5px; letter-spacing:.08em; color:var(--ink-3); margin-left:auto; font-weight:500; }
+  .tcol .nums{ display:flex; align-items:baseline; gap:12px; }
+  .tcol .grp{ display:flex; flex-direction:column; line-height:1; min-width:0; }
+  .tcol .grp .k{ font-family:var(--mono); font-size:7.5px; letter-spacing:.09em; text-transform:uppercase; color:var(--ink-3); margin-bottom:4px; white-space:nowrap; }
+  .tcol .grp .n{ font-family:var(--display); font-size:24px; line-height:.82; letter-spacing:-.02em; }
+  .tcol .grp .n.g{ color:var(--green); }
+  .tcol .grp .n.y{ color:var(--gold); }
+
+  /* ---- legend ---- */
+  .legend{ display:flex; align-items:center; gap:13px; flex-wrap:wrap; font-family:var(--mono); font-size:9px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); margin-bottom:11px; padding:0 1px; }
+  .legend .it{ display:flex; align-items:center; gap:5px; }
+  .legend .sw{ width:13px; height:10px; border:1.5px solid var(--ink); display:inline-block; }
+  .legend .sw.g{ background:var(--green); }
+  .legend .sw.y{ background:repeating-linear-gradient(-45deg,var(--gold) 0 4px,var(--gold-soft) 4px 8px); }
+  .legend .note{ margin-left:auto; color:var(--ink-3); font-size:8px; letter-spacing:.04em; text-transform:none; font-style:italic; }
+
+  /* ---- column captions over the wings ---- */
+  .wingcap{ display:grid; grid-template-columns:minmax(0,1fr) 70px minmax(0,1fr); align-items:end; margin-bottom:4px; }
+  .wingcap .l{ text-align:left; }
+  .wingcap .r{ text-align:right; }
+  .wingcap .pn{ font-family:var(--display); font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink); }
+  .wingcap .pot{ font-family:var(--mono); font-size:8px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-3); margin-top:1px; }
+  .wingcap .mid{ text-align:center; font-family:var(--mono); font-size:8px; letter-spacing:.08em; color:var(--ink-3); text-transform:uppercase; }
+
+  /* ===================== BUTTERFLY ===================== */
+  .fly{ display:flex; flex-direction:column; gap:3px; }
+
+  .row{
+    display:grid; grid-template-columns:minmax(0,1fr) 70px minmax(0,1fr); align-items:stretch;
+    position:relative;
+  }
+  .row.live .gutter{ background:#fbf4df; }
+
+  /* wing tap-targets (role=button) */
+  .wing{
+    position:relative; height:34px; cursor:pointer; outline:none;
+    display:flex; align-items:center;
+  }
+  .wing.left{ justify-content:flex-end; padding-right:0; }
+  .wing.right{ justify-content:flex-start; padding-left:0; }
+
+  /*
+    Bar geometry — driven by two custom props on each .wing:
+      --w : round's share of THIS phase's ceiling, as a % (bar length, fair across phases)
+      --g : green (banked) fraction of that bar, 0..1 (rest is gold in-play)
+    The bar is anchored at the spine and grows outward; segments split via flex-grow.
+  */
+  .bar{
+    position:absolute; top:6px; bottom:6px; width:var(--w);
+    display:flex; border:1.5px solid var(--ink);
+  }
+  .wing.left .bar{ right:0; }
+  .wing.right .bar{ left:0; }
+
+  .seg{ height:100%; min-width:0; }
+  .seg.bank{ flex:var(--g) 1 0; background:var(--green); }
+  .seg.play{ flex:calc(1 - var(--g)) 1 0; background:repeating-linear-gradient(-45deg,var(--gold) 0 4.5px,var(--gold-soft) 4.5px 9px); }
+  /* divider where green meets gold — shows only for mixed rounds (0<--g<1);
+     a zero-width segment never paints a visible seam, so this stays clean
+     for the all-banked / all-in-play rounds in this dataset. */
+  .seg.bank + .seg.play{ box-shadow:-1.5px 0 0 var(--ink); }
+
+  /* empty (unrealised) potential — faint ghost outline to the wing's own max */
+  .ghost{ position:absolute; top:6px; bottom:6px; width:var(--w); border:1.5px dashed var(--paper-3); }
+  .wing.left .ghost{ right:0; }
+  .wing.right .ghost{ left:0; }
+
+  /* tip labels: absolute points, sit just past the bar's outer end */
+  .tip{
+    position:absolute; top:50%; transform:translateY(-50%);
+    font-family:var(--mono); font-size:9px; line-height:1.05; white-space:nowrap;
+    pointer-events:none;
+  }
+  .wing.left  .tip{ right:calc(var(--w) + 5px); text-align:right; }
+  .wing.right .tip{ left:calc(var(--w) + 5px);  text-align:left;  }
+  .tip .pts{ font-family:var(--display); font-size:13px; letter-spacing:-.01em; }
+  .tip .pts.g{ color:var(--green); }
+  .tip .pts.y{ color:var(--gold); }
+  .tip .pts.zero{ color:var(--ink-3); font-size:11px; }
+  .tip .src{ display:block; font-size:7.5px; letter-spacing:.04em; color:var(--ink-3); margin-top:1px; }
+
+  /* ---- centre gutter / spine ---- */
+  .gutter{
+    border-left:2px solid var(--ink); border-right:2px solid var(--ink);
+    background:var(--paper-2);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:3px 0;
+  }
+  .gutter .rd{ font-family:var(--display); font-size:12px; letter-spacing:.02em; text-transform:uppercase; color:var(--ink); line-height:1; }
+  .gutter .nn{ font-family:var(--mono); font-size:9px; color:var(--ink-2); margin-top:2px; letter-spacing:.02em; }
+  .gutter .nn .of{ color:var(--ink-3); }
+  .row.live .gutter .rd{ color:var(--red-deep); }
+  .livepip{ font-family:var(--mono); font-size:6.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--red); font-weight:600; margin-top:1px; }
+
+  /* hover/focus affordance on a wing */
+  .wing:hover .bar, .wing:focus-visible .bar{ filter:saturate(1.18) brightness(1.04); }
+  .wing:focus-visible{ box-shadow:inset 0 0 0 2px var(--red); }
+  .wing:hover .tip .pts, .wing:focus-visible .tip .pts{ text-decoration:underline; text-underline-offset:2px; }
+
+  /* ===================== HOUSE TOOLTIP ===================== */
+  .ttp{
+    position:absolute; bottom:calc(100% + 7px);
+    width:132px; background:var(--ink); color:var(--paper);
+    border:2px solid var(--ink); box-shadow:3px 3px 0 var(--ink);
+    padding:7px 8px 8px; z-index:30;
+    opacity:0; visibility:hidden; transform:translateY(3px);
+    transition:opacity .12s ease, transform .12s ease;
+  }
+  .wing.left .ttp{ right:-4px; }
+  .wing.right .ttp{ left:-4px; }
+  .wing:hover .ttp, .wing:focus-visible .ttp{ opacity:1; visibility:visible; transform:translateY(0); }
+  /* little ink notch */
+  .ttp::after{
+    content:""; position:absolute; top:100%; width:8px; height:8px;
+    background:var(--ink); border-right:2px solid var(--ink); border-bottom:2px solid var(--ink);
+    transform:rotate(45deg); margin-top:-5px;
+  }
+  .wing.left .ttp::after{ right:14px; }
+  .wing.right .ttp::after{ left:14px; }
+
+  .ttp .th{ font-family:var(--mono); font-size:8px; letter-spacing:.1em; text-transform:uppercase; color:var(--paper-3); display:flex; justify-content:space-between; align-items:center; padding-bottom:4px; margin-bottom:5px; border-bottom:1px solid #2c3a5e; }
+  .ttp .th b{ font-family:var(--display); color:var(--paper); font-size:9px; letter-spacing:.04em; }
+  .ttp .grp2{ margin-bottom:5px; }
+  .ttp .grp2:last-child{ margin-bottom:0; }
+  .ttp .gh{ font-family:var(--mono); font-size:7.5px; letter-spacing:.08em; text-transform:uppercase; margin-bottom:3px; display:flex; align-items:center; gap:4px; }
+  .ttp .gh.alive{ color:var(--gold-soft); }
+  .ttp .gh.out{ color:#d98c86; }
+  .ttp .gh .c{ margin-left:auto; opacity:.7; }
+  .ttp .chips{ display:flex; flex-wrap:wrap; gap:3px; }
+  .ttp .chip{
+    font-family:var(--mono); font-size:8px; font-weight:600; letter-spacing:.04em;
+    padding:1px 4px; line-height:1.3;
+  }
+  .ttp .chip.al{ background:#16361f; color:#8fe6ac; border:1px solid #2f6a44; }
+  .ttp .chip.ot{ background:#3a1714; color:#f0a39c; border:1px solid #7a322c; text-decoration:line-through; text-decoration-thickness:1px; }
+  .ttp .chip.champ{ background:var(--gold); color:var(--ink); border:1px solid var(--gold-soft); }
+  .ttp .empty{ font-family:var(--mono); font-size:8px; color:var(--ink-3); }
+
+  /* footer fairness note */
+  .fnote{
+    margin-top:11px; padding-top:9px; border-top:1.5px dashed var(--paper-3);
+    font-family:var(--mono); font-size:9px; line-height:1.5; color:var(--ink-2); letter-spacing:.01em;
+  }
+  .fnote b{ color:var(--ink); font-weight:600; }
+  .fnote .gw{ color:var(--green); } .fnote .yw{ color:var(--gold); }
+
+  @media (max-width:380px){
+    .row{ grid-template-columns:1fr 62px 1fr; }
+    .wingcap{ grid-template-columns:1fr 62px 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap pn">
+
+  <h1 class="m-title">Bracket Spread — diverging butterfly</h1>
+  <p class="m-cap">Illustrative sample data · mid-tournament (R16 &amp; R16 played, QF live)</p>
+
+  <!-- ===================== WIDGET ===================== -->
+  <section class="pn-card" aria-label="Bracket advancement — Phase 1 vs Phase 2">
+    <div class="pn-card-h">
+      <span>Bracket Spread</span>
+      <span class="right"><span class="live-dot"></span>QF LIVE</span>
+    </div>
+
+    <div class="pn-card-body">
+
+      <!-- per-phase running totals -->
+      <div class="totals">
+        <div class="tcol p1">
+          <div class="ph"><span class="dot"></span>Phase 1 <span class="sub">Original</span></div>
+          <div class="nums">
+            <div class="grp"><span class="k">Banked</span><span class="n g">290</span></div>
+            <div class="grp"><span class="k">In-play</span><span class="n y">485</span></div>
+          </div>
+        </div>
+        <div class="tcol p2">
+          <div class="ph"><span class="dot"></span>Phase 2 <span class="sub">Re-pick</span></div>
+          <div class="nums">
+            <div class="grp"><span class="k">Banked</span><span class="n g">160</span></div>
+            <div class="grp"><span class="k">In-play</span><span class="n y">380</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- legend -->
+      <div class="legend">
+        <span class="it"><span class="sw g"></span>Banked</span>
+        <span class="it"><span class="sw y"></span>In-play</span>
+        <span class="note">wings scaled to each phase's own ceiling</span>
+      </div>
+
+      <!-- wing captions -->
+      <div class="wingcap">
+        <div class="l"><div class="pn">◀ Phase 1</div><div class="pot">grows left</div></div>
+        <div class="mid">round<br>n / N</div>
+        <div class="r"><div class="pn">Phase 2 ▶</div><div class="pot">grows right</div></div>
+      </div>
+
+      <!-- ============ butterfly rows ============ -->
+      <!--
+        Wing length = (banked + in-play pts for this round) / (this phase's grand potential).
+        P1 potential = 775, P2 potential = 540. Half-width of one wing column ≈ 100% of that side.
+        Within a wing, the green:gold split is proportional to banked:in-play of that round.
+      -->
+      <div class="fly">
+
+        <!-- ===== R16 ===== (banked → green; --g:1) -->
+        <div class="row">
+          <!-- P1: 165 banked / 775 ceiling = 21.3% → ×3.2 = 68.2% -->
+          <div class="wing left" role="button" tabindex="0" style="--w:68.2%; --g:1;"
+               aria-label="Round of 16, Phase 1: 165 points banked, 11 of 16 picks reached. Activate for team detail.">
+            <div class="ghost"></div>
+            <div class="bar"><span class="seg bank"></span><span class="seg play"></span></div>
+            <div class="tip"><span class="pts g">165</span><span class="src">banked</span></div>
+            <div class="ttp" role="tooltip">
+              <div class="th">R16 · P1 <b>11/16</b></div>
+              <div class="grp2">
+                <div class="gh alive">Reached <span class="c">6 shown</span></div>
+                <div class="chips">
+                  <span class="chip al">BRA</span><span class="chip al">FRA</span><span class="chip al">ARG</span>
+                  <span class="chip al">ESP</span><span class="chip al">ENG</span><span class="chip al">POR</span>
+                </div>
+              </div>
+              <div class="grp2">
+                <div class="gh out">Missed <span class="c">2</span></div>
+                <div class="chips"><span class="chip ot">NED</span><span class="chip ot">GER</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="gutter">
+            <div class="rd">R16</div>
+            <div class="nn">11<span class="of">/16</span> · 14<span class="of">/16</span></div>
+          </div>
+
+          <!-- P2: 70 / 540 = 13.0% → ×3.2 = 41.6% -->
+          <div class="wing right" role="button" tabindex="0" style="--w:41.6%; --g:1;"
+               aria-label="Round of 16, Phase 2: 70 points banked, 14 of 16 picks reached. Activate for team detail.">
+            <div class="ghost"></div>
+            <div class="bar"><span class="seg bank"></span><span class="seg play"></span></div>
+            <div class="tip"><span class="pts g">70</span><span class="src">banked</span></div>
+            <div class="ttp" role="tooltip">
+              <div class="th">R16 · P2 <b>14/16</b></div>
+              <div class="grp2">
+                <div class="gh alive">Reached <span class="c">8 shown</span></div>
+                <div class="chips">
+                  <span class="chip al">BRA</span><span class="chip al">FRA</span><span class="chip al">ARG</span>
+                  <span class="chip al">ESP</span><span class="chip al">ENG</span><span class="chip al">POR</span>
+                  <span class="chip al">CRO</span><span class="chip al">MAR</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== QF ===== (banked → green; --g:1) -->
+        <div class="row live">
+          <!-- P1: 125 / 775 = 16.1% → ×3.2 = 51.5% -->
+          <div class="wing left" role="button" tabindex="0" style="--w:51.5%; --g:1;"
+               aria-label="Quarter-finals, Phase 1: 125 points banked, 5 of 8 picks reached. Activate for team detail.">
+            <div class="ghost"></div>
+            <div class="bar"><span class="seg bank"></span><span class="seg play"></span></div>
+            <div class="tip"><span class="pts g">125</span><span class="src">banked</span></div>
+            <div class="ttp" role="tooltip">
+              <div class="th">QF · P1 <b>5/8</b></div>
+              <div class="grp2">
+                <div class="gh alive">Reached <span class="c">3</span></div>
+                <div class="chips"><span class="chip al">BRA</span><span class="chip al">FRA</span><span class="chip al">ESP</span></div>
+              </div>
+              <div class="grp2">
+                <div class="gh out">Missed <span class="c">1</span></div>
+                <div class="chips"><span class="chip ot">ARG</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="gutter">
+            <div class="rd">QF</div>
+            <div class="nn">5<span class="of">/8</span> · 6<span class="of">/8</span></div>
+            <div class="livepip">● live</div>
+          </div>
+
+          <!-- P2: 90 / 540 = 16.7% → ×3.2 = 53.4% -->
+          <div class="wing right" role="button" tabindex="0" style="--w:53.4%; --g:1;"
+               aria-label="Quarter-finals, Phase 2: 90 points banked, 6 of 8 picks reached. Activate for team detail.">
+            <div class="ghost"></div>
+            <div class="bar"><span class="seg bank"></span><span class="seg play"></span></div>
+            <div class="tip"><span class="pts g">90</span><span class="src">banked</span></div>
+            <div class="ttp" role="tooltip">
+              <div class="th">QF · P2 <b>6/8</b></div>
+              <div class="grp2">
+                <div class="gh alive">Reached <span class="c">4</span></div>
+                <div class="chips"><span class="chip al">BRA</span><span class="chip al">FRA</span><span class="chip al">ESP</span><span class="chip al">POR</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== SF ===== (in-play → gold; --g:0) -->
+        <div class="row">
+          <!-- P1: 165 / 775 = 21.3% → ×3.2 = 68.2% -->
+          <div class="wing left" role="button" tabindex="0" style="--w:68.2%; --g:0;"
+               aria-label="Semi-finals, Phase 1: 165 points in play, 3 of 4 picks still alive. Activate for team detail.">
+            <div class="ghost"></div>
+            <div class="bar"><span class="seg bank"></span><span class="seg play"></span></div>
+            <div class="tip"><span class="pts y">165</span><span class="src">in-play</span></div>
+            <div class="ttp" role="tooltip">
+              <div class="th">SF · P1 <b>3/4 alive</b></div>
+              <div class="grp2">
+                <div class="gh alive">Still in <span class="c">3</span></div>
+                <div class="chips"><span class="chip al">BRA</span><span class="chip al">FRA</span><span class="chip al">ESP</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="gutter">
+            <div class="rd">SF</div>
+            <div class="nn">3<span class="of">/4</span> · 4<span class="of">/4</span></div>
+          </div>
+
+          <!-- P2: 160 / 540 = 29.6% → ×3.2 = 94.7% (phase-best share) -->
+          <div class="wing right" role="button" tabindex="0" style="--w:94.7%; --g:0;"
+               aria-label="Semi-finals, Phase 2: 160 points in play, 4 of 4 picks still alive. Activate for team detail.">
+            <div class="ghost"></div>
+            <div class="bar"><span class="seg bank"></span><span class="seg play"></span></div>
+            <div class="tip"><span class="pts y">160</span><span class="src">in-play</span></div>
+            <div class="ttp" role="tooltip">
+              <div class="th">SF · P2 <b>4/4 alive</b></div>
+              <div class="grp2">
+                <div class="gh alive">Still in <span class="c">4</span></div>
+                <div class="chips"><span class="chip al">BRA</span><span class="chip al">FRA</span><span class="chip al">ESP</span><span class="chip al">POR</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== Final ===== (in-play → gold; --g:0) -->
+        <div class="row">
+          <!-- P1: 170 / 775 = 21.9% → ×3.2 = 70.1% -->
+          <div class="wing left" role="button" tabindex="0" style="--w:70.1%; --g:0;"
+               aria-label="Final, Phase 1: 170 points in play, 2 of 2 picks still alive. Activate for team detail.">
+            <div class="ghost"></div>
+            <div class="bar"><span class="seg bank"></span><span class="seg play"></span></div>
+            <div class="tip"><span class="pts y">170</span><span class="src">in-play</span></div>
+            <div class="ttp" role="tooltip">
+              <div class="th">FINAL · P1 <b>2/2 alive</b></div>
+              <div class="grp2">
+                <div class="gh alive">Still in <span class="c">2</span></div>
+                <div class="chips"><span class="chip al">BRA</span><span class="chip al">FRA</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="gutter">
+            <div class="rd">FINAL</div>
+            <div class="nn">2<span class="of">/2</span> · 2<span class="of">/2</span></div>
+          </div>
+
+          <!-- P2: 120 / 540 = 22.2% → ×3.2 = 71.0% -->
+          <div class="wing right" role="button" tabindex="0" style="--w:71.0%; --g:0;"
+               aria-label="Final, Phase 2: 120 points in play, 2 of 2 picks still alive. Activate for team detail.">
+            <div class="ghost"></div>
+            <div class="bar"><span class="seg bank"></span><span class="seg play"></span></div>
+            <div class="tip"><span class="pts y">120</span><span class="src">in-play</span></div>
+            <div class="ttp" role="tooltip">
+              <div class="th">FINAL · P2 <b>2/2 alive</b></div>
+              <div class="grp2">
+                <div class="gh alive">Still in <span class="c">2</span></div>
+                <div class="chips"><span class="chip al">BRA</span><span class="chip al">FRA</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ===== Winner ===== (in-play → gold; --g:0) -->
+        <div class="row">
+          <!-- P1: 150 / 775 = 19.4% → ×3.2 = 62.1% -->
+          <div class="wing left" role="button" tabindex="0" style="--w:62.1%; --g:0;"
+               aria-label="Winner, Phase 1: 150 points in play, your champion pick still alive. Activate for team detail.">
+            <div class="ghost"></div>
+            <div class="bar"><span class="seg bank"></span><span class="seg play"></span></div>
+            <div class="tip"><span class="pts y">150</span><span class="src">in-play</span></div>
+            <div class="ttp" role="tooltip">
+              <div class="th">WINNER · P1 <b>1/1 alive</b></div>
+              <div class="grp2">
+                <div class="gh alive">Champion pick <span class="c">1</span></div>
+                <div class="chips"><span class="chip champ">BRA ★</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="gutter">
+            <div class="rd">WINNER</div>
+            <div class="nn">1<span class="of">/1</span> · 1<span class="of">/1</span></div>
+          </div>
+
+          <!-- P2: 100 / 540 = 18.5% → ×3.2 = 59.2% -->
+          <div class="wing right" role="button" tabindex="0" style="--w:59.2%; --g:0;"
+               aria-label="Winner, Phase 2: 100 points in play, your champion pick still alive. Activate for team detail.">
+            <div class="ghost"></div>
+            <div class="bar"><span class="seg bank"></span><span class="seg play"></span></div>
+            <div class="tip"><span class="pts y">100</span><span class="src">in-play</span></div>
+            <div class="ttp" role="tooltip">
+              <div class="th">WINNER · P2 <b>1/1 alive</b></div>
+              <div class="grp2">
+                <div class="gh alive">Champion pick <span class="c">1</span></div>
+                <div class="chips"><span class="chip champ">FRA ★</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /fly -->
+
+      <!-- fairness note -->
+      <p class="fnote">
+        Wings scaled to each phase's own ceiling (<b>P1 775</b> · <b>P2 540</b>) so length = share realised, not raw pts.
+        <span class="gw">Green</span> = banked &nbsp;·&nbsp; <span class="yw">gold</span> = still winnable.
+        Tap a wing for the teams.
+      </p>
+
+    </div>
+  </section>
+
+</div>
+</body>
+</html>

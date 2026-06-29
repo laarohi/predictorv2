@@ -50,6 +50,10 @@ export interface StageCellResponse {
 export interface StageRowResponse {
 	earned: StageCellResponse;
 	available: StageCellResponse;
+	/** Eliminated picks at this stage (feeder match finished, team lost). Carries
+	 *  0 pts; drives the muted-red "missed" segment + tooltip. Optional for
+	 *  backward-compat with a response cached before the field existed. */
+	missed?: StageCellResponse;
 }
 
 export interface BracketExposureResponse {
@@ -95,6 +99,33 @@ export interface GroupQualEntry {
  *  tooltip; reconciles with the leaderboard (same scoring engine). */
 export async function getMyGroupQualification(): Promise<GroupQualEntry[]> {
 	return api.get<GroupQualEntry[]>('/predictions/me/group-qualification');
+}
+
+// ---- Knockout match-score points (the "KO matches so far" strip) ----
+
+export interface KnockoutMatchFixtureRow {
+	home_team: string;
+	away_team: string;
+	predicted: string; // "2-1"
+	actual: string | null; // final (ET/pens) score for display, null if unplayed
+	points: number | null; // banked points, null if unplayed
+	result: 'exact' | 'outcome' | 'miss' | null;
+	status: string; // "finished" | "scheduled" | "live" | ...
+}
+
+export interface KnockoutMatchRoundRow {
+	stage: string; // round_of_32 .. final, third_place
+	earned_pts: number;
+	/** Best-case ceiling (≤) for unplayed predicted fixtures, never awarded. */
+	available_pts: number;
+	fixtures: KnockoutMatchFixtureRow[];
+}
+
+/** Per-KO-round match-SCORE points for the calling user — banked (finished)
+ *  plus a best-case still-in-play ceiling. Sibling of the bracket Scoring
+ *  Journey; reconciles with the leaderboard (same scoring engine). */
+export async function getMyKnockoutMatchPoints(): Promise<KnockoutMatchRoundRow[]> {
+	return api.get<KnockoutMatchRoundRow[]>('/predictions/me/knockout-match-points');
 }
 
 export async function updateMatchPrediction(

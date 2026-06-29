@@ -116,12 +116,22 @@ class StageCell:
 
 @dataclass
 class StageRow:
-    """One row of the Scoring Journey grid. Always has both cells (the
-    available cell collapses to zeros once every feeder match has
-    resolved)."""
+    """One row of the Scoring Journey grid.
+
+    Three buckets, which together account for every pick the user made at
+    this stage:
+      - earned    — feeder match finished, team won → reached (banked).
+      - available — feeder match still TBD → still alive (in play).
+      - missed    — feeder match finished, team lost → eliminated (0 pts).
+    The grouped-bars widget renders these as the green / gold / muted-red
+    segments of a single bar; (earned + available + missed) is the
+    denominator for the "picks kept" fraction. `missed` carries no points
+    (pts=0) — it exists so the eliminated teams can be surfaced rather than
+    silently dropped."""
 
     earned: StageCell = field(default_factory=StageCell)
     available: StageCell = field(default_factory=StageCell)
+    missed: StageCell = field(default_factory=StageCell)
 
 
 @dataclass
@@ -254,6 +264,7 @@ async def _classify_picks_per_stage(
         picks_at_stage = user_picks_by_stage.get(dest_stage, [])
         earned_picks: list[str] = []
         available_picks: list[str] = []
+        eliminated_picks: list[str] = []
         counted_tbd_matches: set[tuple[str, str]] = set()
 
         for team in picks_at_stage:
@@ -267,9 +278,11 @@ async def _classify_picks_per_stage(
                     counted_tbd_matches.add((h, a))
                     available_picks.append(team)
                     break
-            # Picks that didn't match (team already eliminated) are
-            # silently dropped — the user already saw the elimination.
-            _ = matched
+            # No match → the team's feeder fixture has resolved and the team
+            # lost: an eliminated pick. Surfaced as the `missed` bucket so the
+            # widget can show which picks busted (was previously dropped).
+            if not matched:
+                eliminated_picks.append(team)
 
         stage_pts = stage_points_lookup.get(STAGE_POINT_KEY[dest_stage], 0)
         out[dest_stage] = StageRow(
@@ -284,6 +297,12 @@ async def _classify_picks_per_stage(
                 of=tbd_count,
                 pts=len(counted_tbd_matches) * stage_pts,
                 teams=available_picks,
+            ),
+            missed=StageCell(
+                n=len(eliminated_picks),
+                of=known_count,
+                pts=0,
+                teams=eliminated_picks,
             ),
         )
 

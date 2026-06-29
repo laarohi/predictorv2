@@ -23,6 +23,12 @@
 	--navy-deep: #0a1733;
 	--gold: #d49a2e;
 	--green: #1b6c3e;
+	/* Soft tints — lighter partners of the signal colours, used for hatched
+	 * "in play" fills (gold), accents, and the muted-red "missed" segment on
+	 * the scoring-journey bars. */
+	--gold-soft: #e9c478;
+	--green-soft: #3f9a63;
+	--red-mute: #cf9b94;
 	--display: 'Archivo Black', 'Impact', sans-serif;
 	--display2: 'Archivo', system-ui, sans-serif;
 	--body: 'IBM Plex Sans', system-ui, sans-serif;

@@ -617,6 +617,112 @@ async def get_group_qualification_ledger(
     return ledger
 
 
+# Best-case match points for an UNPLAYED predicted KO fixture: correct outcome
+# (5) + exact score (10). The rarity bonus is excluded because it depends on how
+# the rest of the pool predicted, which isn't known until the match is graded —
+# so this is a true ceiling ("≤"), never an awarded figure.
+_BEST_CASE_KO_MATCH_PTS = 15
+
+# KO match rounds in tournament order. `third_place` is a real KO fixture that
+# sits off the advancement path; it's included so its match-score prediction
+# still counts toward the strip.
+_KO_MATCH_ROUND_ORDER = [
+    "round_of_32",
+    "round_of_16",
+    "quarter_final",
+    "semi_final",
+    "final",
+    "third_place",
+]
+
+
+async def get_knockout_match_points_ledger(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+) -> list[dict]:
+    """Per-KO-round match-SCORE points for one user (distinct from bracket
+    *advancement* points, which `compute_bracket_exposure` owns).
+
+    For each knockout round the user predicted, returns the points already
+    BANKED (finished fixtures, graded through the same ``calculate_match_points``
+    the leaderboard uses, so it reconciles) plus a best-case ``available``
+    ceiling for predicted fixtures that haven't been played. KO match-score
+    predictions are Phase 2. Grades on REGULATION (``calculate_match_points``
+    reads the 90-minute score; the rarity denominator counts the pool against
+    ``score.regulation_outcome``), while DISPLAYING the final (ET/pens) score for
+    humans — matching the engine.
+
+    Returns rounds in tournament order, omitting rounds the user didn't predict.
+    Shape: ``[{stage, earned_pts, available_pts, fixtures: [{home_team,
+    away_team, predicted, actual, points, result, status}]}]``.
+    """
+    rows = (
+        await session.execute(
+            select(MatchPrediction, Score, Fixture)
+            .join(Fixture, MatchPrediction.fixture_id == Fixture.id)
+            .join(Score, Score.fixture_id == Fixture.id, isouter=True)
+            .where(
+                MatchPrediction.user_id == user_id,
+                Fixture.stage != "group",
+            )
+            .order_by(Fixture.kickoff)
+        )
+    ).all()
+    if not rows:
+        return []
+
+    # One query for the whole pool's outcome counts (the rarity denominator),
+    # mirroring the leaderboard build instead of one query per fixture.
+    counts_by_fixture = await get_all_outcome_counts(session)
+
+    by_stage: dict[str, dict] = {}
+    for prediction, score, fixture in rows:
+        bucket = by_stage.setdefault(
+            fixture.stage, {"earned_pts": 0, "available_pts": 0, "fixtures": []}
+        )
+        if fixture.status == MatchStatus.FINISHED and score is not None:
+            counts = counts_by_fixture.get(fixture.id, {})
+            total_predictors = sum(counts.values())
+            correct_predictors = counts.get(score.regulation_outcome, 0)
+            points, is_outcome, is_exact = calculate_match_points(
+                prediction,
+                score,
+                total_predictors=total_predictors,
+                correct_predictors=correct_predictors,
+            )
+            bucket["earned_pts"] += points
+            bucket["fixtures"].append(
+                {
+                    "home_team": fixture.home_team,
+                    "away_team": fixture.away_team,
+                    "predicted": f"{prediction.home_score}-{prediction.away_score}",
+                    "actual": f"{score.final_home_score}-{score.final_away_score}",
+                    "points": points,
+                    "result": "exact" if is_exact else "outcome" if is_outcome else "miss",
+                    "status": "finished",
+                }
+            )
+        else:
+            bucket["available_pts"] += _BEST_CASE_KO_MATCH_PTS
+            bucket["fixtures"].append(
+                {
+                    "home_team": fixture.home_team,
+                    "away_team": fixture.away_team,
+                    "predicted": f"{prediction.home_score}-{prediction.away_score}",
+                    "actual": None,
+                    "points": None,
+                    "result": None,
+                    "status": fixture.status.value,
+                }
+            )
+
+    return [
+        {"stage": stage, **by_stage[stage]}
+        for stage in _KO_MATCH_ROUND_ORDER
+        if stage in by_stage
+    ]
+
+
 async def get_actual_advancement(session: AsyncSession) -> dict[str, str]:
     """Determine which teams advanced to each stage based on completed fixtures.
 

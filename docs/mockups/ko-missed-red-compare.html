@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Missed segment — colour comparison</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  .pn{
+    --paper:#f1ebde; --paper-2:#e9e1cf; --paper-3:#dfd4ba;
+    --ink:#0e1d40; --ink-2:#514a3d; --ink-3:#6e6754;
+    --red:#c8281f; --red-deep:#8a1610; --red-mute:#cf9b94;
+    --gold:#d49a2e; --gold-soft:#e9c478; --green:#1b6c3e; --green-soft:#3f9a63;
+    --navy:#1a3168;
+    --display:'Archivo Black','Impact',sans-serif;
+    --body:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#cabfa6;padding:24px 14px 70px;font-family:'IBM Plex Sans',system-ui,sans-serif;}
+  .wrap{max-width:440px;margin:0 auto;}
+  .page-title{font-family:var(--display);font-size:16px;letter-spacing:.02em;text-transform:uppercase;color:#21314f;margin:0 0 3px;}
+  .page-cap{font-family:var(--mono);font-size:10px;color:#5e5742;margin:0 0 14px;line-height:1.5;}
+  .blocklbl{font-family:var(--mono);font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:#3c3422;margin:22px 0 7px;display:flex;align-items:center;gap:8px;}
+  .blocklbl .star{color:var(--green);font-weight:600;}
+
+  .pn{color:var(--ink);}
+  .pn-card{background:var(--paper);border:2.5px solid var(--ink);box-shadow:5px 5px 0 var(--ink);}
+  .legend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:7px 12px;background:var(--paper-2);border-bottom:2px solid var(--ink);font-family:var(--mono);font-size:9px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);}
+  .legend .it{display:flex;align-items:center;gap:5px;}
+  .legend .sw{width:13px;height:11px;border:1.5px solid var(--ink);display:inline-block;}
+  .legend .sw.g{background:var(--green);}
+  .legend .sw.y{background:repeating-linear-gradient(45deg,var(--gold) 0 4px,var(--gold-soft) 4px 8px);}
+  .legend .sw.mSolid{background:var(--red);}
+  .legend .sw.mMute{background:var(--red-mute);}
+
+  .chart{padding:10px 12px 12px;display:flex;flex-direction:column;gap:9px;}
+  .rnd .rhead{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+  .rnd .rhead .rname{font-family:var(--display);font-size:11px;letter-spacing:.04em;text-transform:uppercase;}
+  .rnd .rhead .pot{font-family:var(--mono);font-size:8.5px;color:var(--ink-3);}
+  .rnd .rhead .nowtag{font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;background:var(--gold);border:1.5px solid var(--ink);padding:1px 5px 2px;margin-left:auto;}
+  .rnd.is-now{background:#fbf3dc;border:1.5px solid var(--gold);box-shadow:3px 3px 0 rgba(212,154,46,.35);margin:0 -4px;padding:6px 4px 7px;}
+
+  .pair{display:flex;flex-direction:column;gap:5px;}
+  .bar{display:grid;grid-template-columns:24px 1fr auto;align-items:center;gap:8px;}
+  .bar .pchip{font-family:var(--display);font-size:8.5px;text-align:center;padding:3px 0 4px;border:1.5px solid var(--ink);line-height:1;}
+  .bar.p1 .pchip{background:var(--ink);color:var(--paper);}
+  .bar.p2 .pchip{background:var(--paper);color:var(--ink);}
+
+  .track{position:relative;height:20px;background:var(--paper-2);border:1.5px solid var(--ink);box-shadow:2px 2px 0 var(--ink);display:flex;overflow:visible;}
+  .seg{position:relative;height:100%;cursor:pointer;outline:none;min-width:6px;}
+  .seg.bank{background:var(--green);}
+  .seg.play{background:repeating-linear-gradient(45deg,var(--gold) 0 4px,var(--gold-soft) 4px 8px);}
+  .seg + .seg{border-left:1.5px solid var(--ink);}
+  .seg:focus-visible{box-shadow:inset 0 0 0 2px var(--red);}
+  /* missed treatments */
+  .solid .seg.miss{background:var(--red);}
+  .mute  .seg.miss{background:var(--red-mute);}
+  .mute  .seg.miss::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent 0 5px,rgba(138,22,16,.18) 5px 6px);}
+
+  .bar .end{display:flex;align-items:center;gap:7px;justify-self:end;white-space:nowrap;}
+  .bar .end .pts{font-family:var(--display);font-size:13px;line-height:1;display:flex;gap:4px;align-items:baseline;}
+  .bar .end .pts .g{color:var(--green);}.bar .end .pts .y{color:var(--gold);}.bar .end .pts .y .lt{font-size:9px;}
+  .bar .end .nn{font-family:var(--mono);font-size:10px;color:var(--ink-2);border:1.5px solid var(--ink);padding:1px 5px 2px;min-width:38px;text-align:center;background:var(--paper);}
+  .bar .end .nn.full{background:var(--green);color:var(--paper);border-color:var(--green);}
+
+  .seg .tip{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%) translateY(4px);width:150px;background:var(--ink);color:var(--paper);border:2px solid var(--ink);box-shadow:3px 3px 0 var(--ink);padding:8px 9px;z-index:30;opacity:0;visibility:hidden;pointer-events:none;transition:.12s;text-align:left;}
+  .seg:hover .tip,.seg:focus .tip,.seg.open .tip{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0);}
+  .seg .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:6px solid transparent;border-top-color:var(--ink);}
+  .bar.down .seg .tip{bottom:auto;top:calc(100% + 8px);}
+  .bar.down .seg .tip::after{top:auto;bottom:100%;border-top-color:transparent;border-bottom-color:var(--ink);}
+  .seg.clampR .tip{left:auto;right:0;transform:translateX(0) translateY(4px);}
+  .seg.clampR:hover .tip,.seg.clampR:focus .tip,.seg.clampR.open .tip{transform:translateX(0) translateY(0);}
+  .seg.clampR .tip::after{left:auto;right:16px;transform:none;}
+  .seg.clampL .tip{left:0;transform:translateX(0) translateY(4px);}
+  .seg.clampL:hover .tip,.seg.clampL:focus .tip,.seg.clampL.open .tip{transform:translateX(0) translateY(0);}
+  .seg.clampL .tip::after{left:16px;}
+  .tip .th{font-family:var(--mono);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:#9aa6c2;display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #2a3a5e;padding-bottom:4px;margin-bottom:5px;}
+  .tip .th b{font-family:var(--display);letter-spacing:0;}.tip .th .g{color:#7fd6a0;}.tip .th .y{color:var(--gold-soft);}.tip .th .r{color:#e0837c;}
+  .tip .grp{font-family:var(--mono);font-size:7.5px;letter-spacing:.08em;text-transform:uppercase;color:#9aa6c2;margin:6px 0 3px;}
+  .tip .chips{display:flex;flex-wrap:wrap;gap:3px;}
+  .tip .fc{font-family:var(--mono);font-size:8.5px;font-weight:600;padding:1px 4px 2px;border:1px solid #44537a;line-height:1;color:#cdd6e8;}
+  .tip .fc.al{color:var(--paper);border-color:var(--green-soft);}
+  .tip .fc.live{color:#f0d28a;border-color:var(--gold);}
+  .tip .fc.out{color:#cdb0ac;border-color:#7a4a44;text-decoration:line-through;text-decoration-color:#e0837c;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1 class="page-title">“Missed” segment — solid red vs muted</h1>
+  <p class="page-cap">Same data, same per-segment tooltips. Tap any segment (incl. the missed part). Three rounds: R16 resolved, QF live-split, SF future.</p>
+
+  <div class="pn">
+
+    <!-- ============ A: SOLID RED ============ -->
+    <div class="blocklbl">A · solid <span style="color:var(--red)">●</span> red</div>
+    <div class="pn-card solid">
+      <div class="legend">
+        <div class="it"><span class="sw g"></span>Banked</div><div class="it"><span class="sw y"></span>In play</div><div class="it"><span class="sw mSolid"></span>Missed</div>
+      </div>
+      <div class="chart">
+        <!-- R16 -->
+        <div class="rnd">
+          <div class="rhead"><span class="rname">R16</span><span class="pot">P1 ×15 · P2 ×5</span></div>
+          <div class="pair">
+            <div class="bar p1 down"><span class="pchip">P1</span>
+              <div class="track">
+                <div class="seg bank clampL" style="width:68.75%" tabindex="0" role="button"><div class="tip"><div class="th"><span>R16 · P1 reached</span><b class="g">165</b></div><div class="grp">Reached · 11</div><div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ARG</span><span class="fc al">ESP</span><span class="fc al">+7</span></div></div></div>
+                <div class="seg miss clampR" style="width:31.25%" tabindex="0" role="button"><div class="tip"><div class="th"><span>R16 · P1 missed</span><b class="r">0</b></div><div class="grp">Did not reach · 5</div><div class="chips"><span class="fc out">NED</span><span class="fc out">GER</span><span class="fc out">SUI</span><span class="fc out">+2</span></div></div></div>
+              </div>
+              <div class="end"><span class="pts"><span class="g">165</span></span><span class="nn">11/16</span></div>
+            </div>
+            <div class="bar p2 down"><span class="pchip">P2</span>
+              <div class="track">
+                <div class="seg bank clampL" style="width:87.5%" tabindex="0" role="button"><div class="tip"><div class="th"><span>R16 · P2 reached</span><b class="g">70</b></div><div class="grp">Reached · 14</div><div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ESP</span><span class="fc al">+11</span></div></div></div>
+                <div class="seg miss clampR" style="width:12.5%" tabindex="0" role="button"><div class="tip"><div class="th"><span>R16 · P2 missed</span><b class="r">0</b></div><div class="grp">Did not reach · 2</div><div class="chips"><span class="fc out">GER</span><span class="fc out">SUI</span></div></div></div>
+              </div>
+              <div class="end"><span class="pts"><span class="g">70</span></span><span class="nn">14/16</span></div>
+            </div>
+          </div>
+        </div>
+        <!-- QF live -->
+        <div class="rnd is-now">
+          <div class="rhead"><span class="rname">QF</span><span class="pot">P1 ×25 · P2 ×15</span><span class="nowtag">deciding now</span></div>
+          <div class="pair">
+            <div class="bar p1"><span class="pchip">P1</span>
+              <div class="track">
+                <div class="seg bank clampL" style="width:37.5%" tabindex="0" role="button"><div class="tip"><div class="th"><span>QF · P1 through</span><b class="g">+75</b></div><div class="grp">Through · 3</div><div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ESP</span></div></div></div>
+                <div class="seg play" style="width:25%" tabindex="0" role="button"><div class="tip"><div class="th"><span>QF · P1 in play</span><b class="y">≤50</b></div><div class="grp">Still playing · 2</div><div class="chips"><span class="fc live">BEL</span><span class="fc live">CRO</span></div></div></div>
+                <div class="seg miss clampR" style="width:37.5%" tabindex="0" role="button"><div class="tip"><div class="th"><span>QF · P1 missed</span><b class="r">0</b></div><div class="grp">Out · 3</div><div class="chips"><span class="fc out">ARG</span><span class="fc out">MEX</span><span class="fc out">JPN</span></div></div></div>
+              </div>
+              <div class="end"><span class="pts"><span class="g">75</span><span class="y"><span class="lt">≤</span>50</span></span><span class="nn">5/8</span></div>
+            </div>
+            <div class="bar p2"><span class="pchip">P2</span>
+              <div class="track">
+                <div class="seg bank clampL" style="width:50%" tabindex="0" role="button"><div class="tip"><div class="th"><span>QF · P2 through</span><b class="g">+60</b></div><div class="grp">Through · 4</div><div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ESP</span><span class="fc al">POR</span></div></div></div>
+                <div class="seg play" style="width:25%" tabindex="0" role="button"><div class="tip"><div class="th"><span>QF · P2 in play</span><b class="y">≤30</b></div><div class="grp">Still playing · 2</div><div class="chips"><span class="fc live">NED</span><span class="fc live">MAR</span></div></div></div>
+                <div class="seg miss clampR" style="width:25%" tabindex="0" role="button"><div class="tip"><div class="th"><span>QF · P2 missed</span><b class="r">0</b></div><div class="grp">Out · 2</div><div class="chips"><span class="fc out">ARG</span><span class="fc out">SEN</span></div></div></div>
+              </div>
+              <div class="end"><span class="pts"><span class="g">60</span><span class="y"><span class="lt">≤</span>30</span></span><span class="nn">6/8</span></div>
+            </div>
+          </div>
+        </div>
+        <!-- SF -->
+        <div class="rnd">
+          <div class="rhead"><span class="rname">SF</span><span class="pot">P1 ×55 · P2 ×40</span></div>
+          <div class="pair">
+            <div class="bar p1"><span class="pchip">P1</span>
+              <div class="track">
+                <div class="seg play clampL" style="width:75%" tabindex="0" role="button"><div class="tip"><div class="th"><span>SF · P1 in play</span><b class="y">≤165</b></div><div class="grp">Still alive · 3</div><div class="chips"><span class="fc live">BRA</span><span class="fc live">FRA</span><span class="fc live">ESP</span></div></div></div>
+                <div class="seg miss clampR" style="width:25%" tabindex="0" role="button"><div class="tip"><div class="th"><span>SF · P1 missed</span><b class="r">0</b></div><div class="grp">Out · 1</div><div class="chips"><span class="fc out">ARG</span></div></div></div>
+              </div>
+              <div class="end"><span class="pts"><span class="y">165</span></span><span class="nn">3/4</span></div>
+            </div>
+            <div class="bar p2"><span class="pchip">P2</span>
+              <div class="track">
+                <div class="seg play clampL" style="width:100%" tabindex="0" role="button"><div class="tip"><div class="th"><span>SF · P2 in play</span><b class="y">≤160</b></div><div class="grp">Still alive · 4</div><div class="chips"><span class="fc live">BRA</span><span class="fc live">FRA</span><span class="fc live">ESP</span><span class="fc live">POR</span></div></div></div>
+              </div>
+              <div class="end"><span class="pts"><span class="y">160</span></span><span class="nn full">4/4</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ B: MUTED ============ -->
+    <div class="blocklbl">B · muted <span style="color:var(--red-mute)">●</span> dusty red <span class="star">◀ recommended</span></div>
+    <div class="pn-card mute">
+      <div class="legend">
+        <div class="it"><span class="sw g"></span>Banked</div><div class="it"><span class="sw y"></span>In play</div><div class="it"><span class="sw mMute"></span>Missed</div>
+      </div>
+      <div class="chart">
+        <!-- R16 -->
+        <div class="rnd">
+          <div class="rhead"><span class="rname">R16</span><span class="pot">P1 ×15 · P2 ×5</span></div>
+          <div class="pair">
+            <div class="bar p1 down"><span class="pchip">P1</span>
+              <div class="track">
+                <div class="seg bank clampL" style="width:68.75%" tabindex="0" role="button"><div class="tip"><div class="th"><span>R16 · P1 reached</span><b class="g">165</b></div><div class="grp">Reached · 11</div><div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ARG</span><span class="fc al">ESP</span><span class="fc al">+7</span></div></div></div>
+                <div class="seg miss clampR" style="width:31.25%" tabindex="0" role="button"><div class="tip"><div class="th"><span>R16 · P1 missed</span><b class="r">0</b></div><div class="grp">Did not reach · 5</div><div class="chips"><span class="fc out">NED</span><span class="fc out">GER</span><span class="fc out">SUI</span><span class="fc out">+2</span></div></div></div>
+              </div>
+              <div class="end"><span class="pts"><span class="g">165</span></span><span class="nn">11/16</span></div>
+            </div>
+            <div class="bar p2 down"><span class="pchip">P2</span>
+              <div class="track">
+                <div class="seg bank clampL" style="width:87.5%" tabindex="0" role="button"><div class="tip"><div class="th"><span>R16 · P2 reached</span><b class="g">70</b></div><div class="grp">Reached · 14</div><div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ESP</span><span class="fc al">+11</span></div></div></div>
+                <div class="seg miss clampR" style="width:12.5%" tabindex="0" role="button"><div class="tip"><div class="th"><span>R16 · P2 missed</span><b class="r">0</b></div><div class="grp">Did not reach · 2</div><div class="chips"><span class="fc out">GER</span><span class="fc out">SUI</span></div></div></div>
+              </div>
+              <div class="end"><span class="pts"><span class="g">70</span></span><span class="nn">14/16</span></div>
+            </div>
+          </div>
+        </div>
+        <!-- QF live -->
+        <div class="rnd is-now">
+          <div class="rhead"><span class="rname">QF</span><span class="pot">P1 ×25 · P2 ×15</span><span class="nowtag">deciding now</span></div>
+          <div class="pair">
+            <div class="bar p1"><span class="pchip">P1</span>
+              <div class="track">
+                <div class="seg bank clampL" style="width:37.5%" tabindex="0" role="button"><div class="tip"><div class="th"><span>QF · P1 through</span><b class="g">+75</b></div><div class="grp">Through · 3</div><div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ESP</span></div></div></div>
+                <div class="seg play" style="width:25%" tabindex="0" role="button"><div class="tip"><div class="th"><span>QF · P1 in play</span><b class="y">≤50</b></div><div class="grp">Still playing · 2</div><div class="chips"><span class="fc live">BEL</span><span class="fc live">CRO</span></div></div></div>
+                <div class="seg miss clampR" style="width:37.5%" tabindex="0" role="button"><div class="tip"><div class="th"><span>QF · P1 missed</span><b class="r">0</b></div><div class="grp">Out · 3</div><div class="chips"><span class="fc out">ARG</span><span class="fc out">MEX</span><span class="fc out">JPN</span></div></div></div>
+              </div>
+              <div class="end"><span class="pts"><span class="g">75</span><span class="y"><span class="lt">≤</span>50</span></span><span class="nn">5/8</span></div>
+            </div>
+            <div class="bar p2"><span class="pchip">P2</span>
+              <div class="track">
+                <div class="seg bank clampL" style="width:50%" tabindex="0" role="button"><div class="tip"><div class="th"><span>QF · P2 through</span><b class="g">+60</b></div><div class="grp">Through · 4</div><div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ESP</span><span class="fc al">POR</span></div></div></div>
+                <div class="seg play" style="width:25%" tabindex="0" role="button"><div class="tip"><div class="th"><span>QF · P2 in play</span><b class="y">≤30</b></div><div class="grp">Still playing · 2</div><div class="chips"><span class="fc live">NED</span><span class="fc live">MAR</span></div></div></div>
+                <div class="seg miss clampR" style="width:25%" tabindex="0" role="button"><div class="tip"><div class="th"><span>QF · P2 missed</span><b class="r">0</b></div><div class="grp">Out · 2</div><div class="chips"><span class="fc out">ARG</span><span class="fc out">SEN</span></div></div></div>
+              </div>
+              <div class="end"><span class="pts"><span class="g">60</span><span class="y"><span class="lt">≤</span>30</span></span><span class="nn">6/8</span></div>
+            </div>
+          </div>
+        </div>
+        <!-- SF -->
+        <div class="rnd">
+          <div class="rhead"><span class="rname">SF</span><span class="pot">P1 ×55 · P2 ×40</span></div>
+          <div class="pair">
+            <div class="bar p1"><span class="pchip">P1</span>
+              <div class="track">
+                <div class="seg play clampL" style="width:75%" tabindex="0" role="button"><div class="tip"><div class="th"><span>SF · P1 in play</span><b class="y">≤165</b></div><div class="grp">Still alive · 3</div><div class="chips"><span class="fc live">BRA</span><span class="fc live">FRA</span><span class="fc live">ESP</span></div></div></div>
+                <div class="seg miss clampR" style="width:25%" tabindex="0" role="button"><div class="tip"><div class="th"><span>SF · P1 missed</span><b class="r">0</b></div><div class="grp">Out · 1</div><div class="chips"><span class="fc out">ARG</span></div></div></div>
+              </div>
+              <div class="end"><span class="pts"><span class="y">165</span></span><span class="nn">3/4</span></div>
+            </div>
+            <div class="bar p2"><span class="pchip">P2</span>
+              <div class="track">
+                <div class="seg play clampL" style="width:100%" tabindex="0" role="button"><div class="tip"><div class="th"><span>SF · P2 in play</span><b class="y">≤160</b></div><div class="grp">Still alive · 4</div><div class="chips"><span class="fc live">BRA</span><span class="fc live">FRA</span><span class="fc live">ESP</span><span class="fc live">POR</span></div></div></div>
+              </div>
+              <div class="end"><span class="pts"><span class="y">160</span></span><span class="nn full">4/4</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+<script>
+  document.querySelectorAll('[role=button]').forEach(function(el){
+    el.addEventListener('click',function(e){
+      var open=el.classList.contains('open');
+      document.querySelectorAll('.open').forEach(function(x){x.classList.remove('open');});
+      if(!open)el.classList.add('open');
+      e.stopPropagation();
+    });
+  });
+  document.addEventListener('click',function(){document.querySelectorAll('.open').forEach(function(x){x.classList.remove('open');});});
+</script>
+</body>
+</html>

@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KO Scoring Journey — redesign options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  /* ---- Panini tokens (verbatim hexes from panini-base.css) ---- */
+  .pn {
+    --paper:#f1ebde; --paper-2:#e9e1cf; --paper-3:#dfd4ba;
+    --ink:#0e1d40; --ink-2:#514a3d; --ink-3:#6e6754;
+    --red:#c8281f; --red-deep:#8a1610;
+    --gold:#d49a2e; --green:#1b6c3e;
+    --navy:#1a3168; --navy-deep:#0a1733;
+    --display:'Archivo Black','Impact',sans-serif;
+    --display2:'Archivo',system-ui,sans-serif;
+    --body:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#cabfa6; padding:28px 16px 80px; font-family:'IBM Plex Sans',system-ui,sans-serif; }
+  .pn { max-width:1180px; margin:0 auto; color:var(--ink); }
+
+  /* page chrome */
+  .page-title { font-family:var(--display); font-size:26px; letter-spacing:.02em; text-transform:uppercase; margin:0 0 4px; }
+  .page-sub { font-family:var(--mono); font-size:12px; color:var(--ink-2); margin:0 0 6px; }
+  .samplebar { font-family:var(--mono); font-size:11px; color:var(--ink); background:#f3e7c4; border:2px dashed var(--gold); padding:7px 12px; margin:14px 0 26px; }
+  .legend { display:flex; gap:18px; flex-wrap:wrap; font-family:var(--mono); font-size:11px; color:var(--ink-2); margin:10px 0 0; }
+  .legend .sw { display:inline-block; width:11px; height:11px; border:1.5px solid var(--ink); vertical-align:-1px; margin-right:5px; }
+  .opt-head { margin:42px 0 4px; }
+  .opt-tag { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--red); font-weight:600; }
+  .opt-name { font-family:var(--display); font-size:21px; text-transform:uppercase; letter-spacing:.02em; margin:2px 0 4px; }
+  .opt-note { font-family:var(--body); font-size:13px; color:var(--ink-2); margin:0 0 16px; max-width:760px; line-height:1.45; }
+
+  /* shared section header */
+  .pn-sec-h { display:flex; justify-content:space-between; align-items:baseline; margin:0 0 9px; gap:12px; }
+  .pn-sec-h .ttl { font-family:var(--display); font-size:15px; text-transform:uppercase; letter-spacing:.03em; display:flex; align-items:center; gap:8px; }
+  .pn-sec-h .ttl em { color:var(--red); font-style:normal; }
+  .pn-sec-h .pip { width:10px; height:10px; background:var(--red); display:inline-block; }
+  .pn-sec-h .meta a, .pn-sec-h .meta { font-family:var(--mono); font-size:11px; color:var(--ink-3); text-decoration:none; }
+  .pn-sec-h .meta a:hover { color:var(--red); }
+
+  /* phase toggle */
+  .ph-toggle { display:inline-flex; border:2px solid var(--ink); font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; }
+  .ph-toggle button { background:var(--paper); border:none; padding:4px 9px; cursor:pointer; font:inherit; color:var(--ink-3); border-right:2px solid var(--ink); }
+  .ph-toggle button:last-child { border-right:none; }
+  .ph-toggle button.on { background:var(--ink); color:var(--paper); }
+
+  /* card */
+  .pn-card { background:var(--paper); border:2.5px solid var(--ink); box-shadow:5px 5px 0 var(--ink); padding:16px 18px; }
+
+  /* ============================================================
+     OPTION A — THE RAIL (unified journey)
+     ============================================================ */
+  .rail-wrap { position:relative; }
+  .rail { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; position:relative; margin-top:6px; }
+  .rail::before { content:''; position:absolute; left:6%; right:6%; top:34px; height:3px; background:repeating-linear-gradient(90deg,var(--ink) 0 9px,transparent 9px 15px); z-index:0; }
+  .node { position:relative; z-index:1; text-align:center; }
+  .node .dot { width:18px; height:18px; border-radius:50%; border:3px solid var(--ink); background:var(--paper); margin:26px auto 8px; }
+  .node.done .dot { background:var(--green); }
+  .node.here .dot { background:var(--gold); box-shadow:0 0 0 4px rgba(212,154,46,.28); }
+  .node.future .dot { background:var(--paper-3); border-color:var(--paper-3); }
+  .node .rnd { font-family:var(--mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-3); }
+  .node .here-flag { font-family:var(--mono); font-size:8px; letter-spacing:.1em; color:var(--gold); font-weight:600; height:11px; }
+  .node-card { border:2px solid var(--ink); background:var(--paper-2); box-shadow:3px 3px 0 var(--ink); padding:8px 4px 9px; cursor:pointer; transition:transform .08s; }
+  .node-card:hover { transform:translateY(-2px); }
+  .node.future .node-card { border-color:var(--paper-3); box-shadow:none; background:transparent; cursor:default; }
+  .node .banked { font-family:var(--display); font-size:23px; line-height:1; color:var(--green); }
+  .node.future .banked, .node .banked.zero { color:var(--ink-3); font-size:17px; }
+  .node .banked .u { font-family:var(--mono); font-size:8px; color:var(--ink-3); margin-left:1px; }
+  .node .inplay { font-family:var(--mono); font-size:10px; color:var(--gold); font-weight:600; margin-top:3px; height:13px; }
+  .node .split { display:flex; height:5px; margin:7px 4px 0; border:1px solid var(--ink); }
+  .node.future .split { display:none; }
+  .node .split .m { background:var(--navy); } .node .split .b { background:var(--red); }
+  .node .splitlbl { font-family:var(--mono); font-size:8px; color:var(--ink-3); margin-top:3px; letter-spacing:.04em; }
+  .pennant .node-card { background:var(--ink); border-color:var(--ink); }
+  .pennant .banked { color:var(--gold); }
+
+  /* popover (shared A + C) */
+  .pop { position:absolute; z-index:30; left:50%; transform:translateX(-50%); top:100%; margin-top:8px; width:230px;
+         background:var(--paper); border:2.5px solid var(--ink); box-shadow:5px 5px 0 var(--ink); padding:10px 11px; text-align:left; display:none; }
+  .pop.open { display:block; }
+  .pop h4 { font-family:var(--mono); font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-3); margin:0 0 5px; border-bottom:1.5px solid var(--paper-3); padding-bottom:3px; }
+  .pop h4:not(:first-child) { margin-top:9px; }
+  .pop .frow { display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:11px; padding:2px 0; gap:8px; }
+  .pop .frow .t { color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .pop .frow .p { font-family:var(--display); font-size:12px; }
+  .pop .frow .p.g { color:var(--green); } .pop .frow .p.y { color:var(--gold); } .pop .frow .p.x { color:var(--ink-3); }
+  .pop .chip { display:inline-flex; align-items:center; gap:3px; font-family:var(--mono); font-size:10px; border:1.5px solid var(--ink); padding:1px 5px; margin:2px 3px 0 0; }
+  .pop .chip.alive { background:#e7f0e9; border-color:var(--green); color:var(--green); }
+  .pop .chip.out { background:transparent; border-color:var(--paper-3); color:var(--ink-3); text-decoration:line-through; }
+  .pop .res { font-size:9px; color:var(--ink-3); }
+  .pop .res.exact { color:var(--gold); } .pop .res.outc { color:var(--green); } .pop .res.miss { color:var(--red); }
+
+  /* totals strip */
+  .a-totals { display:flex; gap:22px; justify-content:flex-end; margin-top:16px; font-family:var(--mono); font-size:11px; color:var(--ink-3); letter-spacing:.06em; flex-wrap:wrap; }
+  .a-totals b { font-family:var(--display); font-size:16px; letter-spacing:0; }
+  .a-totals .g { color:var(--green); } .a-totals .y { color:var(--gold); } .a-totals .tot { color:var(--ink); }
+
+  /* ============================================================
+     OPTION B — TWO-LANE LEDGER (matrix)
+     ============================================================ */
+  .ledger { display:grid; grid-template-columns:128px repeat(5,1fr) 96px; border:2px solid var(--ink); }
+  .ledger > div { border-right:1.5px solid var(--paper-3); border-bottom:1.5px solid var(--paper-3); padding:7px 8px; min-width:0; }
+  .ledger .col-tot, .ledger .head { background:var(--paper-2); }
+  .ledger .head { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); text-align:center; }
+  .ledger .rowlbl { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.04em; display:flex; align-items:center; gap:6px; }
+  .ledger .rowlbl .ic { font-size:13px; }
+  .ledger .cell { text-align:center; cursor:pointer; position:relative; }
+  .ledger .cell:hover { background:var(--paper-2); }
+  .ledger .cell.na { cursor:default; background:repeating-linear-gradient(45deg,transparent 0 6px,rgba(0,0,0,.03) 6px 12px); }
+  .ledger .cell .bk { font-family:var(--display); font-size:19px; line-height:1; color:var(--green); }
+  .ledger .cell .bk.zero { color:var(--ink-3); font-size:15px; }
+  .ledger .cell .ip { font-family:var(--mono); font-size:10px; color:var(--gold); font-weight:600; height:13px; margin-top:2px; }
+  .ledger .cell .na-txt { font-family:var(--mono); font-size:10px; color:var(--ink-3); }
+  .ledger .col-tot .bk { font-size:21px; }
+  .ledger .grand { grid-column:1 / -1; display:flex; justify-content:flex-end; align-items:baseline; gap:14px; background:var(--ink); color:var(--paper); padding:9px 14px; border-bottom:none; border-right:none; }
+  .ledger .grand .lbl { font-family:var(--mono); font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:#cdd6e8; }
+  .ledger .grand b { font-family:var(--display); font-size:20px; }
+  .ledger .grand .g { color:#7fd6a0; } .ledger .grand .y { color:var(--gold); }
+  .b-expand { border:2px solid var(--ink); border-top:none; background:var(--paper); padding:0; max-height:0; overflow:hidden; transition:max-height .18s ease; }
+  .b-expand.open { max-height:280px; }
+  .b-expand .inner { padding:12px 16px; display:grid; grid-template-columns:1fr 1fr; gap:6px 26px; }
+  .b-expand .ex-h { grid-column:1 / -1; font-family:var(--mono); font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--red); margin-bottom:2px; }
+  .b-expand .frow { display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:11px; gap:8px; }
+  .b-expand .frow .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .b-expand .frow .p { font-family:var(--display); font-size:12px; }
+  .b-expand .frow .p.g { color:var(--green); } .b-expand .frow .p.y { color:var(--gold); } .b-expand .frow .p.x { color:var(--ink-3); }
+
+  /* ============================================================
+     OPTION C — SOURCE SUMMARY + MINI JOURNEY
+     ============================================================ */
+  .c-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  .src-tile { border:2px solid var(--ink); box-shadow:3px 3px 0 var(--ink); background:var(--paper-2); padding:12px 14px; }
+  .src-tile .lbl { font-family:var(--mono); font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); display:flex; align-items:center; gap:6px; margin-bottom:6px; }
+  .src-tile .lbl .ic { font-size:15px; }
+  .src-tile .big { font-family:var(--display); font-size:34px; line-height:1; color:var(--green); }
+  .src-tile .big .u { font-family:var(--mono); font-size:11px; color:var(--ink-3); margin-left:3px; }
+  .src-tile .meta { font-family:var(--mono); font-size:11px; color:var(--ink-2); margin-top:6px; }
+  .src-tile .meta .y { color:var(--gold); font-weight:600; }
+  .src-tile.grand { background:var(--ink); grid-column:1 / -1; display:flex; justify-content:space-between; align-items:center; }
+  .src-tile.grand .lbl, .src-tile.grand .big { color:var(--paper); }
+  .src-tile.grand .lbl { color:#cdd6e8; }
+  .src-tile.grand .big .g { color:#7fd6a0; } .src-tile.grand .big .y2 { color:var(--gold); font-size:20px; }
+  .steps { position:relative; height:120px; border:2px solid var(--ink); background:var(--paper-2); padding:14px 10px 26px; display:grid; grid-template-columns:repeat(5,1fr); align-items:end; gap:10px; }
+  .step { position:relative; text-align:center; cursor:pointer; }
+  .step .bar { margin:0 auto; width:60%; background:var(--green); border:1.5px solid var(--ink); position:relative; }
+  .step .bar .ghost { position:absolute; bottom:100%; left:-1.5px; right:-1.5px; background:repeating-linear-gradient(45deg,var(--gold) 0 4px,#e9c478 4px 8px); border:1.5px solid var(--gold); border-bottom:none; }
+  .step .v { font-family:var(--display); font-size:13px; color:var(--green); margin-bottom:3px; }
+  .step .rnd { position:absolute; bottom:-22px; left:0; right:0; font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); }
+  .step.here .rnd { color:var(--gold); font-weight:600; }
+  .step.here::after { content:'▲'; position:absolute; bottom:-34px; left:0; right:0; font-size:8px; color:var(--gold); }
+
+  @media (max-width:780px) {
+    .rail { grid-template-columns:repeat(3,1fr); row-gap:30px; }
+    .rail::before { display:none; }
+    .c-grid { grid-template-columns:1fr; }
+    .ledger { grid-template-columns:96px repeat(5,1fr); font-size:11px; }
+    .ledger .col-tot { display:none; }
+    .b-expand .inner { grid-template-columns:1fr; }
+    .pop { width:200px; }
+  }
+</style>
+</head>
+<body>
+<div class="pn">
+  <p class="page-title">Knockout scoring journey — redesign options</p>
+  <p class="page-sub">Panini-faithful mockups · banked-first · match + bracket points · per-team breakdown on tap/hover</p>
+  <div class="samplebar">⚠ Illustrative sample data — a <b>mid-tournament snapshot (QF upcoming)</b> so both banked &amp; in-play states are visible. "Match in&nbsp;play" = best-case projection (15&nbsp;pts/unplayed predicted fixture).</div>
+  <div class="legend">
+    <span><span class="sw" style="background:#1b6c3e"></span>Banked — points locked into your score</span>
+    <span><span class="sw" style="background:#d49a2e"></span>In play — still winnable</span>
+    <span><span class="sw" style="background:#1a3168"></span>Match-score source</span>
+    <span><span class="sw" style="background:#c8281f"></span>Bracket-advancement source</span>
+  </div>
+
+  <!-- ============================== OPTION A ============================== -->
+  <div class="opt-head">
+    <div class="opt-tag">Option A · recommended</div>
+    <div class="opt-name">The Rail — one journey, two sources</div>
+    <p class="opt-note">A true left-to-right progression along the tournament rounds with a "you are here" marker. Each node leads with <b>banked points (green)</b>; gold shows what's still in play. The thin bar splits the round's points into <b>match (navy)</b> vs <b>bracket (red)</b>. Tap any node for the per-fixture scores and per-team alive/out chips. Best at conveying the <em>journey</em> + per-team identity in one glance.</p>
+  </div>
+  <div class="pn-sec-h">
+    <div class="ttl"><span class="pip"></span>Your scoring <em>journey</em></div>
+    <div class="meta" style="display:flex;gap:12px;align-items:center">
+      <span class="ph-toggle"><button class="on">Phase 2 · live</button><button>Phase 1</button></span>
+      <a href="#">See full breakdown →</a>
+    </div>
+  </div>
+  <div class="pn-card rail-wrap">
+    <div class="rail">
+      <!-- R32 -->
+      <div class="node done" data-pop="popR32">
+        <div class="rnd">R32</div><div class="here-flag"></div><div class="dot"></div>
+        <div class="node-card">
+          <div class="banked">48<span class="u">pts</span></div>
+          <div class="inplay">&nbsp;</div>
+          <div class="split"><div class="m" style="width:73%"></div><div class="b" style="width:27%"></div></div>
+          <div class="splitlbl">35m · 13b</div>
+        </div>
+        <div class="pop" id="popR32">
+          <h4>⚽ Match scores · R32</h4>
+          <div class="frow"><span class="t">🇧🇷 BRA 2–0 KOR <span class="res exact">exact</span></span><span class="p y">+15</span></div>
+          <div class="frow"><span class="t">🇫🇷 FRA 1–0 SEN <span class="res outc">outcome</span></span><span class="p g">+5</span></div>
+          <div class="frow"><span class="t">🇳🇱 NED 1–2 ENG <span class="res miss">miss</span></span><span class="p x">0</span></div>
+          <div class="frow" style="color:var(--ink-3)"><span class="t">+5 more fixtures…</span><span class="p g">+15</span></div>
+          <h4>◆ Bracket · reached R16</h4>
+          <span class="chip alive">🇧🇷 BRA</span><span class="chip alive">🇫🇷 FRA</span><span class="chip alive">🇦🇷 ARG</span><span class="chip out">🇳🇱 NED</span>
+        </div>
+      </div>
+      <!-- R16 -->
+      <div class="node done" data-pop="popR16">
+        <div class="rnd">R16</div><div class="here-flag"></div><div class="dot"></div>
+        <div class="node-card">
+          <div class="banked">30<span class="u">pts</span></div>
+          <div class="inplay">&nbsp;</div>
+          <div class="split"><div class="m" style="width:50%"></div><div class="b" style="width:50%"></div></div>
+          <div class="splitlbl">15m · 15b</div>
+        </div>
+        <div class="pop" id="popR16">
+          <h4>⚽ Match scores · R16</h4>
+          <div class="frow"><span class="t">🇦🇷 ARG 2–1 BEL <span class="res outc">outcome</span></span><span class="p g">+5</span></div>
+          <div class="frow"><span class="t">🇪🇸 ESP 3–1 CRO <span class="res exact">exact</span></span><span class="p y">+15</span></div>
+          <h4>◆ Bracket · reached QF</h4>
+          <span class="chip alive">🇧🇷 BRA</span><span class="chip alive">🇫🇷 FRA</span><span class="chip alive">🇪🇸 ESP</span><span class="chip out">🇦🇷 ARG</span>
+        </div>
+      </div>
+      <!-- QF (here) -->
+      <div class="node here" data-pop="popQF">
+        <div class="rnd">QF</div><div class="here-flag">◀ YOU ARE HERE</div><div class="dot"></div>
+        <div class="node-card">
+          <div class="banked zero">—</div>
+          <div class="inplay">+90 in play</div>
+          <div class="split"><div class="m" style="width:67%"></div><div class="b" style="width:33%"></div></div>
+          <div class="splitlbl">60m · 30b</div>
+        </div>
+        <div class="pop" id="popQF">
+          <h4>⚽ Match scores · QF — upcoming</h4>
+          <div class="frow"><span class="t">🇧🇷 BRA – FRA <span class="res">predicted 2–1</span></span><span class="p y">≤15</span></div>
+          <div class="frow"><span class="t">🇪🇸 ESP – GER <span class="res">predicted 1–1</span></span><span class="p y">≤15</span></div>
+          <div class="frow" style="color:var(--ink-3)"><span class="t">+2 fixtures predicted</span><span class="p y">≤30</span></div>
+          <h4>◆ Bracket · reaching SF</h4>
+          <span class="chip alive">🇧🇷 BRA</span><span class="chip alive">🇫🇷 FRA</span>
+        </div>
+      </div>
+      <!-- SF -->
+      <div class="node future" data-pop="popSF">
+        <div class="rnd">SF</div><div class="here-flag"></div><div class="dot"></div>
+        <div class="node-card">
+          <div class="banked">—</div>
+          <div class="inplay">+70</div>
+        </div>
+      </div>
+      <!-- Final -->
+      <div class="node future">
+        <div class="rnd">Final</div><div class="here-flag"></div><div class="dot"></div>
+        <div class="node-card">
+          <div class="banked">—</div>
+          <div class="inplay">+100</div>
+        </div>
+      </div>
+      <!-- Winner pennant -->
+      <div class="node future pennant">
+        <div class="rnd">Winner</div><div class="here-flag"></div><div class="dot"></div>
+        <div class="node-card">
+          <div class="banked">—</div>
+          <div class="inplay" style="color:var(--gold)">+100</div>
+        </div>
+      </div>
+    </div>
+    <div class="a-totals">
+      <span>banked <b class="g">78</b></span>
+      <span>in play <b class="y">360</b></span>
+      <span>KO total <b class="tot">438</b></span>
+    </div>
+  </div>
+
+  <!-- ============================== OPTION B ============================== -->
+  <div class="opt-head">
+    <div class="opt-tag">Option B</div>
+    <div class="opt-name">Two-Lane Ledger — the accounting view</div>
+    <p class="opt-note">Two explicit lanes — <b>⚽ Match scores</b> and <b>◆ Bracket</b> — across the round columns, with a per-lane total and a grand total. Each cell is <b>banked-first (green)</b> with a small gold "in play" line. Click a cell to expand its fixtures/teams inline. Greatest clarity on "where did my points come from" (your points 1 &amp; 3); the journey feel is implicit in the left→right columns.</p>
+  </div>
+  <div class="pn-sec-h">
+    <div class="ttl"><span class="pip"></span>Knockout <em>points</em> ledger</div>
+    <div class="meta"><span class="ph-toggle"><button class="on">Phase 2</button><button>Phase 1</button></span></div>
+  </div>
+  <div class="pn-card" style="padding:0;overflow:hidden">
+    <div class="ledger">
+      <div class="head" style="text-align:left">Source</div>
+      <div class="head">R32</div><div class="head">R16</div><div class="head">QF</div><div class="head">SF</div><div class="head">Final</div>
+      <div class="head col-tot">Total</div>
+
+      <!-- Match lane -->
+      <div class="rowlbl"><span class="ic">⚽</span>Match</div>
+      <div class="cell" data-exp="exMR32"><div class="bk">35</div><div class="ip">&nbsp;</div></div>
+      <div class="cell" data-exp="exMR16"><div class="bk">15</div><div class="ip">&nbsp;</div></div>
+      <div class="cell" data-exp="exMQF"><div class="bk zero">—</div><div class="ip">≤60</div></div>
+      <div class="cell"><div class="bk zero">—</div><div class="ip">≤30</div></div>
+      <div class="cell"><div class="bk zero">—</div><div class="ip">≤15</div></div>
+      <div class="cell col-tot"><div class="bk">50</div><div class="ip">≤105</div></div>
+
+      <!-- Bracket lane -->
+      <div class="rowlbl"><span class="ic" style="color:var(--red)">◆</span>Bracket</div>
+      <div class="cell na"><div class="na-txt">n/a</div><div class="ip" style="color:var(--ink-3)">group</div></div>
+      <div class="cell" data-exp="exBR16"><div class="bk">15</div><div class="ip">&nbsp;</div></div>
+      <div class="cell" data-exp="exBQF"><div class="bk zero">—</div><div class="ip">+30</div></div>
+      <div class="cell"><div class="bk zero">—</div><div class="ip">+40</div></div>
+      <div class="cell"><div class="bk zero">—</div><div class="ip">+60</div></div>
+      <div class="cell col-tot"><div class="bk">15</div><div class="ip">+130</div></div>
+
+      <div class="grand">
+        <span class="lbl">Knockout total</span>
+        <span><span class="lbl">banked</span> <b class="g">65</b></span>
+        <span><span class="lbl">in play</span> <b class="y">235</b></span>
+        <span><span class="lbl">max</span> <b>300</b></span>
+      </div>
+    </div>
+    <!-- expand drawers -->
+    <div class="b-expand" id="exMR32"><div class="inner">
+      <div class="ex-h">⚽ Match scores · Round of 32 — 35 pts banked</div>
+      <div class="frow"><span class="t">🇧🇷 BRA 2–0 KOR · you 2–0</span><span class="p y">+15 exact</span></div>
+      <div class="frow"><span class="t">🇫🇷 FRA 1–0 SEN · you 2–0</span><span class="p g">+5 outcome</span></div>
+      <div class="frow"><span class="t">🇦🇷 ARG 2–1 AUS · you 2–1</span><span class="p y">+15 exact</span></div>
+      <div class="frow"><span class="t">🇳🇱 NED 1–2 ENG · you 2–1</span><span class="p x">0 miss</span></div>
+    </div></div>
+    <div class="b-expand" id="exMR16"><div class="inner">
+      <div class="ex-h">⚽ Match scores · Round of 16 — 15 pts banked</div>
+      <div class="frow"><span class="t">🇪🇸 ESP 3–1 CRO · you 3–1</span><span class="p y">+15 exact</span></div>
+      <div class="frow"><span class="t">🇦🇷 ARG 2–1 BEL · you 0–1</span><span class="p x">0 miss</span></div>
+    </div></div>
+    <div class="b-expand" id="exMQF"><div class="inner">
+      <div class="ex-h">⚽ Match scores · Quarter-finals — up to 60 pts in play (4 fixtures predicted)</div>
+      <div class="frow"><span class="t">🇧🇷 BRA – FRA · you 2–1</span><span class="p y">≤15</span></div>
+      <div class="frow"><span class="t">🇪🇸 ESP – GER · you 1–1</span><span class="p y">≤15</span></div>
+    </div></div>
+    <div class="b-expand" id="exBR16"><div class="inner">
+      <div class="ex-h">◆ Bracket · teams you predicted to reach R16 — 15 pts banked</div>
+      <div class="frow"><span class="t">🇧🇷 BRA ✓ · 🇫🇷 FRA ✓ · 🇦🇷 ARG ✓</span><span class="p g">+15</span></div>
+      <div class="frow"><span class="t">🇳🇱 NED ✗ (out at R32)</span><span class="p x">—</span></div>
+    </div></div>
+    <div class="b-expand" id="exBQF"><div class="inner">
+      <div class="ex-h">◆ Bracket · teams still alive to reach QF — 30 pts in play</div>
+      <div class="frow"><span class="t">🇧🇷 BRA · 🇫🇷 FRA still in</span><span class="p y">+30</span></div>
+    </div></div>
+  </div>
+
+  <!-- ============================== OPTION C ============================== -->
+  <div class="opt-head">
+    <div class="opt-tag">Option C</div>
+    <div class="opt-name">Source Summary + Mini-Journey — accounting over narrative</div>
+    <p class="opt-note">Separates the two questions. A headline band answers "how many KO points, from where?" — <b>Match</b> vs <b>Bracket</b> tiles, each banked-first with a gold in-play line, plus a grand total. Below, a slim stepped strip shows the <b>cumulative banked climb</b> round by round (gold hatching = still-in-play headroom) with a "you are here" marker. Most compact; hover a step for the round detail.</p>
+  </div>
+  <div class="pn-sec-h">
+    <div class="ttl"><span class="pip"></span>Knockout <em>points</em></div>
+    <div class="meta"><a href="#">See full breakdown →</a></div>
+  </div>
+  <div class="pn-card">
+    <div class="c-grid">
+      <div class="src-tile">
+        <div class="lbl"><span class="ic">⚽</span>Match scores</div>
+        <div class="big">50<span class="u">banked</span></div>
+        <div class="meta"><span class="y">≤105 in play</span> · 6 of 10 fixtures graded</div>
+      </div>
+      <div class="src-tile">
+        <div class="lbl"><span class="ic" style="color:var(--red)">◆</span>Bracket advancement</div>
+        <div class="big">15<span class="u">banked</span></div>
+        <div class="meta"><span class="y">+130 in play</span> · 2 picks alive to the Final</div>
+      </div>
+      <div class="src-tile grand">
+        <div>
+          <div class="lbl">Knockout total so far</div>
+          <div class="big"><span class="g">65</span> <span style="color:#8a93a8;font-size:18px">/</span> <span class="y2">300 max</span></div>
+        </div>
+        <div class="meta" style="color:#cdd6e8;text-align:right">banked + in&nbsp;play<br/>across both sources</div>
+      </div>
+    </div>
+    <div class="steps">
+      <div class="step" title="R32: +50 cumulative"><div class="v">50</div><div class="bar" style="height:40px"></div><div class="rnd">R32</div></div>
+      <div class="step" title="R16: +65 cumulative"><div class="v">65</div><div class="bar" style="height:52px"></div><div class="rnd">R16</div></div>
+      <div class="step here" title="QF: +90 in play"><div class="v" style="color:var(--gold)">≤155</div><div class="bar" style="height:52px"><div class="ghost" style="height:36px"></div></div><div class="rnd">QF</div></div>
+      <div class="step" title="SF: +70 in play"><div class="v" style="color:var(--ink-3)">—</div><div class="bar" style="height:52px;background:transparent;border-style:dashed"><div class="ghost" style="height:28px"></div></div><div class="rnd">SF</div></div>
+      <div class="step" title="Final: +115 in play"><div class="v" style="color:var(--ink-3)">—</div><div class="bar" style="height:52px;background:transparent;border-style:dashed"><div class="ghost" style="height:46px"></div></div><div class="rnd">Final</div></div>
+    </div>
+  </div>
+
+  <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#514a3d;margin-top:34px">
+    Tap nodes (A) / cells (B) / hover steps (C) to see the per-fixture &amp; per-team breakdown that restores the identity the slimmed version dropped.
+  </p>
+</div>
+
+<script>
+  // tap-to-open popovers (Option A) — works on touch + click
+  document.querySelectorAll('[data-pop]').forEach(function (n) {
+    n.addEventListener('click', function (e) {
+      var id = n.getAttribute('data-pop');
+      var pop = document.getElementById(id);
+      if (!pop) return;
+      var wasOpen = pop.classList.contains('open');
+      document.querySelectorAll('.pop.open').forEach(function (p) { p.classList.remove('open'); });
+      if (!wasOpen) pop.classList.add('open');
+      e.stopPropagation();
+    });
+  });
+  // click-to-expand drawers (Option B)
+  document.querySelectorAll('[data-exp]').forEach(function (c) {
+    c.addEventListener('click', function () {
+      var d = document.getElementById(c.getAttribute('data-exp'));
+      if (!d) return;
+      var open = d.classList.contains('open');
+      document.querySelectorAll('.b-expand.open').forEach(function (x) { x.classList.remove('open'); });
+      if (!open) d.classList.add('open');
+    });
+  });
+  document.addEventListener('click', function () {
+    document.querySelectorAll('.pop.open').forEach(function (p) { p.classList.remove('open'); });
+  });
+</script>
+</body>
+</html>

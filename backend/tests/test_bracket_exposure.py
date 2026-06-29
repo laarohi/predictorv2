@@ -275,10 +275,11 @@ async def test_tbd_match_dedup_caps_available_at_one_per_match(
     assert r16.earned.n == 0
 
 
-async def test_eliminated_picks_silently_dropped(session, user, competition) -> None:
-    """Pick lost their feeder match → not earned, not available, not
-    surfaced in any teams list. The widget shows them as zero (UX hides
-    them so the user isn't reminded of past misses)."""
+async def test_eliminated_picks_surface_in_missed(session, user, competition) -> None:
+    """Pick lost their feeder match → not earned, not available, but now
+    surfaced in the `missed` bucket (carries 0 pts) so the grouped-bars
+    widget can render the muted-red tail with the busted team. Previously
+    these picks were silently dropped."""
     _add_ko(session, competition.id, stage="round_of_32",
             home="ARG", away="MEX", home_score=2, away_score=0,
             status=MatchStatus.FINISHED)
@@ -292,9 +293,14 @@ async def test_eliminated_picks_silently_dropped(session, user, competition) -> 
     assert r16.earned.teams == []
     assert r16.available.n == 0
     assert r16.available.teams == []
+    # The eliminated pick now lands in `missed`, with 0 pts.
+    assert r16.missed.n == 1
+    assert r16.missed.teams == ["MEX"]
+    assert r16.missed.pts == 0
     # The feeder match still bumped known_count even though the user's
     # pick lost — denominators describe the world, not the user.
     assert r16.earned.of == 1
+    assert r16.missed.of == 1
 
 
 # ---------------------------------------------------------------------------
@@ -332,11 +338,17 @@ async def test_mixed_earned_available_eliminated_in_one_stage(
     assert r16.earned.teams == ["ARG"]
     assert r16.available.n == 1              # ESP is alive
     assert r16.available.teams == ["ESP"]
-    # BRA is silently dropped — eliminated
+    # BRA lost → the `missed` bucket (0 pts), no longer dropped
+    assert r16.missed.n == 1
+    assert r16.missed.teams == ["BRA"]
+    assert r16.missed.pts == 0
     assert "BRA" not in r16.earned.teams
     assert "BRA" not in r16.available.teams
     assert r16.earned.of == 2                # 2 R32 matches resolved
     assert r16.available.of == 1             # 1 R32 match tbd
+    # Reconciliation: with no same-match double picks, the three buckets
+    # account for every pick the user made at the stage.
+    assert r16.earned.n + r16.available.n + r16.missed.n == 3
 
 
 async def test_progressive_denominators_per_stage(session, user, competition) -> None:

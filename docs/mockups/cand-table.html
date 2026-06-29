@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Bracket scoring — Phase 1 vs Phase 2 (comparison table)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #cabfa6;
+    min-height: 100vh;
+    padding: 26px 12px 80px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-family: 'IBM Plex Sans', system-ui, sans-serif;
+    overflow-x: hidden;
+  }
+
+  .pn{
+    --paper:#f1ebde; --paper-2:#e9e1cf; --paper-3:#dfd4ba;
+    --ink:#0e1d40; --ink-2:#514a3d; --ink-3:#6e6754;
+    --red:#c8281f; --red-deep:#8a1610;
+    --gold:#d49a2e; --gold-soft:#e9c478; --green:#1b6c3e; --green-soft:#3f9a63;
+    --navy:#1a3168; --navy-deep:#0a1733;
+    --display:'Archivo Black','Impact',sans-serif;
+    --display2:'Archivo',system-ui,sans-serif;
+    --body:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',monospace;
+  }
+
+  /* ── page furniture ─────────────────────────────────────────── */
+  .page-title {
+    width: 100%;
+    max-width: 430px;
+    font-family: var(--display);
+    color: #0e1d40;
+    font-size: 15px;
+    letter-spacing: 0.01em;
+    line-height: 1.15;
+    text-transform: uppercase;
+    margin: 0 0 4px;
+  }
+  .page-cap {
+    width: 100%;
+    max-width: 430px;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #5d5645;
+    margin: 0 0 18px;
+  }
+  .pn { width: 100%; max-width: 430px; }
+
+  /* ── section header (mirrors .pn-sec-h) ─────────────────────── */
+  .pn .pn-sec-h {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid var(--ink);
+    gap: 10px;
+  }
+  .pn .pn-sec-h .ttl {
+    font-family: var(--display);
+    font-size: 17px;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--ink);
+  }
+  .pn .pn-sec-h .ttl em { color: var(--red); font-style: normal; }
+  .pn .pn-sec-h .ttl .pip {
+    width: 8px; height: 8px; background: var(--red); border-radius: 50%;
+    display: inline-block; flex: none;
+    animation: pn-blink 1.2s steps(2) infinite;
+  }
+  @keyframes pn-blink { 50% { opacity: 0.25; } }
+  .pn .pn-sec-h .meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    text-align: right;
+    flex: none;
+  }
+  .pn .pn-sec-h .meta b { color: var(--ink); }
+
+  /* ── the card ───────────────────────────────────────────────── */
+  .pn .cmp {
+    background: var(--paper);
+    border: 2.5px solid var(--ink);
+    box-shadow: 5px 5px 0 var(--ink);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* phase-totals header band — two phase columns, banked/in-play running tots */
+  .pn .cmp-head {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    background: var(--ink);
+    color: var(--paper);
+  }
+  .pn .cmp-head .ph {
+    padding: 9px 10px 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+  }
+  .pn .cmp-head .ph + .ph { border-left: 2px solid var(--paper-3); }
+  .pn .cmp-head .ph .lab {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .pn .cmp-head .ph .lab .nm {
+    font-family: var(--display);
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .pn .cmp-head .ph .lab .sub {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--paper-3);
+  }
+  .pn .cmp-head .ph .tots {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .pn .cmp-head .ph .tots .t { display: flex; align-items: baseline; gap: 3px; min-width: 0; }
+  .pn .cmp-head .ph .tots .t .n {
+    font-family: var(--display);
+    font-size: 17px;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  .pn .cmp-head .ph .tots .t .k {
+    font-family: var(--mono);
+    font-size: 7.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--paper-3);
+  }
+  .pn .cmp-head .ph .tots .bk .n { color: var(--green-soft); }
+  .pn .cmp-head .ph .tots .ip .n { color: var(--gold-soft); }
+  .pn .cmp-head .ph .pot {
+    margin-top: -1px;
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--paper-3);
+  }
+  .pn .cmp-head .ph .pot b { color: var(--paper); font-weight: 600; }
+
+  /* column-key row above the grid (Phase 1 | round | Phase 2) */
+  .pn .cmp-key {
+    display: grid;
+    grid-template-columns: 1fr 44px 1fr;
+    background: var(--navy);
+    color: var(--paper);
+  }
+  .pn .cmp-key span {
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    color: var(--paper-3);
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .pn .cmp-key .p1 { text-align: left; }
+  .pn .cmp-key .mid { text-align: center; padding-left: 0; padding-right: 0; }
+  .pn .cmp-key .p2 { text-align: right; }
+
+  /* ── the comparison grid ────────────────────────────────────── */
+  .pn .row {
+    display: grid;
+    grid-template-columns: 1fr 44px 1fr;
+    align-items: stretch;
+    border-bottom: 1px dashed var(--paper-3);
+  }
+  .pn .row:last-of-type { border-bottom: 0; }
+  .pn .row.live { background: rgba(212, 154, 46, 0.09); }
+
+  /* middle round-label spine */
+  .pn .row .spine {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border-left: 2px dashed var(--paper-3);
+    border-right: 2px dashed var(--paper-3);
+    padding: 6px 2px;
+  }
+  .pn .row .spine .rd {
+    font-family: var(--display);
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--ink);
+    line-height: 1;
+  }
+  .pn .row .spine .delta {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1;
+    padding: 1px 3px;
+    border: 1px solid currentColor;
+  }
+  .pn .row .spine .delta.p1 { color: var(--ink); }   /* P1 ahead */
+  .pn .row .spine .delta.p2 { color: var(--red); }   /* P2 ahead */
+  .pn .row .spine .delta.tie { color: var(--ink-3); border-color: var(--ink-3); }
+
+  /* a phase cell = tap target holding mini-bar + numbers + n/N */
+  .pn .cell {
+    position: relative;
+    padding: 7px 10px 8px;
+    cursor: help;
+    outline: none;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+  }
+  .pn .cell.r { align-items: flex-end; text-align: right; }   /* phase 2, mirror */
+  .pn .cell:focus-visible { box-shadow: inset 0 0 0 2px var(--ink); }
+
+  /* line 1: banked / in-play point labels */
+  .pn .cell .pts {
+    display: flex;
+    align-items: baseline;
+    gap: 7px;
+    font-variant-numeric: tabular-nums;
+  }
+  .pn .cell.r .pts { flex-direction: row-reverse; }
+  .pn .cell .pts .v { display: flex; align-items: baseline; gap: 3px; }
+  .pn .cell .pts .v .num {
+    font-family: var(--display);
+    font-size: 14px;
+    line-height: 1;
+  }
+  .pn .cell .pts .v .tag {
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .pn .cell .pts .bk .num { color: var(--green); }
+  .pn .cell .pts .bk .tag { color: var(--green); }
+  .pn .cell .pts .ip .num { color: var(--gold); }
+  .pn .cell .pts .ip .tag { color: var(--gold); }
+  .pn .cell .pts .v.zero .num { color: var(--ink-3); }
+  .pn .cell .pts .v.zero .tag { color: var(--ink-3); }
+
+  /* line 2: the fairness mini-bar — fill = points / THIS phase's own round
+     ceiling (banked green, in-play gold, empty paper-3). Same 0..100% scale
+     for both phases, so left/right bar lengths are directly comparable. */
+  .pn .cell .bar {
+    position: relative;
+    height: 9px;
+    width: 100%;
+    background: var(--paper-3);
+    border: 1.5px solid var(--ink);
+    display: flex;
+    overflow: hidden;
+  }
+  .pn .cell .bar i { display: block; height: 100%; }
+  .pn .cell .bar i.bk { background: var(--green); }
+  .pn .cell .bar i.ip {
+    background: var(--gold);
+    background-image: repeating-linear-gradient(
+      -45deg, transparent 0 3px, rgba(255,255,255,0.28) 3px 5px);
+  }
+  /* mirror phase-2 bar so both fills grow toward the centre spine */
+  .pn .cell.r .bar { flex-direction: row-reverse; }
+
+  /* line 3: picks-correct/alive — shared 0..N scale, the fair headline */
+  .pn .cell .alv {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
+    color: var(--ink-2);
+  }
+  .pn .cell.r .alv { flex-direction: row-reverse; }
+  .pn .cell .alv .nN {
+    font-family: var(--display);
+    font-size: 11px;
+    color: var(--ink);
+  }
+  .pn .cell .alv .nN.live { color: var(--gold); }
+  .pn .cell .alv .nN.banked { color: var(--green); }
+  .pn .cell .alv .w {
+    font-size: 8.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+  }
+  /* tiny pip ledger of the n/N as filled/empty squares */
+  .pn .cell .alv .pips { display: flex; gap: 2px; }
+  .pn .cell .alv .pips b {
+    width: 6px; height: 6px;
+    border: 1px solid var(--ink);
+    display: inline-block;
+  }
+  .pn .cell .alv .pips b.on { background: var(--green); border-color: var(--green); }
+  .pn .cell .alv .pips b.live { background: var(--gold); border-color: var(--gold); }
+  .pn .cell .alv .pips b.off { background: var(--paper); }
+
+  /* ── house tooltip (verbatim mechanics of .gtip) ────────────── */
+  .pn .gtip {
+    position: absolute;
+    left: 50%;
+    top: calc(100% + 8px);
+    min-width: 138px;
+    max-width: 168px;
+    background: var(--ink);
+    color: var(--paper);
+    border: 2px solid var(--ink);
+    box-shadow: 4px 4px 0 rgba(14, 29, 64, 0.3);
+    padding: 7px 9px 8px;
+    z-index: 60;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.12s ease, transform 0.12s ease;
+    transform: translateX(-50%) translateY(-4px);
+    text-align: left;
+    white-space: nowrap;
+  }
+  .pn .cell:hover .gtip,
+  .pn .cell:focus .gtip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+  }
+  .pn .gtip .tip-h {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-family: var(--display);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding-bottom: 5px;
+    margin-bottom: 5px;
+    border-bottom: 1px solid rgba(241, 235, 222, 0.22);
+  }
+  .pn .gtip .tip-h b { color: var(--gold); }
+  .pn .gtip .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    white-space: normal;
+  }
+  .pn .gtip .chips span {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 2px 4px 1px;
+    border: 1px solid var(--paper-3);
+    color: var(--paper);
+  }
+  .pn .gtip .chips span.alive { border-color: var(--green-soft); color: var(--green-soft); }
+  .pn .gtip .chips span.out {
+    border-color: var(--ink-3);
+    color: var(--paper-3);
+    text-decoration: line-through;
+    opacity: 0.7;
+  }
+  .pn .gtip .chips span.champ {
+    border-color: var(--gold);
+    background: var(--gold);
+    color: var(--ink);
+  }
+  .pn .gtip .tnote {
+    margin-top: 5px;
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--paper-3);
+    white-space: normal;
+  }
+  /* edge-anchored tooltips: phase-1 cells nudge right, phase-2 nudge left so
+     the popover never clips the 375px card edge */
+  .pn .cell.edgeL .gtip { left: 8px; transform: translateX(0) translateY(-4px); }
+  .pn .cell.edgeL:hover .gtip,
+  .pn .cell.edgeL:focus .gtip { transform: translateX(0) translateY(0); }
+  .pn .cell.edgeR .gtip { left: auto; right: 8px; transform: translateX(0) translateY(-4px); }
+  .pn .cell.edgeR:hover .gtip,
+  .pn .cell.edgeR:focus .gtip { transform: translateX(0) translateY(0); }
+
+  /* ── footer: legend + totals reconciliation ─────────────────── */
+  .pn .cmp-foot {
+    border-top: 2px solid var(--ink);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 8px 12px 9px;
+  }
+  .pn .legend { display: flex; gap: 12px; flex-wrap: wrap; }
+  .pn .legend .l {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .pn .legend .l i {
+    width: 10px; height: 10px; border: 1.5px solid var(--ink); display: inline-block;
+  }
+  .pn .legend .l i.bk { background: var(--green); }
+  .pn .legend .l i.ip {
+    background: var(--gold);
+    background-image: repeating-linear-gradient(
+      -45deg, transparent 0 3px, rgba(255,255,255,0.28) 3px 5px);
+  }
+  .pn .legend .l.note { color: var(--ink-3); }
+  .pn .cmp-foot .grand {
+    font-family: var(--mono);
+    font-size: 9.5px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+    display: flex;
+    gap: 9px;
+    align-items: baseline;
+  }
+  .pn .cmp-foot .grand b {
+    font-family: var(--display);
+    font-size: 13px;
+    color: var(--red);
+  }
+  .pn .cmp-foot .grand .gp { display: flex; align-items: baseline; gap: 4px; }
+
+  /* ── narrow-viewport compaction (≤395px) ────────────────────────
+     The two phase columns + spine must coexist in ~347px. Below this
+     width we shed the longest mono words and tighten the type so the
+     card never forces horizontal scroll. The colour semantics carry
+     the meaning the dropped words spelled out. */
+  @media (max-width: 395px) {
+    .pn .cmp-head .ph { padding: 8px 8px; }
+    .pn .cmp-head .ph .tots { gap: 7px; }
+    .pn .cmp-head .ph .tots .t .n { font-size: 16px; }
+    .pn .cmp-head .ph .lab .sub { display: none; }
+    .pn .cmp-head .ph .tots .t .k,
+    .pn .cell .pts .v .tag { font-size: 7px; letter-spacing: 0.02em; }
+    .pn .cell { padding: 7px 8px 8px; }
+    .pn .cell .pts { gap: 7px; }
+    .pn .cell .pts .v { gap: 2px; }
+    .pn .cell .pts .v .num { font-size: 13px; }
+    .pn .cell .alv { gap: 5px; }
+    .pn .cell .alv .w { font-size: 8px; }
+    .pn .row, .pn .cmp-key { grid-template-columns: 1fr 40px 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<h1 class="page-title">Bracket scoring — Phase 1 vs Phase 2, per round, side by side</h1>
+<p class="page-cap">Illustrative sample data · bars normalise to each phase's own round ceiling</p>
+
+<div class="pn">
+  <div class="pn-sec-h">
+    <span class="ttl"><span class="pip"></span> Bracket <em>head-to-head</em></span>
+    <span class="meta">R16/R16 done · <b>QF live</b></span>
+  </div>
+
+  <div class="cmp">
+
+    <!-- phase-totals header band -->
+    <div class="cmp-head">
+      <div class="ph">
+        <div class="lab"><span class="nm">Phase 1</span><span class="sub">original</span></div>
+        <div class="tots">
+          <div class="t bk"><span class="n">290</span><span class="k">bank</span></div>
+          <div class="t ip"><span class="n">485</span><span class="k">live</span></div>
+        </div>
+        <div class="pot">potential <b>775</b></div>
+      </div>
+      <div class="ph">
+        <div class="lab"><span class="nm">Phase 2</span><span class="sub">re-pick</span></div>
+        <div class="tots">
+          <div class="t bk"><span class="n">160</span><span class="k">bank</span></div>
+          <div class="t ip"><span class="n">380</span><span class="k">live</span></div>
+        </div>
+        <div class="pot">potential <b>540</b></div>
+      </div>
+    </div>
+
+    <!-- column key -->
+    <div class="cmp-key">
+      <span class="p1">◂ Phase 1</span>
+      <span class="mid">rd</span>
+      <span class="p2">Phase 2 ▸</span>
+    </div>
+
+    <!-- ── R16 — both banked ───────────────────────────────── -->
+    <div class="row">
+      <!-- P1: 165 banked of 240 ceiling (16×15) -->
+      <div class="cell edgeL" role="button" tabindex="0"
+           aria-label="Phase 1, R16: 165 points banked, 11 of 16 picks reached the round of 16">
+        <div class="pts">
+          <div class="v bk"><span class="num">165</span><span class="tag">bank</span></div>
+          <div class="v zero"><span class="num">0</span><span class="tag">live</span></div>
+        </div>
+        <div class="bar"><i class="bk" style="width:68.75%"></i></div>
+        <div class="alv">
+          <span class="nN banked">11</span><span class="w">/16 in</span>
+          <span class="pips"><b class="on"></b><b class="on"></b><b class="on"></b><b class="on"></b><b class="off"></b></span>
+        </div>
+        <div class="gtip" role="tooltip">
+          <span class="tip-h"><span>P1 · R16</span><b>165 pts</b></span>
+          <span class="chips">
+            <span class="alive">BRA</span><span class="alive">FRA</span><span class="alive">ARG</span>
+            <span class="alive">ESP</span><span class="alive">ENG</span><span class="alive">POR</span>
+            <span class="out">NED</span><span class="out">GER</span>
+          </span>
+          <span class="tnote">11/16 reached · banked</span>
+        </div>
+      </div>
+
+      <div class="spine">
+        <span class="rd">R16</span>
+        <span class="delta p1">P1 +95</span>
+      </div>
+
+      <!-- P2: 70 banked of 80 ceiling (16×5) -->
+      <div class="cell r edgeR" role="button" tabindex="0"
+           aria-label="Phase 2, R16: 70 points banked, 14 of 16 picks reached the round of 16">
+        <div class="pts">
+          <div class="v bk"><span class="num">70</span><span class="tag">bank</span></div>
+          <div class="v zero"><span class="num">0</span><span class="tag">live</span></div>
+        </div>
+        <div class="bar"><i class="bk" style="width:87.5%"></i></div>
+        <div class="alv">
+          <span class="nN banked">14</span><span class="w">/16 in</span>
+          <span class="pips"><b class="on"></b><b class="on"></b><b class="on"></b><b class="on"></b><b class="on"></b></span>
+        </div>
+        <div class="gtip" role="tooltip">
+          <span class="tip-h"><span>P2 · R16</span><b>70 pts</b></span>
+          <span class="chips">
+            <span class="alive">BRA</span><span class="alive">FRA</span><span class="alive">ARG</span>
+            <span class="alive">ESP</span><span class="alive">ENG</span><span class="alive">POR</span>
+            <span class="alive">CRO</span><span class="alive">MAR</span>
+          </span>
+          <span class="tnote">14/16 reached · banked</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── QF — LIVE round, both banked so far ─────────────── -->
+    <div class="row live">
+      <!-- P1: 125 banked of 200 ceiling (8×25) -->
+      <div class="cell edgeL" role="button" tabindex="0"
+           aria-label="Phase 1, quarter-finals: 125 points banked, 5 of 8 picks reached">
+        <div class="pts">
+          <div class="v bk"><span class="num">125</span><span class="tag">bank</span></div>
+          <div class="v zero"><span class="num">0</span><span class="tag">live</span></div>
+        </div>
+        <div class="bar"><i class="bk" style="width:62.5%"></i></div>
+        <div class="alv">
+          <span class="nN banked">5</span><span class="w">/8 in</span>
+          <span class="pips"><b class="on"></b><b class="on"></b><b class="on"></b><b class="off"></b><b class="off"></b></span>
+        </div>
+        <div class="gtip" role="tooltip">
+          <span class="tip-h"><span>P1 · QF</span><b>125 pts</b></span>
+          <span class="chips">
+            <span class="alive">BRA</span><span class="alive">FRA</span><span class="alive">ESP</span>
+            <span class="out">ARG</span>
+          </span>
+          <span class="tnote">5/8 reached · banked</span>
+        </div>
+      </div>
+
+      <div class="spine">
+        <span class="rd">QF</span>
+        <span class="delta p1">P1 +35</span>
+      </div>
+
+      <!-- P2: 90 banked of 120 ceiling (8×15) -->
+      <div class="cell r edgeR" role="button" tabindex="0"
+           aria-label="Phase 2, quarter-finals: 90 points banked, 6 of 8 picks reached">
+        <div class="pts">
+          <div class="v bk"><span class="num">90</span><span class="tag">bank</span></div>
+          <div class="v zero"><span class="num">0</span><span class="tag">live</span></div>
+        </div>
+        <div class="bar"><i class="bk" style="width:75%"></i></div>
+        <div class="alv">
+          <span class="nN banked">6</span><span class="w">/8 in</span>
+          <span class="pips"><b class="on"></b><b class="on"></b><b class="on"></b><b class="on"></b><b class="off"></b></span>
+        </div>
+        <div class="gtip" role="tooltip">
+          <span class="tip-h"><span>P2 · QF</span><b>90 pts</b></span>
+          <span class="chips">
+            <span class="alive">BRA</span><span class="alive">FRA</span><span class="alive">ESP</span>
+            <span class="alive">POR</span>
+          </span>
+          <span class="tnote">6/8 reached · banked</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── SF — all in-play ────────────────────────────────── -->
+    <div class="row">
+      <!-- P1: 165 in-play of 220 ceiling (4×55) -->
+      <div class="cell edgeL" role="button" tabindex="0"
+           aria-label="Phase 1, semi-finals: 165 points in play, 3 of 4 picks still alive">
+        <div class="pts">
+          <div class="v zero"><span class="num">0</span><span class="tag">bank</span></div>
+          <div class="v ip"><span class="num">165</span><span class="tag">live</span></div>
+        </div>
+        <div class="bar"><i class="ip" style="width:75%"></i></div>
+        <div class="alv">
+          <span class="nN live">3</span><span class="w">/4 alive</span>
+          <span class="pips"><b class="live"></b><b class="live"></b><b class="live"></b><b class="off"></b></span>
+        </div>
+        <div class="gtip" role="tooltip">
+          <span class="tip-h"><span>P1 · SF</span><b>165 live</b></span>
+          <span class="chips">
+            <span class="alive">BRA</span><span class="alive">FRA</span><span class="alive">ESP</span>
+          </span>
+          <span class="tnote">3/4 alive · in play</span>
+        </div>
+      </div>
+
+      <div class="spine">
+        <span class="rd">SF</span>
+        <span class="delta p1">P1 +5</span>
+      </div>
+
+      <!-- P2: 160 in-play of 160 ceiling (4×40) -->
+      <div class="cell r edgeR" role="button" tabindex="0"
+           aria-label="Phase 2, semi-finals: 160 points in play, 4 of 4 picks still alive">
+        <div class="pts">
+          <div class="v zero"><span class="num">0</span><span class="tag">bank</span></div>
+          <div class="v ip"><span class="num">160</span><span class="tag">live</span></div>
+        </div>
+        <div class="bar"><i class="ip" style="width:100%"></i></div>
+        <div class="alv">
+          <span class="nN live">4</span><span class="w">/4 alive</span>
+          <span class="pips"><b class="live"></b><b class="live"></b><b class="live"></b><b class="live"></b></span>
+        </div>
+        <div class="gtip" role="tooltip">
+          <span class="tip-h"><span>P2 · SF</span><b>160 live</b></span>
+          <span class="chips">
+            <span class="alive">BRA</span><span class="alive">FRA</span><span class="alive">ESP</span>
+            <span class="alive">POR</span>
+          </span>
+          <span class="tnote">4/4 alive · in play</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Final — all in-play ─────────────────────────────── -->
+    <div class="row">
+      <!-- P1: 170 in-play of 170 ceiling (2×85) -->
+      <div class="cell edgeL" role="button" tabindex="0"
+           aria-label="Phase 1, final: 170 points in play, both picks still alive">
+        <div class="pts">
+          <div class="v zero"><span class="num">0</span><span class="tag">bank</span></div>
+          <div class="v ip"><span class="num">170</span><span class="tag">live</span></div>
+        </div>
+        <div class="bar"><i class="ip" style="width:100%"></i></div>
+        <div class="alv">
+          <span class="nN live">2</span><span class="w">/2 alive</span>
+          <span class="pips"><b class="live"></b><b class="live"></b></span>
+        </div>
+        <div class="gtip" role="tooltip">
+          <span class="tip-h"><span>P1 · Final</span><b>170 live</b></span>
+          <span class="chips">
+            <span class="alive">BRA</span><span class="alive">FRA</span>
+          </span>
+          <span class="tnote">2/2 alive · in play</span>
+        </div>
+      </div>
+
+      <div class="spine">
+        <span class="rd">FIN</span>
+        <span class="delta p1">P1 +50</span>
+      </div>
+
+      <!-- P2: 120 in-play of 120 ceiling (2×60) -->
+      <div class="cell r edgeR" role="button" tabindex="0"
+           aria-label="Phase 2, final: 120 points in play, both picks still alive">
+        <div class="pts">
+          <div class="v zero"><span class="num">0</span><span class="tag">bank</span></div>
+          <div class="v ip"><span class="num">120</span><span class="tag">live</span></div>
+        </div>
+        <div class="bar"><i class="ip" style="width:100%"></i></div>
+        <div class="alv">
+          <span class="nN live">2</span><span class="w">/2 alive</span>
+          <span class="pips"><b class="live"></b><b class="live"></b></span>
+        </div>
+        <div class="gtip" role="tooltip">
+          <span class="tip-h"><span>P2 · Final</span><b>120 live</b></span>
+          <span class="chips">
+            <span class="alive">BRA</span><span class="alive">FRA</span>
+          </span>
+          <span class="tnote">2/2 alive · in play</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Winner — champion pick ──────────────────────────── -->
+    <div class="row">
+      <!-- P1: 150 in-play of 150 ceiling (1×150) -->
+      <div class="cell edgeL" role="button" tabindex="0"
+           aria-label="Phase 1, winner: 150 points in play, champion pick Brazil still alive">
+        <div class="pts">
+          <div class="v zero"><span class="num">0</span><span class="tag">bank</span></div>
+          <div class="v ip"><span class="num">150</span><span class="tag">live</span></div>
+        </div>
+        <div class="bar"><i class="ip" style="width:100%"></i></div>
+        <div class="alv">
+          <span class="nN live">1</span><span class="w">/1 alive</span>
+          <span class="pips"><b class="live"></b></span>
+        </div>
+        <div class="gtip" role="tooltip">
+          <span class="tip-h"><span>P1 · Winner</span><b>150 live</b></span>
+          <span class="chips">
+            <span class="champ">BRA</span>
+          </span>
+          <span class="tnote">Champion pick · alive</span>
+        </div>
+      </div>
+
+      <div class="spine">
+        <span class="rd">WIN</span>
+        <span class="delta p1">P1 +50</span>
+      </div>
+
+      <!-- P2: 100 in-play of 100 ceiling (1×100) -->
+      <div class="cell r edgeR" role="button" tabindex="0"
+           aria-label="Phase 2, winner: 100 points in play, champion pick France still alive">
+        <div class="pts">
+          <div class="v zero"><span class="num">0</span><span class="tag">bank</span></div>
+          <div class="v ip"><span class="num">100</span><span class="tag">live</span></div>
+        </div>
+        <div class="bar"><i class="ip" style="width:100%"></i></div>
+        <div class="alv">
+          <span class="nN live">1</span><span class="w">/1 alive</span>
+          <span class="pips"><b class="live"></b></span>
+        </div>
+        <div class="gtip" role="tooltip">
+          <span class="tip-h"><span>P2 · Winner</span><b>100 live</b></span>
+          <span class="chips">
+            <span class="champ">FRA</span>
+          </span>
+          <span class="tnote">Champion pick · alive</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- footer: legend + reconciliation -->
+    <div class="cmp-foot">
+      <div class="legend">
+        <span class="l"><i class="bk"></i> banked</span>
+        <span class="l"><i class="ip"></i> in play</span>
+        <span class="l note">bars · % of own ceiling</span>
+      </div>
+      <div class="grand">
+        <span class="gp"><span>grand</span> <b>775</b></span>
+        <span class="gp"><span>vs</span> <b>540</b></span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

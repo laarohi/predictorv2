@@ -27,6 +27,7 @@
 	import DwTop5 from './widgets/DwTop5.svelte';
 	import DwScoringJourney from './widgets/DwScoringJourney.svelte';
 	import type { JourneyPhase } from './widgets/DwScoringJourney.svelte';
+	import DwKnockoutMatchScores from './widgets/DwKnockoutMatchScores.svelte';
 
 	import { user } from '$stores/auth';
 	import { fetchAllFixtures, fixtures } from '$stores/fixtures';
@@ -42,8 +43,10 @@
 	import {
 		getBracketExposure,
 		getAgreements,
+		getMyKnockoutMatchPoints,
 		type BracketExposureResponse,
-		type FixtureAgreement
+		type FixtureAgreement,
+		type KnockoutMatchRoundRow
 	} from '$api/predictions';
 	import { getScoringConfig, type ScoringConfig } from '$api/competition';
 	import { teamCode } from '$lib/utils/teamCodes';
@@ -54,6 +57,8 @@
 	let trajectoryData: RankTrajectoryResponse | null = null;
 	let p1Exposure: BracketExposureResponse | null = null;
 	let p2Exposure: BracketExposureResponse | null = null;
+	// KO match-SCORE points per round — drives the DwKnockoutMatchScores strip.
+	let koMatchRounds: KnockoutMatchRoundRow[] = [];
 	// Per-fixture predictor counts + scoring config — needed to fold the rarity
 	// (hybrid) bonus into the KO match-table points, matching the leaderboard.
 	let agreements: FixtureAgreement[] = [];
@@ -64,10 +69,11 @@
 		fetchLeaderboard();
 		fetchMatchPredictions();
 		try {
-			[trajectoryData, p1Exposure, p2Exposure] = await Promise.all([
+			[trajectoryData, p1Exposure, p2Exposure, koMatchRounds] = await Promise.all([
 				getMyRankTrajectory(5),
 				getBracketExposure('phase_1').catch(() => null),
-				getBracketExposure('phase_2').catch(() => null)
+				getBracketExposure('phase_2').catch(() => null),
+				getMyKnockoutMatchPoints().catch(() => [])
 			]);
 		} catch {
 			trajectoryData = null;
@@ -372,8 +378,11 @@
 			const k = STAGE_TO_KEY[stage];
 			if (!k) continue;
 			phase[k] = {
-				earned: { n: row.earned.n, of: row.earned.of, pts: row.earned.pts, teams: row.earned.teams },
-				available: { n: row.available.n, of: row.available.of, pts: row.available.pts, teams: row.available.teams }
+				earned: { n: row.earned.n, pts: row.earned.pts, teams: row.earned.teams },
+				available: { n: row.available.n, pts: row.available.pts, teams: row.available.teams },
+				missed: row.missed
+					? { n: row.missed.n, pts: row.missed.pts, teams: row.missed.teams }
+					: { n: 0, pts: 0, teams: [] }
 			};
 		}
 		return phase;
@@ -440,6 +449,15 @@
 		<section class="pn-journey-sec">
 			<DwScoringJourney p1={journeyP1} p2={journeyP2} footHref="/leaderboard" />
 		</section>
+
+		<!-- Match-SCORE points per KO round — the sibling of the bracket
+		     journey above (advancement vs match scores are two separate point
+		     streams). Only shown once the user has a KO score pick. -->
+		{#if koMatchRounds.length > 0}
+			<section class="pn-koms-sec">
+				<DwKnockoutMatchScores rounds={koMatchRounds} />
+			</section>
+		{/if}
 
 		<!-- Same 3-col rhythm as the group-stage dashboard. -->
 		<section class="pn-dash-cols spectator">

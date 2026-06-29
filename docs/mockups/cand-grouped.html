@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bracket Scoring — Grouped Paired Bars (P1 vs P2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  .pn{
+    --paper:#f1ebde; --paper-2:#e9e1cf; --paper-3:#dfd4ba;
+    --ink:#0e1d40; --ink-2:#514a3d; --ink-3:#6e6754;
+    --red:#c8281f; --red-deep:#8a1610;
+    --gold:#d49a2e; --gold-soft:#e9c478; --green:#1b6c3e; --green-soft:#3f9a63;
+    --navy:#1a3168; --navy-deep:#0a1733;
+    --display:'Archivo Black','Impact',sans-serif;
+    --display2:'Archivo',system-ui,sans-serif;
+    --body:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',monospace;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:#cabfa6; padding:26px 14px 70px; font-family:'IBM Plex Sans',system-ui,sans-serif; }
+  .wrap{ max-width:430px; margin:0 auto; }
+
+  /* ---- mockup chrome ---- */
+  .page-title{ font-family:var(--display); font-size:17px; letter-spacing:.02em; text-transform:uppercase; color:#21314f; margin:0 0 3px; }
+  .page-cap{ font-family:var(--mono); font-size:10.5px; color:#5e5742; margin:0 0 16px; letter-spacing:.02em; }
+
+  /* ============ WIDGET ============ */
+  .pn{ color:var(--ink); }
+  .pn-card{ background:var(--paper); border:2.5px solid var(--ink); box-shadow:5px 5px 0 var(--ink); }
+
+  /* header strip */
+  .card-h{ background:var(--ink); color:var(--paper); padding:8px 13px 9px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .card-h .ttl{ font-family:var(--display); font-size:13px; letter-spacing:.04em; text-transform:uppercase; line-height:1; }
+  .card-h .ttl .sub{ display:block; font-family:var(--mono); font-size:8.5px; letter-spacing:.12em; color:#9aa6c2; margin-top:3px; font-weight:400; }
+  .card-h .live{ font-family:var(--mono); font-size:8.5px; letter-spacing:.1em; color:var(--gold); display:flex; align-items:center; gap:5px; text-transform:uppercase; }
+  .card-h .live .dot{ width:7px; height:7px; border-radius:50%; background:var(--gold); display:inline-block; animation:blink 1.4s ease-in-out infinite; }
+  @keyframes blink{ 0%,100%{opacity:1;} 50%{opacity:.25;} }
+
+  /* phase totals header */
+  .totals{ display:flex; border-bottom:2px solid var(--ink); }
+  .totals .ph{ flex:1 1 0; padding:9px 12px 10px; }
+  .totals .ph:first-child{ border-right:2px solid var(--ink); }
+  .totals .ph .tag{ display:inline-flex; align-items:center; gap:5px; font-family:var(--mono); font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); margin-bottom:6px; }
+  .totals .ph .tag .chip{ font-family:var(--display); font-size:9px; padding:1px 5px 2px; border:1.5px solid var(--ink); letter-spacing:.02em; line-height:1; }
+  .totals .ph.p1 .tag .chip{ background:var(--ink); color:var(--paper); }
+  .totals .ph.p2 .tag .chip{ background:var(--paper); color:var(--ink); }
+  .totals .ph .nums{ display:flex; align-items:baseline; gap:8px; }
+  .totals .ph .nums .grand{ font-family:var(--display); font-size:27px; line-height:.85; letter-spacing:-.02em; }
+  .totals .ph .nums .split{ font-family:var(--mono); font-size:10px; line-height:1.3; }
+  .totals .ph .nums .split .g{ color:var(--green); font-weight:600; }
+  .totals .ph .nums .split .y{ color:var(--gold); font-weight:600; }
+  .totals .ph .nums .split .x{ color:var(--ink-3); }
+
+  /* legend */
+  .legend{ display:flex; align-items:center; gap:14px; flex-wrap:wrap; padding:7px 13px; background:var(--paper-2); border-bottom:2px solid var(--ink); font-family:var(--mono); font-size:9px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink-2); }
+  .legend .it{ display:flex; align-items:center; gap:5px; }
+  .legend .sw{ width:13px; height:11px; border:1.5px solid var(--ink); display:inline-block; }
+  .legend .sw.g{ background:var(--green); }
+  .legend .sw.y{ background:repeating-linear-gradient(45deg,var(--gold) 0 4px,var(--gold-soft) 4px 8px); }
+  .legend .it.note{ color:var(--ink-3); text-transform:none; letter-spacing:0; margin-left:auto; }
+
+  /* chart body */
+  .chart{ padding:11px 13px 13px; display:flex; flex-direction:column; gap:9px; }
+  .rnd{ }
+  .rnd .rhead{ display:flex; align-items:center; gap:8px; margin-bottom:5px; }
+  .rnd .rhead .rname{ font-family:var(--display); font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--ink); }
+  .rnd .rhead .pot{ font-family:var(--mono); font-size:8.5px; letter-spacing:.04em; color:var(--ink-3); }
+  .rnd .rhead .nowtag{ font-family:var(--mono); font-size:8px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink); background:var(--gold); border:1.5px solid var(--ink); padding:1px 5px 2px; line-height:1; margin-left:auto; }
+  .rnd.is-now{ background:#fbf3dc; border:1.5px solid var(--gold); box-shadow:3px 3px 0 rgba(212,154,46,.35); margin:0 -5px; padding:6px 5px 7px; }
+
+  /* a single phase bar (grid: chip | track | endlabel) */
+  .pair{ display:flex; flex-direction:column; gap:5px; }
+  .bar{ display:grid; grid-template-columns:26px 1fr auto; align-items:center; gap:8px; }
+  .bar .pchip{ font-family:var(--display); font-size:8.5px; letter-spacing:.01em; text-align:center; padding:3px 0 4px; border:1.5px solid var(--ink); line-height:1; }
+  .bar.p1 .pchip{ background:var(--ink); color:var(--paper); }
+  .bar.p2 .pchip{ background:var(--paper); color:var(--ink); }
+
+  .track{ position:relative; height:19px; background:var(--paper-2); border:1.5px solid var(--ink); box-shadow:2px 2px 0 var(--ink); overflow:hidden; cursor:pointer; outline:none; }
+  .track:focus-visible{ box-shadow:0 0 0 2px var(--red), 2px 2px 0 var(--ink); }
+  .track .seg{ position:absolute; top:0; bottom:0; }
+  .track .seg.bank{ left:0; background:var(--green); }
+  .track .seg.play{ background:repeating-linear-gradient(45deg,var(--gold) 0 4px,var(--gold-soft) 4px 8px); border-left:1.5px solid var(--ink); }
+  /* faint empty-tick to read "of own ceiling" */
+  .track .seg.bank::after{ content:''; position:absolute; right:-1.5px; top:0; bottom:0; width:1.5px; background:var(--ink); opacity:.35; }
+
+  .bar .end{ display:flex; align-items:center; gap:7px; justify-self:end; white-space:nowrap; }
+  .bar .end .pts{ font-family:var(--display); font-size:13px; letter-spacing:-.01em; line-height:1; }
+  .bar .end .pts .g{ color:var(--green); }
+  .bar .end .pts .y{ color:var(--gold); }
+  .bar .end .pts .z{ color:var(--ink-3); font-size:11px; }
+  .bar .end .nn{ font-family:var(--mono); font-size:10px; color:var(--ink-2); border:1.5px solid var(--ink); padding:1px 5px 2px; min-width:38px; text-align:center; line-height:1.2; background:var(--paper); }
+  .bar .end .nn.full{ background:var(--green); color:var(--paper); border-color:var(--green); }
+
+  /* tooltip — house style: dark ink, hover+focus */
+  .track .tip{ position:absolute; bottom:calc(100% + 8px); left:50%; transform:translateX(-50%) translateY(4px); width:150px; background:var(--ink); color:var(--paper); border:2px solid var(--ink); box-shadow:3px 3px 0 var(--ink); padding:8px 9px; z-index:20; opacity:0; pointer-events:none; transition:opacity .12s ease, transform .12s ease; }
+  .track:hover .tip, .track:focus-visible .tip, .track:focus .tip{ opacity:1; transform:translateX(-50%) translateY(0); }
+  .track .tip::after{ content:''; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:6px solid transparent; border-top-color:var(--ink); }
+  .track.right .tip{ left:auto; right:-6px; transform:translateX(0) translateY(4px); }
+  .track.right:hover .tip, .track.right:focus .tip, .track.right:focus-visible .tip{ transform:translateX(0) translateY(0); }
+  .track.right .tip::after{ left:auto; right:14px; transform:none; }
+  /* top-row tooltips drop BELOW the bar so they never clip the card top */
+  .track.down .tip{ bottom:auto; top:calc(100% + 8px); }
+  .track.down .tip::after{ top:auto; bottom:100%; border-top-color:transparent; border-bottom-color:var(--ink); }
+  .tip .th{ font-family:var(--mono); font-size:8.5px; letter-spacing:.1em; text-transform:uppercase; color:#9aa6c2; margin-bottom:5px; display:flex; justify-content:space-between; gap:6px; }
+  .tip .th b{ color:var(--paper); font-weight:600; }
+  .tip .grp{ font-family:var(--mono); font-size:8px; letter-spacing:.08em; text-transform:uppercase; margin:5px 0 2px; }
+  .tip .grp.al{ color:var(--green-soft); }
+  .tip .grp.out{ color:#e0837c; }
+  .tip .chips{ display:flex; flex-wrap:wrap; gap:3px; }
+  .tip .fc{ font-family:var(--mono); font-size:8.5px; font-weight:600; padding:1px 4px 2px; border:1px solid #44537a; line-height:1; }
+  .tip .fc.al{ color:var(--paper); border-color:var(--green-soft); }
+  .tip .fc.out{ color:#b9c0d0; border-color:#5a4640; text-decoration:line-through; text-decoration-color:#e0837c; }
+  .tip .none{ font-family:var(--mono); font-size:8.5px; color:#7c86a0; }
+
+  /* footnote */
+  .foot{ padding:8px 13px 10px; border-top:2px solid var(--ink); background:var(--paper-2); font-family:var(--mono); font-size:9px; line-height:1.5; letter-spacing:.01em; color:var(--ink-2); }
+  .foot b{ color:var(--ink); font-weight:600; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1 class="page-title">Grouped Paired Bars — P1 vs P2 per round</h1>
+    <p class="page-cap">Illustrative sample data. Bar length = share of that phase&rsquo;s OWN round ceiling (fair across phases); absolute points labelled.</p>
+
+    <div class="pn">
+      <div class="pn-card">
+
+        <!-- header -->
+        <div class="card-h">
+          <div class="ttl">Bracket Returns<span class="sub">ADVANCEMENT · BOTH PHASES</span></div>
+          <div class="live"><span class="dot"></span>QF live</div>
+        </div>
+
+        <!-- phase running totals -->
+        <div class="totals">
+          <div class="ph p1">
+            <div class="tag"><span class="chip">P1</span>Original</div>
+            <div class="nums">
+              <div class="grand">775</div>
+              <div class="split"><span class="g">290 banked</span><br><span class="y">485 in play</span></div>
+            </div>
+          </div>
+          <div class="ph p2">
+            <div class="tag"><span class="chip">P2</span>Re-pick</div>
+            <div class="nums">
+              <div class="grand">540</div>
+              <div class="split"><span class="g">160 banked</span><br><span class="y">380 in play</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- legend -->
+        <div class="legend">
+          <div class="it"><span class="sw g"></span>Banked</div>
+          <div class="it"><span class="sw y"></span>In play</div>
+          <div class="it note">bars scaled to each phase&rsquo;s ceiling</div>
+        </div>
+
+        <!-- chart -->
+        <div class="chart">
+
+          <!-- R16 -->
+          <div class="rnd">
+            <div class="rhead">
+              <span class="rname">R16</span>
+              <span class="pot">P1 ×15 · P2 ×5</span>
+            </div>
+            <div class="pair">
+              <!-- P1: banked 165, 11/16 -> 11/16 of ceiling = 68.75% -->
+              <div class="bar p1">
+                <span class="pchip">P1</span>
+                <div class="track down" role="button" tabindex="0" aria-label="Phase 1 R16: 165 points banked, 11 of 16 picks reached">
+                  <div class="seg bank" style="width:68.75%"></div>
+                  <div class="tip">
+                    <div class="th">R16 · <b>Phase 1</b></div>
+                    <div class="th" style="margin:0;color:var(--paper)"><span style="color:#7fd6a0">165 banked</span> · 11/16</div>
+                    <div class="grp al">Reached (alive)</div>
+                    <div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ARG</span><span class="fc al">ESP</span><span class="fc al">ENG</span><span class="fc al">POR</span></div>
+                    <div class="grp out">Reached (since out)</div>
+                    <div class="chips"><span class="fc out">NED</span><span class="fc out">GER</span></div>
+                  </div>
+                </div>
+                <div class="end"><span class="pts"><span class="g">165</span></span><span class="nn">11/16</span></div>
+              </div>
+              <!-- P2: banked 70, 14/16 -> 87.5% -->
+              <div class="bar p2">
+                <span class="pchip">P2</span>
+                <div class="track down" role="button" tabindex="0" aria-label="Phase 2 R16: 70 points banked, 14 of 16 picks reached">
+                  <div class="seg bank" style="width:87.5%"></div>
+                  <div class="tip">
+                    <div class="th">R16 · <b>Phase 2</b></div>
+                    <div class="th" style="margin:0;color:var(--paper)"><span style="color:#7fd6a0">70 banked</span> · 14/16</div>
+                    <div class="grp al">Reached (alive)</div>
+                    <div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ARG</span><span class="fc al">ESP</span><span class="fc al">ENG</span><span class="fc al">POR</span><span class="fc al">CRO</span><span class="fc al">MAR</span></div>
+                  </div>
+                </div>
+                <div class="end"><span class="pts"><span class="g">70</span></span><span class="nn">14/16</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- QF (LIVE) -->
+          <div class="rnd is-now">
+            <div class="rhead">
+              <span class="rname">QF</span>
+              <span class="pot">P1 ×25 · P2 ×15</span>
+              <span class="nowtag">Now</span>
+            </div>
+            <div class="pair">
+              <!-- P1: banked 125, 5/8 -> 62.5% -->
+              <div class="bar p1">
+                <span class="pchip">P1</span>
+                <div class="track" role="button" tabindex="0" aria-label="Phase 1 QF: 125 points banked, 5 of 8 picks reached">
+                  <div class="seg bank" style="width:62.5%"></div>
+                  <div class="tip">
+                    <div class="th">QF · <b>Phase 1</b></div>
+                    <div class="th" style="margin:0;color:var(--paper)"><span style="color:#7fd6a0">125 banked</span> · 5/8</div>
+                    <div class="grp al">Reached (alive)</div>
+                    <div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ESP</span></div>
+                    <div class="grp out">Reached (since out)</div>
+                    <div class="chips"><span class="fc out">ARG</span></div>
+                  </div>
+                </div>
+                <div class="end"><span class="pts"><span class="g">125</span></span><span class="nn">5/8</span></div>
+              </div>
+              <!-- P2: banked 90, 6/8 -> 75% -->
+              <div class="bar p2">
+                <span class="pchip">P2</span>
+                <div class="track" role="button" tabindex="0" aria-label="Phase 2 QF: 90 points banked, 6 of 8 picks reached">
+                  <div class="seg bank" style="width:75%"></div>
+                  <div class="tip">
+                    <div class="th">QF · <b>Phase 2</b></div>
+                    <div class="th" style="margin:0;color:var(--paper)"><span style="color:#7fd6a0">90 banked</span> · 6/8</div>
+                    <div class="grp al">Reached (alive)</div>
+                    <div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ESP</span><span class="fc al">POR</span></div>
+                  </div>
+                </div>
+                <div class="end"><span class="pts"><span class="g">90</span></span><span class="nn">6/8</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- SF (in play) -->
+          <div class="rnd">
+            <div class="rhead">
+              <span class="rname">SF</span>
+              <span class="pot">P1 ×55 · P2 ×40</span>
+            </div>
+            <div class="pair">
+              <!-- P1: in-play 165, 3/4 -> 75% -->
+              <div class="bar p1">
+                <span class="pchip">P1</span>
+                <div class="track right" role="button" tabindex="0" aria-label="Phase 1 SF: 165 points in play, 3 of 4 picks alive">
+                  <div class="seg play" style="left:0;width:75%"></div>
+                  <div class="tip">
+                    <div class="th">SF · <b>Phase 1</b></div>
+                    <div class="th" style="margin:0;color:var(--paper)"><span style="color:var(--gold-soft)">165 in play</span> · 3/4</div>
+                    <div class="grp al">Still alive</div>
+                    <div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ESP</span></div>
+                  </div>
+                </div>
+                <div class="end"><span class="pts"><span class="y">165</span></span><span class="nn">3/4</span></div>
+              </div>
+              <!-- P2: in-play 160, 4/4 -> 100% -->
+              <div class="bar p2">
+                <span class="pchip">P2</span>
+                <div class="track right" role="button" tabindex="0" aria-label="Phase 2 SF: 160 points in play, 4 of 4 picks alive">
+                  <div class="seg play" style="left:0;width:100%"></div>
+                  <div class="tip">
+                    <div class="th">SF · <b>Phase 2</b></div>
+                    <div class="th" style="margin:0;color:var(--paper)"><span style="color:var(--gold-soft)">160 in play</span> · 4/4</div>
+                    <div class="grp al">Still alive</div>
+                    <div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span><span class="fc al">ESP</span><span class="fc al">POR</span></div>
+                  </div>
+                </div>
+                <div class="end"><span class="pts"><span class="y">160</span></span><span class="nn full">4/4</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- FINAL (in play) -->
+          <div class="rnd">
+            <div class="rhead">
+              <span class="rname">Final</span>
+              <span class="pot">P1 ×85 · P2 ×60</span>
+            </div>
+            <div class="pair">
+              <!-- P1: in-play 170, 2/2 -> 100% -->
+              <div class="bar p1">
+                <span class="pchip">P1</span>
+                <div class="track right" role="button" tabindex="0" aria-label="Phase 1 Final: 170 points in play, 2 of 2 picks alive">
+                  <div class="seg play" style="left:0;width:100%"></div>
+                  <div class="tip">
+                    <div class="th">Final · <b>Phase 1</b></div>
+                    <div class="th" style="margin:0;color:var(--paper)"><span style="color:var(--gold-soft)">170 in play</span> · 2/2</div>
+                    <div class="grp al">Still alive</div>
+                    <div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span></div>
+                  </div>
+                </div>
+                <div class="end"><span class="pts"><span class="y">170</span></span><span class="nn full">2/2</span></div>
+              </div>
+              <!-- P2: in-play 120, 2/2 -> 100% -->
+              <div class="bar p2">
+                <span class="pchip">P2</span>
+                <div class="track right" role="button" tabindex="0" aria-label="Phase 2 Final: 120 points in play, 2 of 2 picks alive">
+                  <div class="seg play" style="left:0;width:100%"></div>
+                  <div class="tip">
+                    <div class="th">Final · <b>Phase 2</b></div>
+                    <div class="th" style="margin:0;color:var(--paper)"><span style="color:var(--gold-soft)">120 in play</span> · 2/2</div>
+                    <div class="grp al">Still alive</div>
+                    <div class="chips"><span class="fc al">BRA</span><span class="fc al">FRA</span></div>
+                  </div>
+                </div>
+                <div class="end"><span class="pts"><span class="y">120</span></span><span class="nn full">2/2</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- WINNER (in play) -->
+          <div class="rnd">
+            <div class="rhead">
+              <span class="rname">Winner</span>
+              <span class="pot">P1 ×150 · P2 ×100</span>
+            </div>
+            <div class="pair">
+              <!-- P1: in-play 150, 1/1 -> 100% -->
+              <div class="bar p1">
+                <span class="pchip">P1</span>
+                <div class="track right" role="button" tabindex="0" aria-label="Phase 1 Winner: 150 points in play, champion pick alive">
+                  <div class="seg play" style="left:0;width:100%"></div>
+                  <div class="tip">
+                    <div class="th">Winner · <b>Phase 1</b></div>
+                    <div class="th" style="margin:0;color:var(--paper)"><span style="color:var(--gold-soft)">150 in play</span> · 1/1</div>
+                    <div class="grp al">Champion pick</div>
+                    <div class="chips"><span class="fc al">BRA</span></div>
+                  </div>
+                </div>
+                <div class="end"><span class="pts"><span class="y">150</span></span><span class="nn full">1/1</span></div>
+              </div>
+              <!-- P2: in-play 100, 1/1 -> 100% -->
+              <div class="bar p2">
+                <span class="pchip">P2</span>
+                <div class="track right" role="button" tabindex="0" aria-label="Phase 2 Winner: 100 points in play, champion pick alive">
+                  <div class="seg play" style="left:0;width:100%"></div>
+                  <div class="tip">
+                    <div class="th">Winner · <b>Phase 2</b></div>
+                    <div class="th" style="margin:0;color:var(--paper)"><span style="color:var(--gold-soft)">100 in play</span> · 1/1</div>
+                    <div class="grp al">Champion pick</div>
+                    <div class="chips"><span class="fc al">FRA</span></div>
+                  </div>
+                </div>
+                <div class="end"><span class="pts"><span class="y">100</span></span><span class="nn full">1/1</span></div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /chart -->
+
+        <!-- footnote -->
+        <div class="foot">
+          Bar length = <b>picks kept / picks made</b> for that round &mdash; same 0&ndash;N scale in both phases, so P1 and P2 are read fairly side-by-side. <b>Points</b> (labelled) carry each round&rsquo;s real value. Tap a bar for the teams.
+        </div>
+
+      </div>
+    </div>
+  </div>
+</body>
+</html>

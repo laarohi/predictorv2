@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KO Scoring Journey — bar redesign (v2)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  .pn {
+    --paper:#f1ebde; --paper-2:#e9e1cf; --paper-3:#dfd4ba;
+    --ink:#0e1d40; --ink-2:#514a3d; --ink-3:#6e6754;
+    --red:#c8281f; --red-deep:#8a1610;
+    --gold:#d49a2e; --gold-soft:#e9c478; --green:#1b6c3e; --green-soft:#3f9a63;
+    --navy:#1a3168; --navy-deep:#0a1733;
+    --display:'Archivo Black','Impact',sans-serif;
+    --display2:'Archivo',system-ui,sans-serif;
+    --body:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',monospace;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:#cabfa6; padding:28px 16px 80px; font-family:'IBM Plex Sans',system-ui,sans-serif; }
+  .pn { max-width:920px; margin:0 auto; color:var(--ink); }
+  .page-title { font-family:var(--display); font-size:24px; letter-spacing:.02em; text-transform:uppercase; margin:0 0 4px; }
+  .page-sub { font-family:var(--mono); font-size:12px; color:var(--ink-2); margin:0 0 6px; }
+  .samplebar { font-family:var(--mono); font-size:11px; color:var(--ink); background:#f3e7c4; border:2px dashed var(--gold); padding:7px 12px; margin:14px 0 26px; }
+
+  .opt-head { margin:44px 0 14px; }
+  .opt-tag { font-family:var(--mono); font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--red); font-weight:600; }
+  .opt-name { font-family:var(--display); font-size:20px; text-transform:uppercase; letter-spacing:.02em; margin:2px 0 4px; }
+  .opt-note { font-family:var(--body); font-size:13px; color:var(--ink-2); margin:0 0 4px; max-width:720px; line-height:1.45; }
+
+  .pn-sec-h { display:flex; justify-content:space-between; align-items:center; margin:0 0 10px; gap:12px; flex-wrap:wrap; }
+  .pn-sec-h .ttl { font-family:var(--display); font-size:15px; text-transform:uppercase; letter-spacing:.03em; display:flex; align-items:center; gap:8px; }
+  .pn-sec-h .ttl em { color:var(--red); font-style:normal; }
+  .pn-sec-h .pip { width:10px; height:10px; background:var(--red); display:inline-block; }
+  .pn-sec-h .right { display:flex; gap:12px; align-items:center; }
+  .pn-sec-h a { font-family:var(--mono); font-size:11px; color:var(--ink-3); text-decoration:none; }
+  .pn-sec-h a:hover { color:var(--red); }
+  .ph-toggle { display:inline-flex; border:2px solid var(--ink); font-family:var(--mono); font-size:10px; letter-spacing:.08em; text-transform:uppercase; }
+  .ph-toggle button { background:var(--paper); border:none; padding:4px 9px; cursor:pointer; font:inherit; color:var(--ink-3); border-right:2px solid var(--ink); }
+  .ph-toggle button:last-child { border-right:none; }
+  .ph-toggle button.on { background:var(--ink); color:var(--paper); }
+
+  .pn-card { background:var(--paper); border:2.5px solid var(--ink); box-shadow:5px 5px 0 var(--ink); padding:16px 18px; }
+
+  /* ---- summary band (shared) ---- */
+  .sumband { display:flex; align-items:stretch; gap:0; border:2px solid var(--ink); margin-bottom:18px; }
+  .sumband .tot { flex:0 0 auto; padding:9px 16px; background:var(--ink); color:var(--paper); display:flex; flex-direction:column; justify-content:center; }
+  .sumband .tot .k { font-family:var(--mono); font-size:9px; letter-spacing:.14em; text-transform:uppercase; color:#aab4cc; }
+  .sumband .tot .v { font-family:var(--display); font-size:24px; line-height:1; }
+  .sumband .tot .v .g { color:#7fd6a0; } .sumband .tot .v .s { color:#8a93a8; font-size:14px; } .sumband .tot .v .y { color:var(--gold); font-size:15px; }
+  .sumband .src { flex:1 1 0; display:flex; }
+  .sumband .src .one { flex:1 1 0; padding:9px 14px; border-left:2px solid var(--ink); display:flex; align-items:center; gap:10px; }
+  .sumband .src .ic { font-size:18px; line-height:1; }
+  .sumband .src .ic.b { color:var(--red); }
+  .sumband .src .meta .lbl { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--ink-3); }
+  .sumband .src .meta .num { font-family:var(--display); font-size:17px; color:var(--green); }
+  .sumband .src .meta .num .ip { font-family:var(--mono); font-size:11px; color:var(--gold); font-weight:600; margin-left:5px; }
+
+  /* ---- bar chart (V1) ---- */
+  .chart { display:flex; flex-direction:column; gap:2px; }
+  .brow { display:grid; grid-template-columns:60px 1fr 118px; align-items:center; gap:14px; padding:5px 6px; cursor:pointer; border:1.5px solid transparent; }
+  .brow:hover { background:var(--paper-2); border-color:var(--paper-3); }
+  .brow.now { background:#fbf4df; border-color:var(--gold); }
+  .brow .rlabel { font-family:var(--mono); font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); display:flex; flex-direction:column; }
+  .brow .rlabel .nowtag { font-family:var(--mono); font-size:8px; letter-spacing:.1em; color:var(--gold); font-weight:600; }
+  .brow .track { height:24px; background:var(--paper-2); border:1.5px solid var(--ink); position:relative; }
+  .brow .fill { position:absolute; inset:0 auto 0 0; display:flex; height:100%; }
+  .brow .seg { height:100%; }
+  .brow .seg.bank { background:var(--green); }
+  .brow .seg.play { background:repeating-linear-gradient(45deg,var(--gold) 0 5px,var(--gold-soft) 5px 10px); border-left:1.5px solid var(--ink); }
+  .brow .vals { text-align:right; font-family:var(--mono); font-size:10px; color:var(--ink-3); white-space:nowrap; }
+  .brow .vals .bk { font-family:var(--display); font-size:15px; color:var(--green); }
+  .brow .vals .bk.zero { color:var(--ink-3); font-size:12px; }
+  .brow .vals .ip { color:var(--gold); font-weight:600; }
+  .brow .vals .src { display:block; margin-top:2px; font-size:9px; color:var(--ink-3); letter-spacing:.02em; }
+
+  /* expand drawer (shared) */
+  .drawer { grid-column:1 / -1; max-height:0; overflow:hidden; transition:max-height .2s ease; }
+  .drawer.open { max-height:240px; }
+  .drawer .inner { padding:10px 4px 12px; display:grid; grid-template-columns:1fr 1fr; gap:6px 26px; border-top:1.5px dashed var(--paper-3); margin-top:4px; }
+  .drawer .ex-h { font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--red); margin-bottom:3px; }
+  .drawer .ex-h.b { color:var(--red); } .drawer .ex-h.m { color:var(--navy); }
+  .drawer .frow { display:flex; justify-content:space-between; align-items:center; font-family:var(--mono); font-size:11px; gap:8px; padding:1px 0; }
+  .drawer .frow .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .drawer .frow .p { font-family:var(--display); font-size:12px; }
+  .drawer .frow .p.g { color:var(--green); } .drawer .frow .p.y { color:var(--gold); } .drawer .frow .p.x { color:var(--ink-3); }
+  .drawer .res { font-size:9px; color:var(--ink-3); } .drawer .res.exact { color:var(--gold); } .drawer .res.outc { color:var(--green); } .drawer .res.miss { color:var(--red); }
+  .chip { display:inline-flex; align-items:center; gap:3px; font-family:var(--mono); font-size:10px; border:1.5px solid var(--ink); padding:1px 5px; margin:2px 3px 0 0; }
+  .chip.alive { background:#e7f0e9; border-color:var(--green); color:var(--green); }
+  .chip.out { background:transparent; border-color:var(--paper-3); color:var(--ink-3); text-decoration:line-through; }
+
+  .legend { display:flex; gap:16px; flex-wrap:wrap; font-family:var(--mono); font-size:10px; color:var(--ink-2); margin-top:14px; padding-top:10px; border-top:1.5px solid var(--paper-3); }
+  .legend .sw { display:inline-block; width:14px; height:9px; border:1.5px solid var(--ink); vertical-align:-1px; margin-right:5px; }
+  .legend .sw.bank { background:var(--green); }
+  .legend .sw.play { background:repeating-linear-gradient(45deg,var(--gold) 0 4px,var(--gold-soft) 4px 8px); }
+
+  /* ---- V2 two-lane ---- */
+  .lanes { display:grid; grid-template-columns:1fr 1fr; gap:0; }
+  .lane { padding:0 4px; }
+  .lane + .lane { border-left:2px dashed var(--paper-3); padding-left:20px; margin-left:4px; }
+  .lane .lane-h { display:flex; align-items:center; gap:7px; font-family:var(--mono); font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--ink); margin-bottom:9px; }
+  .lane .lane-h .ic { font-size:15px; } .lane .lane-h .ic.b { color:var(--red); }
+  .lane .lane-h .tot { margin-left:auto; font-family:var(--display); font-size:14px; color:var(--green); }
+  .lane .lane-h .tot .ip { font-family:var(--mono); font-size:10px; color:var(--gold); margin-left:4px; }
+  .lrow { display:grid; grid-template-columns:40px 1fr 54px; align-items:center; gap:9px; padding:3px 2px; cursor:pointer; }
+  .lrow:hover { background:var(--paper-2); }
+  .lrow .rl { font-family:var(--mono); font-size:10px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-3); }
+  .lrow .tk { height:18px; background:var(--paper-2); border:1.5px solid var(--ink); position:relative; }
+  .lrow .fl { position:absolute; inset:0 auto 0 0; display:flex; }
+  .lrow .sg { height:100%; } .lrow .sg.bk { background:var(--green); } .lrow .sg.pl { background:repeating-linear-gradient(45deg,var(--gold) 0 5px,var(--gold-soft) 5px 10px); border-left:1.5px solid var(--ink); }
+  .lrow .vv { text-align:right; font-family:var(--mono); font-size:10px; color:var(--ink-3); }
+  .lrow .vv b { font-family:var(--display); font-size:13px; color:var(--green); } .lrow .vv b.zero { color:var(--ink-3); font-size:11px; }
+  .lrow .vv .ip { color:var(--gold); font-weight:600; }
+
+  @media (max-width:720px) {
+    .sumband { flex-wrap:wrap; } .sumband .tot { flex:1 1 100%; flex-direction:row; gap:10px; align-items:baseline; }
+    .lanes { grid-template-columns:1fr; } .lane + .lane { border-left:none; padding-left:4px; margin-left:0; margin-top:18px; border-top:2px dashed var(--paper-3); padding-top:14px; }
+    .drawer .inner { grid-template-columns:1fr; }
+    .brow { grid-template-columns:48px 1fr 96px; gap:9px; }
+  }
+</style>
+</head>
+<body>
+<div class="pn">
+  <p class="page-title">KO scoring journey — the bar redesign</p>
+  <p class="page-sub">Back to proportional bars · banked-first · progression emerges from the data, no rail</p>
+  <div class="samplebar">⚠ Illustrative sample — mid-tournament (QF round live). Note how <b>green (banked) naturally sits at the top rounds and gold (in&nbsp;play) at the bottom</b> — that <i>is</i> the journey, drawn by the data. "Match in play" = best-case (≤). Tap any row for the breakdown.</div>
+
+  <!-- ============================== V1 ============================== -->
+  <div class="opt-head">
+    <div class="opt-tag">Variant 1 · recommended</div>
+    <div class="opt-name">Round bars — one bar per round</div>
+    <p class="opt-note">One proportional bar per tournament round. <b>Green = banked, gold = still in play.</b> Length = points, so the bar carries the meaning — and because early rounds are played and late rounds aren't, the green-to-gold gradient <i>is</i> your journey, with zero rail scaffolding. The headline band splits your KO points by source (⚽ match vs ◆ bracket) so match points finally have a home. Tap a row → the fixtures &amp; teams behind that bar.</p>
+  </div>
+  <div class="pn-sec-h">
+    <div class="ttl"><span class="pip"></span>Your scoring <em>journey</em></div>
+    <div class="right">
+      <span class="ph-toggle"><button class="on">Phase 2 · live</button><button>Phase 1</button></span>
+      <a href="#">Full breakdown →</a>
+    </div>
+  </div>
+  <div class="pn-card">
+    <div class="sumband">
+      <div class="tot"><span class="k">Knockout points</span><span class="v"><span class="g">160</span><span class="s"> banked · </span><span class="y">≤445</span></span></div>
+      <div class="src">
+        <div class="one"><span class="ic">⚽</span><div class="meta"><div class="lbl">Match scores</div><div class="num">60<span class="ip">≤105 in play</span></div></div></div>
+        <div class="one"><span class="ic b">◆</span><div class="meta"><div class="lbl">Bracket</div><div class="num">100<span class="ip">≤340 in play</span></div></div></div>
+      </div>
+    </div>
+
+    <div class="chart">
+      <!-- R32 -->
+      <div class="brow" data-d="dR32">
+        <div class="rlabel">R32</div>
+        <div class="track"><div class="fill" style="width:27%"><div class="seg bank" style="width:100%"></div></div></div>
+        <div class="vals"><span class="bk">40</span> banked<span class="src">⚽ all match</span></div>
+        <div class="drawer" id="dR32"><div class="inner">
+          <div><div class="ex-h m">⚽ Match · Round of 32 — 40 banked</div>
+            <div class="frow"><span class="t">🇧🇷 BRA 2–0 KOR · 2–0 <span class="res exact">exact</span></span><span class="p y">+15</span></div>
+            <div class="frow"><span class="t">🇫🇷 FRA 1–0 SEN · 2–0 <span class="res outc">outcome</span></span><span class="p g">+5</span></div>
+            <div class="frow"><span class="t">🇦🇷 ARG 2–1 AUS · 2–1 <span class="res exact">exact</span></span><span class="p y">+15</span></div>
+            <div class="frow"><span class="t">🇳🇱 NED 1–2 ENG · 2–1 <span class="res miss">miss</span></span><span class="p x">0</span></div>
+          </div>
+          <div><div class="ex-h b">◆ Bracket · R32 not scored in Phase 2</div>
+            <div class="frow" style="color:var(--ink-3)"><span class="t">R32 entry was banked in the group stage</span><span class="p x">—</span></div>
+          </div>
+        </div></div>
+      </div>
+      <!-- R16 -->
+      <div class="brow" data-d="dR16">
+        <div class="rlabel">R16</div>
+        <div class="track"><div class="fill" style="width:40%"><div class="seg bank" style="width:100%"></div></div></div>
+        <div class="vals"><span class="bk">60</span> banked<span class="src">⚽20 · ◆40</span></div>
+        <div class="drawer" id="dR16"><div class="inner">
+          <div><div class="ex-h m">⚽ Match · Round of 16 — 20 banked</div>
+            <div class="frow"><span class="t">🇪🇸 ESP 3–1 CRO · 3–1 <span class="res exact">exact</span></span><span class="p y">+15</span></div>
+            <div class="frow"><span class="t">🇦🇷 ARG 2–1 BEL · 0–1 <span class="res miss">miss</span></span><span class="p x">0</span></div>
+            <div class="frow"><span class="t">🇵🇹 POR 2–0 SUI · 1–0 <span class="res outc">outcome</span></span><span class="p g">+5</span></div>
+          </div>
+          <div><div class="ex-h b">◆ Bracket · reached R16 — 40 banked</div>
+            <span class="chip alive">🇧🇷 BRA</span><span class="chip alive">🇫🇷 FRA</span><span class="chip alive">🇦🇷 ARG</span><span class="chip alive">🇪🇸 ESP</span><span class="chip out">🇳🇱 NED</span>
+          </div>
+        </div></div>
+      </div>
+      <!-- QF (now) -->
+      <div class="brow now" data-d="dQF">
+        <div class="rlabel">QF<span class="nowtag">◀ NOW</span></div>
+        <div class="track"><div class="fill" style="width:80%"><div class="seg bank" style="width:50%"></div><div class="seg play" style="width:50%"></div></div></div>
+        <div class="vals"><span class="bk">60</span> · <span class="ip">≤60</span><span class="src">◆ reached · ⚽ to play</span></div>
+        <div class="drawer" id="dQF"><div class="inner">
+          <div><div class="ex-h m">⚽ Match · Quarter-finals — ≤60 in play (4 predicted)</div>
+            <div class="frow"><span class="t">🇧🇷 BRA – 🇫🇷 FRA · you 2–1</span><span class="p y">≤15</span></div>
+            <div class="frow"><span class="t">🇪🇸 ESP – 🇩🇪 GER · you 1–1</span><span class="p y">≤15</span></div>
+            <div class="frow" style="color:var(--ink-3)"><span class="t">+2 more</span><span class="p y">≤30</span></div>
+          </div>
+          <div><div class="ex-h b">◆ Bracket · reached QF — 60 banked</div>
+            <span class="chip alive">🇧🇷 BRA</span><span class="chip alive">🇫🇷 FRA</span><span class="chip alive">🇪🇸 ESP</span><span class="chip alive">🇵🇹 POR</span>
+          </div>
+        </div></div>
+      </div>
+      <!-- SF -->
+      <div class="brow" data-d="dSF">
+        <div class="rlabel">SF</div>
+        <div class="track"><div class="fill" style="width:100%"><div class="seg play" style="width:100%"></div></div></div>
+        <div class="vals"><span class="bk zero">—</span> · <span class="ip">≤150</span><span class="src">◆120 · ⚽≤30</span></div>
+        <div class="drawer" id="dSF"><div class="inner">
+          <div><div class="ex-h m">⚽ Match · Semi-finals — ≤30 in play</div>
+            <div class="frow" style="color:var(--ink-3)"><span class="t">2 fixtures · predictable once SF is set</span><span class="p y">≤30</span></div>
+          </div>
+          <div><div class="ex-h b">◆ Bracket · reaching SF — ≤120 in play</div>
+            <span class="chip alive">🇧🇷 BRA</span><span class="chip alive">🇫🇷 FRA</span><span class="chip alive">🇪🇸 ESP</span>
+          </div>
+        </div></div>
+      </div>
+      <!-- Final -->
+      <div class="brow" data-d="dF">
+        <div class="rlabel">Final</div>
+        <div class="track"><div class="fill" style="width:90%"><div class="seg play" style="width:100%"></div></div></div>
+        <div class="vals"><span class="bk zero">—</span> · <span class="ip">≤135</span><span class="src">◆120 · ⚽≤15</span></div>
+        <div class="drawer" id="dF"><div class="inner">
+          <div><div class="ex-h m">⚽ Match · Final — ≤15 in play</div>
+            <div class="frow" style="color:var(--ink-3)"><span class="t">1 fixture</span><span class="p y">≤15</span></div>
+          </div>
+          <div><div class="ex-h b">◆ Bracket · reaching Final — ≤120 in play</div>
+            <span class="chip alive">🇧🇷 BRA</span><span class="chip alive">🇫🇷 FRA</span>
+          </div>
+        </div></div>
+      </div>
+      <!-- Winner -->
+      <div class="brow" data-d="dW">
+        <div class="rlabel">Winner</div>
+        <div class="track"><div class="fill" style="width:67%"><div class="seg play" style="width:100%"></div></div></div>
+        <div class="vals"><span class="bk zero">—</span> · <span class="ip">≤100</span><span class="src">◆ champion pick</span></div>
+        <div class="drawer" id="dW"><div class="inner">
+          <div style="grid-column:1 / -1"><div class="ex-h b">◆ Bracket · tournament winner — ≤100 in play</div>
+            <span class="chip alive">🇧🇷 BRA — your champion</span>
+          </div>
+        </div></div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><span class="sw bank"></span>Banked — locked into your score</span>
+      <span><span class="sw play"></span>In play — still winnable (≤ best case for match)</span>
+      <span>⚽ Match scores &nbsp;·&nbsp; ◆ Bracket advancement</span>
+    </div>
+  </div>
+
+  <!-- ============================== V2 ============================== -->
+  <div class="opt-head">
+    <div class="opt-tag">Variant 2</div>
+    <div class="opt-name">Two lanes — match &amp; bracket, side by side</div>
+    <p class="opt-note">Same bar language, but the two point sources get their <b>own mini bar-chart with its own scale</b> — so match points (small in absolute terms) stay readable instead of being dwarfed by deep-bracket payouts. Clearest separation of "where the points come from"; the trade is two charts instead of one unified shape. Tap a row for its breakdown.</p>
+  </div>
+  <div class="pn-sec-h">
+    <div class="ttl"><span class="pip"></span>Knockout <em>points</em></div>
+    <div class="right"><span class="ph-toggle"><button class="on">Phase 2 · live</button><button>Phase 1</button></span></div>
+  </div>
+  <div class="pn-card">
+    <div class="lanes">
+      <div class="lane">
+        <div class="lane-h"><span class="ic">⚽</span>Match scores <span class="tot">60<span class="ip">≤105</span></span></div>
+        <div class="lrow"><div class="rl">R32</div><div class="tk"><div class="fl" style="width:67%"><div class="sg bk" style="width:100%"></div></div></div><div class="vv"><b>40</b></div></div>
+        <div class="lrow"><div class="rl">R16</div><div class="tk"><div class="fl" style="width:33%"><div class="sg bk" style="width:100%"></div></div></div><div class="vv"><b>20</b></div></div>
+        <div class="lrow"><div class="rl">QF</div><div class="tk"><div class="fl" style="width:100%"><div class="sg pl" style="width:100%"></div></div></div><div class="vv"><b class="zero">—</b><span class="ip">≤60</span></div></div>
+        <div class="lrow"><div class="rl">SF</div><div class="tk"><div class="fl" style="width:50%"><div class="sg pl" style="width:100%"></div></div></div><div class="vv"><b class="zero">—</b><span class="ip">≤30</span></div></div>
+        <div class="lrow"><div class="rl">Final</div><div class="tk"><div class="fl" style="width:25%"><div class="sg pl" style="width:100%"></div></div></div><div class="vv"><b class="zero">—</b><span class="ip">≤15</span></div></div>
+      </div>
+      <div class="lane">
+        <div class="lane-h"><span class="ic b">◆</span>Bracket <span class="tot">100<span class="ip">≤340</span></span></div>
+        <div class="lrow"><div class="rl">R16</div><div class="tk"><div class="fl" style="width:33%"><div class="sg bk" style="width:100%"></div></div></div><div class="vv"><b>40</b></div></div>
+        <div class="lrow"><div class="rl">QF</div><div class="tk"><div class="fl" style="width:50%"><div class="sg bk" style="width:100%"></div></div></div><div class="vv"><b>60</b></div></div>
+        <div class="lrow"><div class="rl">SF</div><div class="tk"><div class="fl" style="width:100%"><div class="sg pl" style="width:100%"></div></div></div><div class="vv"><b class="zero">—</b><span class="ip">≤120</span></div></div>
+        <div class="lrow"><div class="rl">Final</div><div class="tk"><div class="fl" style="width:100%"><div class="sg pl" style="width:100%"></div></div></div><div class="vv"><b class="zero">—</b><span class="ip">≤120</span></div></div>
+        <div class="lrow"><div class="rl">Winner</div><div class="tk"><div class="fl" style="width:83%"><div class="sg pl" style="width:100%"></div></div></div><div class="vv"><b class="zero">—</b><span class="ip">≤100</span></div></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span><span class="sw bank"></span>Banked</span>
+      <span><span class="sw play"></span>In play (≤)</span>
+      <span style="color:var(--ink-3)">Each lane scaled to its own max so match stays legible</span>
+    </div>
+  </div>
+
+  <p style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#514a3d;margin-top:30px">
+    The bar length carries the points; the green→gold gradient down the rounds carries the journey. Tap a V1 row to open its fixtures + team chips.
+  </p>
+</div>
+<script>
+  document.querySelectorAll('[data-d]').forEach(function (r) {
+    r.addEventListener('click', function () {
+      var d = document.getElementById(r.getAttribute('data-d'));
+      if (!d) return;
+      var open = d.classList.contains('open');
+      document.querySelectorAll('.drawer.open').forEach(function (x) { x.classList.remove('open'); });
+      if (!open) d.classList.add('open');
+    });
+  });
+</script>
+</body>
+</html>

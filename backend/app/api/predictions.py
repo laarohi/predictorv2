@@ -53,7 +53,10 @@ from app.services.bonus import (
 )
 from app.services.bracket_consistency import validate_phase1_bracket
 from app.services.bracket_exposure import compute_bracket_exposure
-from app.services.scoring import get_group_qualification_ledger
+from app.services.scoring import (
+    get_group_qualification_ledger,
+    get_knockout_match_points_ledger,
+)
 from app.services.locking import (
     check_fixture_locked,
     get_current_phase,
@@ -138,10 +141,19 @@ class StageCellResponse(BaseModel):
 
 
 class StageRowResponse(BaseModel):
-    """One row of the Scoring Journey (a single KO destination stage)."""
+    """One row of the Scoring Journey (a single KO destination stage).
+
+    earned / available / missed = reached (banked) / still alive (in play) /
+    eliminated. Together they account for every pick at the stage, so the
+    grouped-bars widget can render the green / gold / muted-red split."""
 
     earned: StageCellResponse
     available: StageCellResponse
+    # Defaulted so any other constructor stays valid; the bracket-exposure
+    # route always populates it.
+    missed: StageCellResponse = Field(
+        default_factory=lambda: StageCellResponse(n=0, of=0, pts=0, teams=[])
+    )
 
 
 class BracketExposureResponse(BaseModel):
@@ -166,6 +178,31 @@ class BracketExposureResponse(BaseModel):
     # an `earned` + `available` cell with progressive denominators (the
     # `of` field). See services/bracket_exposure.py for the algorithm.
     per_stage: dict[str, StageRowResponse] = {}
+
+
+class KnockoutMatchFixtureRow(BaseModel):
+    """One KO fixture's match-score line, for the match-points strip tooltip."""
+
+    home_team: str
+    away_team: str
+    predicted: str
+    actual: str | None = None
+    points: int | None = None
+    result: str | None = None  # "exact" | "outcome" | "miss" (finished only)
+    status: str
+
+
+class KnockoutMatchRoundRow(BaseModel):
+    """One KO round's match-SCORE points: banked + best-case still in play.
+
+    Sibling of the bracket-advancement Scoring Journey — drives the
+    'KO matches so far' strip. `available_pts` is a best-case ceiling (≤)
+    for unplayed predicted fixtures, never an awarded figure."""
+
+    stage: str
+    earned_pts: int
+    available_pts: int
+    fixtures: list[KnockoutMatchFixtureRow]
 
 
 class FixtureAgreement(BaseModel):
@@ -1407,6 +1444,30 @@ async def get_my_group_qualification(
     ]
 
 
+@router.get("/me/knockout-match-points", response_model=list[KnockoutMatchRoundRow])
+async def get_my_knockout_match_points(
+    session: DbSession,
+    current_user: CurrentUser,
+) -> list[KnockoutMatchRoundRow]:
+    """Per-KO-round match-SCORE points for the calling user — banked (finished
+    fixtures) plus a best-case `available` ceiling for unplayed predicted ones.
+
+    Powers the 'KO matches so far' strip, the match-score sibling of the
+    bracket-advancement Scoring Journey. Reuses the leaderboard scoring engine so
+    banked points reconcile. Empty until the user has a KO match prediction.
+    """
+    ledger = await get_knockout_match_points_ledger(session, current_user.id)
+    return [
+        KnockoutMatchRoundRow(
+            stage=r["stage"],
+            earned_pts=r["earned_pts"],
+            available_pts=r["available_pts"],
+            fixtures=[KnockoutMatchFixtureRow(**f) for f in r["fixtures"]],
+        )
+        for r in ledger
+    ]
+
+
 @router.get("/bracket-exposure", response_model=BracketExposureResponse)
 async def get_bracket_exposure(
     session: DbSession,
@@ -1435,6 +1496,12 @@ async def get_bracket_exposure(
                 of=row.available.of,
                 pts=row.available.pts,
                 teams=row.available.teams,
+            ),
+            missed=StageCellResponse(
+                n=row.missed.n,
+                of=row.missed.of,
+                pts=row.missed.pts,
+                teams=row.missed.teams,
             ),
         )
         for stage, row in result.per_stage.items()

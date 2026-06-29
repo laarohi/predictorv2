@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KO Scoring Journey — hybrid (mirrored accuracy spread)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<style>
+  .pn{
+    --paper:#f1ebde; --paper-2:#e9e1cf; --paper-3:#dfd4ba;
+    --ink:#0e1d40; --ink-2:#514a3d; --ink-3:#6e6754;
+    --red:#c8281f; --red-deep:#8a1610;
+    --gold:#d49a2e; --gold-soft:#e9c478; --green:#1b6c3e; --green-soft:#3f9a63;
+    --navy:#1a3168; --navy-deep:#0a1733;
+    --display:'Archivo Black','Impact',sans-serif;
+    --display2:'Archivo',system-ui,sans-serif;
+    --body:'IBM Plex Sans',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',monospace;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:#cabfa6;padding:26px 14px 80px;font-family:'IBM Plex Sans',system-ui,sans-serif;}
+  .pn{max-width:560px;margin:0 auto;color:var(--ink);}
+  .page-title{font-family:var(--display);font-size:22px;letter-spacing:.02em;text-transform:uppercase;margin:0 0 4px;}
+  .page-sub{font-family:var(--mono);font-size:11px;color:var(--ink-2);margin:0 0 6px;}
+  .samplebar{font-family:var(--mono);font-size:10.5px;color:var(--ink);background:#f3e7c4;border:2px dashed var(--gold);padding:7px 11px;margin:12px 0 22px;line-height:1.5;}
+
+  .pn-sec-h{display:flex;justify-content:space-between;align-items:center;margin:0 0 9px;gap:10px;}
+  .pn-sec-h .ttl{font-family:var(--display);font-size:14px;text-transform:uppercase;letter-spacing:.03em;display:flex;align-items:center;gap:8px;}
+  .pn-sec-h .ttl em{color:var(--red);font-style:normal;}
+  .pn-sec-h .pip{width:9px;height:9px;background:var(--red);display:inline-block;}
+  .pn-sec-h a{font-family:var(--mono);font-size:10px;color:var(--ink-3);text-decoration:none;}
+  .pn-sec-h a:hover{color:var(--red);}
+
+  .pn-card{background:var(--paper);border:2.5px solid var(--ink);box-shadow:5px 5px 0 var(--ink);padding:0;}
+
+  /* phase header band */
+  .phh{display:grid;grid-template-columns:1fr auto 1fr;background:var(--ink);color:var(--paper);}
+  .phh .ph{padding:8px 12px;}
+  .phh .ph.r{text-align:right;}
+  .phh .ph .nm{font-family:var(--display);font-size:12px;letter-spacing:.04em;text-transform:uppercase;line-height:1;}
+  .phh .ph .nm .k{color:#aab4cc;font-family:var(--mono);font-size:9px;letter-spacing:.1em;}
+  .phh .ph .tt{font-family:var(--mono);font-size:10px;margin-top:5px;color:#cdd6e8;white-space:nowrap;}
+  .phh .ph .tt b{font-family:var(--display);font-size:13px;letter-spacing:0;}
+  .phh .ph .tt .g{color:#7fd6a0;} .phh .ph .tt .y{color:var(--gold);}
+  .phh .mid{width:54px;background:var(--navy-deep);display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:9px;letter-spacing:.1em;color:#8a93a8;text-transform:uppercase;}
+
+  /* round rows: mirrored spine */
+  .rows{padding:4px 0 2px;}
+  .rrow{display:grid;grid-template-columns:1fr 54px 1fr;align-items:center;border-bottom:1.5px dashed var(--paper-3);}
+  .rrow:last-child{border-bottom:0;}
+  .rrow.now{background:#fbf4df;}
+  .wing{padding:7px 10px;cursor:pointer;}
+  .wing:hover{background:var(--paper-2);}
+  .rrow.now .wing:hover{background:#f6eccf;}
+  .wing.l{justify-self:stretch;}
+  /* left wing: content right-aligned toward spine; right wing mirrors */
+  .wrap{display:flex;align-items:center;gap:9px;}
+  .wing.l .wrap{flex-direction:row;justify-content:flex-end;}
+  .wing.r .wrap{flex-direction:row-reverse;justify-content:flex-end;}
+  .pts{font-family:var(--display);font-size:19px;line-height:1;color:var(--green);white-space:nowrap;}
+  .pts.play{color:var(--gold);}
+  .pts.zero{color:var(--ink-3);font-size:14px;}
+  .pts .u{font-family:var(--mono);font-size:8px;color:var(--ink-3);margin-left:1px;}
+  .meterwrap{display:flex;flex-direction:column;gap:3px;min-width:0;width:108px;}
+  .wing.l .meterwrap{align-items:flex-end;}
+  .wing.r .meterwrap{align-items:flex-start;}
+  .meter{height:9px;width:100%;background:var(--paper-3);border:1.5px solid var(--ink);position:relative;}
+  .meter .fl{position:absolute;top:0;bottom:0;background:var(--green);}
+  .wing.l .meter .fl{right:0;} .wing.r .meter .fl{left:0;}
+  .meter.play .fl{background:repeating-linear-gradient(45deg,var(--gold) 0 4px,var(--gold-soft) 4px 8px);}
+  .frac{font-family:var(--mono);font-size:9.5px;color:var(--ink-2);letter-spacing:.02em;white-space:nowrap;}
+  .frac b{color:var(--ink);}
+  .frac.win{color:var(--green);} .frac.win b{color:var(--green);}
+  .sharp{font-family:var(--mono);font-size:8px;color:var(--green);font-weight:600;}
+
+  /* spine */
+  .spine{align-self:stretch;background:var(--paper-2);border-left:1.5px solid var(--ink);border-right:1.5px solid var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 0;}
+  .spine .rn{font-family:var(--display);font-size:12px;letter-spacing:.02em;color:var(--ink);line-height:1;}
+  .spine .mult{font-family:var(--mono);font-size:8px;letter-spacing:.02em;color:var(--ink-3);margin-top:3px;text-align:center;line-height:1.3;}
+  .spine .mult .p1{color:var(--ink-2);} .spine .mult .p2{color:var(--ink-2);}
+  .rrow.now .spine{background:var(--gold);}
+  .rrow.now .spine .rn{color:var(--ink);} .rrow.now .spine .mult{color:var(--ink);}
+  .rrow.now .spine .nowt{font-family:var(--mono);font-size:7px;letter-spacing:.08em;color:var(--ink);font-weight:600;margin-top:2px;}
+
+  /* tooltip (house dark ink) */
+  .wing{position:relative;}
+  .tip{position:absolute;z-index:40;left:50%;transform:translateX(-50%) translateY(4px);bottom:calc(100% + 6px);min-width:150px;background:var(--ink);color:var(--paper);border:2px solid var(--ink);box-shadow:4px 4px 0 rgba(14,29,64,.3);padding:7px 9px 8px;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .12s,transform .12s;text-align:left;}
+  .wing:hover .tip,.wing:focus .tip,.wing.open .tip{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0);}
+  .tip .th{display:flex;justify-content:space-between;gap:10px;font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#aab4cc;border-bottom:1px solid #2a3a5e;padding-bottom:4px;margin-bottom:5px;}
+  .tip .th b{font-family:var(--display);color:var(--paper);}
+  .tip .chips{display:flex;flex-wrap:wrap;gap:3px;}
+  .tip .chip{font-family:var(--mono);font-size:9px;border:1px solid #3a4a6e;padding:1px 4px;color:#cdd6e8;}
+  .tip .chip.alive{border-color:var(--green-soft);color:#9fe0ba;}
+  .tip .chip.out{color:#7a8299;text-decoration:line-through;border-color:#3a4a6e;}
+  .tip .chip.star{border-color:var(--gold);color:var(--gold);}
+
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:9.5px;color:var(--ink-2);padding:9px 12px;border-top:1.5px solid var(--paper-3);}
+  .legend .sw{display:inline-block;width:13px;height:8px;border:1.5px solid var(--ink);vertical-align:-1px;margin-right:4px;}
+  .legend .sw.g{background:var(--green);} .legend .sw.y{background:repeating-linear-gradient(45deg,var(--gold) 0 3px,var(--gold-soft) 3px 6px);}
+
+  /* ---- match strip (sibling, mirrors .pn-gss) ---- */
+  .gss{display:grid;grid-template-columns:auto 1fr auto;background:var(--paper);border:2.5px solid var(--ink);box-shadow:5px 5px 0 var(--ink);align-items:stretch;margin-top:26px;}
+  .gss .lbl{padding:0 13px;background:var(--ink);color:var(--paper);display:flex;flex-direction:column;justify-content:center;}
+  .gss .lbl .t{font-family:var(--display);font-size:13px;text-transform:uppercase;letter-spacing:.04em;line-height:1.05;}
+  .gss .lbl .t em{color:var(--gold);font-style:normal;}
+  .gss .lbl .s{font-family:var(--mono);font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--paper-3);margin-top:3px;}
+  .gss .cells{display:grid;grid-template-columns:repeat(5,1fr);}
+  .gss .cell{padding:8px 4px 9px;text-align:center;border-right:1.5px dashed var(--paper-3);position:relative;cursor:pointer;}
+  .gss .cell:hover{background:var(--paper-2);}
+  .gss .cell .r{font-family:var(--display);font-size:11px;text-transform:uppercase;color:var(--ink-3);line-height:1;}
+  .gss .cell .v{font-family:var(--display);font-size:21px;line-height:1;margin-top:6px;color:var(--ink);}
+  .gss .cell.hi .v{color:var(--gold);}
+  .gss .cell.play .v{color:var(--gold);font-size:16px;}
+  .gss .cell .mini{height:3px;width:78%;margin:6px auto 0;background:var(--paper-3);position:relative;}
+  .gss .cell .mini .fl{position:absolute;left:0;top:0;bottom:0;background:var(--ink);}
+  .gss .cell.hi .mini .fl{background:var(--gold);}
+  .gss .cell.play .mini{background:transparent;}
+  .gss .cell.play .mini .fl{background:repeating-linear-gradient(45deg,var(--gold) 0 3px,var(--gold-soft) 3px 6px);}
+  .gss .cap{padding:0 12px;background:var(--paper-2);border-left:1.5px solid var(--ink);display:flex;flex-direction:column;justify-content:center;text-align:right;}
+  .gss .cap .k{font-family:var(--mono);font-size:8px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);}
+  .gss .cap .v{font-family:var(--display);font-size:16px;color:var(--green);line-height:1.1;}
+  .gss .cap .v .y{color:var(--gold);font-size:12px;}
+  .gss .cell .tip{position:absolute;z-index:40;left:50%;transform:translateX(-50%) translateY(4px);bottom:calc(100% + 7px);min-width:140px;background:var(--ink);color:var(--paper);border:2px solid var(--ink);box-shadow:4px 4px 0 rgba(14,29,64,.3);padding:7px 9px;opacity:0;visibility:hidden;pointer-events:none;transition:.12s;text-align:left;}
+  .gss .cell:hover .tip,.gss .cell:focus .tip,.gss .cell.open .tip{opacity:1;visibility:visible;transform:translateX(-50%) translateY(0);}
+  .gss .tip .th{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;color:#aab4cc;display:flex;justify-content:space-between;gap:8px;border-bottom:1px solid #2a3a5e;padding-bottom:4px;margin-bottom:5px;}
+  .gss .tip .th b{font-family:var(--display);color:var(--paper);}
+  .gss .tip ul{list-style:none;margin:0;padding:0;}
+  .gss .tip li{display:flex;justify-content:space-between;gap:10px;font-family:var(--mono);font-size:10px;padding:1px 0;}
+  .gss .tip li .p{font-family:var(--display);}
+  .gss .tip li.exact .p{color:var(--gold);} .gss .tip li.outc .p{color:#9fe0ba;} .gss .tip li.miss .p{color:#cf8a86;}
+
+  @media (max-width:430px){
+    .meterwrap{width:78px;} .pts{font-size:17px;} .gss .lbl{padding:0 9px;} .gss .cap{padding:0 8px;}
+    .phh .ph .tt{font-size:9px;}
+  }
+</style>
+</head>
+<body>
+<div class="pn">
+  <p class="page-title">KO journey — mirrored accuracy spread</p>
+  <p class="page-sub">Both phases at once · bar = picks kept (fair) · number = points won</p>
+  <div class="samplebar"><b>How to read:</b> the <b>meter</b> = share of your picks still kept (same 0–100% scale for both phases, so it's a fair skill read); the <b>big number</b> = points won (P1 picks are worth more — see ×15 / ×5 in the spine). Green = banked, gold hatch = in&nbsp;play. Tap a side for the teams. <i>Illustrative sample, QF live.</i></div>
+
+  <!-- ===================== JOURNEY (bracket, both phases) ===================== -->
+  <div class="pn-sec-h">
+    <div class="ttl"><span class="pip"></span>Your scoring <em>journey</em></div>
+    <a href="#">Full breakdown →</a>
+  </div>
+  <div class="pn-card">
+    <div class="phh">
+      <div class="ph"><div class="nm">Phase 1 <span class="k">· original</span></div><div class="tt">banked <b class="g">290</b> · in play <b class="y">485</b></div></div>
+      <div class="mid">vs</div>
+      <div class="ph r"><div class="nm">Phase 2 <span class="k">· re-pick</span></div><div class="tt">banked <b class="g">160</b> · in play <b class="y">380</b></div></div>
+    </div>
+
+    <div class="rows">
+      <!-- R16 -->
+      <div class="rrow">
+        <div class="wing l" tabindex="0" role="button" data-t>
+          <div class="wrap"><div class="pts">165<span class="u">pts</span></div>
+            <div class="meterwrap"><div class="meter"><div class="fl" style="width:69%"></div></div><div class="frac"><b>11</b>/16 kept</div></div></div>
+          <div class="tip"><div class="th"><span>P1 · reached R16</span><b>165</b></div><div class="chips"><span class="chip alive">BRA</span><span class="chip alive">FRA</span><span class="chip alive">ARG</span><span class="chip alive">ESP</span><span class="chip alive">ENG</span><span class="chip alive">POR</span><span class="chip out">NED</span><span class="chip out">GER</span></div></div>
+        </div>
+        <div class="spine"><div class="rn">R16</div><div class="mult"><span class="p1">×15</span> · <span class="p2">×5</span></div></div>
+        <div class="wing r" tabindex="0" role="button" data-t>
+          <div class="wrap"><div class="pts">70<span class="u">pts</span></div>
+            <div class="meterwrap"><div class="meter"><div class="fl" style="width:88%"></div></div><div class="frac win"><b>14</b>/16 kept <span class="sharp">▲ sharper</span></div></div></div>
+          <div class="tip"><div class="th"><span>P2 · reached R16</span><b>70</b></div><div class="chips"><span class="chip alive">BRA</span><span class="chip alive">FRA</span><span class="chip alive">ARG</span><span class="chip alive">ESP</span><span class="chip alive">ENG</span><span class="chip alive">POR</span><span class="chip alive">CRO</span><span class="chip alive">MAR</span></div></div>
+        </div>
+      </div>
+      <!-- QF (now) -->
+      <div class="rrow now">
+        <div class="wing l" tabindex="0" role="button" data-t>
+          <div class="wrap"><div class="pts">125<span class="u">pts</span></div>
+            <div class="meterwrap"><div class="meter"><div class="fl" style="width:62%"></div></div><div class="frac"><b>5</b>/8 kept</div></div></div>
+          <div class="tip"><div class="th"><span>P1 · reached QF</span><b>125</b></div><div class="chips"><span class="chip alive">BRA</span><span class="chip alive">FRA</span><span class="chip alive">ESP</span><span class="chip out">ARG</span></div></div>
+        </div>
+        <div class="spine"><div class="rn">QF</div><div class="mult"><span class="p1">×25</span> · <span class="p2">×15</span></div><div class="nowt">◀ NOW ▶</div></div>
+        <div class="wing r" tabindex="0" role="button" data-t>
+          <div class="wrap"><div class="pts">90<span class="u">pts</span></div>
+            <div class="meterwrap"><div class="meter"><div class="fl" style="width:75%"></div></div><div class="frac win"><b>6</b>/8 kept <span class="sharp">▲ sharper</span></div></div></div>
+          <div class="tip"><div class="th"><span>P2 · reached QF</span><b>90</b></div><div class="chips"><span class="chip alive">BRA</span><span class="chip alive">FRA</span><span class="chip alive">ESP</span><span class="chip alive">POR</span></div></div>
+        </div>
+      </div>
+      <!-- SF -->
+      <div class="rrow">
+        <div class="wing l" tabindex="0" role="button" data-t>
+          <div class="wrap"><div class="pts play">165<span class="u">pts</span></div>
+            <div class="meterwrap"><div class="meter play"><div class="fl" style="width:75%"></div></div><div class="frac"><b>3</b>/4 alive</div></div></div>
+          <div class="tip"><div class="th"><span>P1 · reaching SF</span><b>≤165</b></div><div class="chips"><span class="chip alive">BRA</span><span class="chip alive">FRA</span><span class="chip alive">ESP</span></div></div>
+        </div>
+        <div class="spine"><div class="rn">SF</div><div class="mult"><span class="p1">×55</span> · <span class="p2">×40</span></div></div>
+        <div class="wing r" tabindex="0" role="button" data-t>
+          <div class="wrap"><div class="pts play">160<span class="u">pts</span></div>
+            <div class="meterwrap"><div class="meter play"><div class="fl" style="width:100%"></div></div><div class="frac win"><b>4</b>/4 alive <span class="sharp">▲</span></div></div></div>
+          <div class="tip"><div class="th"><span>P2 · reaching SF</span><b>≤160</b></div><div class="chips"><span class="chip alive">BRA</span><span class="chip alive">FRA</span><span class="chip alive">ESP</span><span class="chip alive">POR</span></div></div>
+        </div>
+      </div>
+      <!-- Final -->
+      <div class="rrow">
+        <div class="wing l" tabindex="0" role="button" data-t>
+          <div class="wrap"><div class="pts play">170<span class="u">pts</span></div>
+            <div class="meterwrap"><div class="meter play"><div class="fl" style="width:100%"></div></div><div class="frac"><b>2</b>/2 alive</div></div></div>
+          <div class="tip"><div class="th"><span>P1 · reaching Final</span><b>≤170</b></div><div class="chips"><span class="chip alive">BRA</span><span class="chip alive">FRA</span></div></div>
+        </div>
+        <div class="spine"><div class="rn">Final</div><div class="mult"><span class="p1">×85</span> · <span class="p2">×60</span></div></div>
+        <div class="wing r" tabindex="0" role="button" data-t>
+          <div class="wrap"><div class="pts play">120<span class="u">pts</span></div>
+            <div class="meterwrap"><div class="meter play"><div class="fl" style="width:100%"></div></div><div class="frac"><b>2</b>/2 alive</div></div></div>
+          <div class="tip"><div class="th"><span>P2 · reaching Final</span><b>≤120</b></div><div class="chips"><span class="chip alive">BRA</span><span class="chip alive">FRA</span></div></div>
+        </div>
+      </div>
+      <!-- Winner -->
+      <div class="rrow">
+        <div class="wing l" tabindex="0" role="button" data-t>
+          <div class="wrap"><div class="pts play">150<span class="u">pts</span></div>
+            <div class="meterwrap"><div class="meter play"><div class="fl" style="width:100%"></div></div><div class="frac"><b>1</b>/1 alive</div></div></div>
+          <div class="tip"><div class="th"><span>P1 · champion</span><b>≤150</b></div><div class="chips"><span class="chip star">★ BRA</span></div></div>
+        </div>
+        <div class="spine"><div class="rn">Winner</div><div class="mult"><span class="p1">×150</span> · <span class="p2">×100</span></div></div>
+        <div class="wing r" tabindex="0" role="button" data-t>
+          <div class="wrap"><div class="pts play">100<span class="u">pts</span></div>
+            <div class="meterwrap"><div class="meter play"><div class="fl" style="width:100%"></div></div><div class="frac"><b>1</b>/1 alive</div></div></div>
+          <div class="tip"><div class="th"><span>P2 · champion</span><b>≤100</b></div><div class="chips"><span class="chip star">★ FRA</span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><span class="sw g"></span>banked (reached)</span>
+      <span><span class="sw y"></span>in play (alive)</span>
+      <span>meter = picks kept · number = points · ×N = pts per pick</span>
+    </div>
+  </div>
+
+  <!-- ===================== MATCH SCORES (sibling strip) ===================== -->
+  <div class="pn-sec-h" style="margin-top:26px;">
+    <div class="ttl"><span class="pip"></span>Knockout <em>match scores</em></div>
+    <a href="#">All results →</a>
+  </div>
+  <div class="gss">
+    <div class="lbl"><div class="t">KO<br/>matches <em>so far</em></div><div class="s">phase 2 · ≤ best case</div></div>
+    <div class="cells">
+      <div class="cell" tabindex="0" role="button" data-t>
+        <div class="r">R32</div><div class="v">40</div><div class="mini"><div class="fl" style="width:67%"></div></div>
+        <div class="tip"><div class="th"><span>R32 · match</span><b>40</b></div><ul><li class="exact"><span>BRA–KOR</span><span class="p">+15</span></li><li class="outc"><span>FRA–SEN</span><span class="p">+5</span></li><li class="exact"><span>ARG–AUS</span><span class="p">+15</span></li><li class="miss"><span>NED–ENG</span><span class="p">0</span></li></ul></div>
+      </div>
+      <div class="cell hi" tabindex="0" role="button" data-t>
+        <div class="r">R16</div><div class="v">20</div><div class="mini"><div class="fl" style="width:34%"></div></div>
+        <div class="tip"><div class="th"><span>R16 · match</span><b>20</b></div><ul><li class="exact"><span>ESP–CRO</span><span class="p">+15</span></li><li class="outc"><span>POR–SUI</span><span class="p">+5</span></li><li class="miss"><span>ARG–BEL</span><span class="p">0</span></li></ul></div>
+      </div>
+      <div class="cell play" tabindex="0" role="button" data-t>
+        <div class="r">QF</div><div class="v">≤60</div><div class="mini"><div class="fl" style="width:100%"></div></div>
+        <div class="tip"><div class="th"><span>QF · in play</span><b>≤60</b></div><ul><li><span>BRA–FRA</span><span class="p">2–1</span></li><li><span>ESP–GER</span><span class="p">1–1</span></li><li style="color:#8a93a8"><span>+2 predicted</span><span class="p">≤30</span></li></ul></div>
+      </div>
+      <div class="cell play" tabindex="0" role="button" data-t>
+        <div class="r">SF</div><div class="v">≤30</div><div class="mini"><div class="fl" style="width:50%"></div></div>
+        <div class="tip"><div class="th"><span>SF · in play</span><b>≤30</b></div><ul><li style="color:#8a93a8"><span>2 fixtures</span><span class="p">≤30</span></li></ul></div>
+      </div>
+      <div class="cell play" tabindex="0" role="button" data-t>
+        <div class="r">Final</div><div class="v">≤15</div><div class="mini"><div class="fl" style="width:25%"></div></div>
+        <div class="tip"><div class="th"><span>Final · in play</span><b>≤15</b></div><ul><li style="color:#8a93a8"><span>1 fixture</span><span class="p">≤15</span></li></ul></div>
+      </div>
+    </div>
+    <div class="cap"><div class="k">match pts</div><div class="v">60<br/><span class="y">≤105</span></div></div>
+  </div>
+
+  <p style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#514a3d;margin-top:26px;line-height:1.5">
+    Two siblings: the <b>journey</b> compares your two brackets fairly (meter) while showing the real reward (points); the <b>match-scores strip</b> mirrors “Groups so far”. Tap any wing / cell for the teams &amp; fixtures.
+  </p>
+</div>
+<script>
+  document.querySelectorAll('[data-t]').forEach(function(el){
+    el.addEventListener('click',function(e){
+      var open=el.classList.contains('open');
+      document.querySelectorAll('.open').forEach(function(x){x.classList.remove('open');});
+      if(!open)el.classList.add('open');
+      e.stopPropagation();
+    });
+  });
+  document.addEventListener('click',function(){document.querySelectorAll('.open').forEach(function(x){x.classList.remove('open');});});
+</script>
+</body>
+</html>
