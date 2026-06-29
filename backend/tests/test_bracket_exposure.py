@@ -425,3 +425,62 @@ async def test_alive_per_stage_still_matches_earned_count(session, user, competi
 
     for stage in ("round_of_16", "quarter_final", "semi_final", "final", "winner"):
         assert result.alive_per_stage[stage] == result.per_stage[stage].earned.n
+
+
+# ---------------------------------------------------------------------------
+# Alive-vs-missed at DEEP rounds — regression for the "all deep rounds red" bug
+# ---------------------------------------------------------------------------
+
+
+async def test_deep_round_pick_for_alive_team_is_available_not_missed(
+    session, user, competition
+) -> None:
+    """A quarter_final pick for a team still alive (qualified to the R32, not
+    knocked out) is IN PLAY even though the R16 feeder fixtures aren't drawn
+    yet (they'd be `slot:` placeholders in reality). It must NOT be classified
+    as 'missed'. Regression for the bug where every round past R16 rendered
+    solid red because deep picks matched no feeder fixture."""
+    # ARG is in the R32 (qualified) and hasn't played → alive. No R16 fixtures
+    # exist yet (the bracket hasn't been drawn that far).
+    _add_ko(session, competition.id, stage="round_of_32", home="ARG", away="MEX")
+    _add_pick(session, user.id, team="ARG", stage="quarter_final")
+    await session.commit()
+
+    result = await compute_bracket_exposure(session, user.id)
+    qf = result.per_stage["quarter_final"]
+    assert qf.earned.n == 0
+    assert qf.available.n == 1
+    assert qf.available.teams == ["ARG"]
+    assert qf.missed.n == 0  # NOT missed — ARG is still alive
+
+
+async def test_deep_round_pick_for_eliminated_team_is_missed(
+    session, user, competition
+) -> None:
+    """A quarter_final pick for a team that LOST its R32 match is genuinely out
+    → missed, even at a deeper round."""
+    _add_ko(session, competition.id, stage="round_of_32", home="ARG", away="MEX",
+            home_score=2, away_score=0, status=MatchStatus.FINISHED)  # MEX out
+    _add_pick(session, user.id, team="MEX", stage="quarter_final")
+    await session.commit()
+
+    result = await compute_bracket_exposure(session, user.id)
+    qf = result.per_stage["quarter_final"]
+    assert qf.available.n == 0
+    assert qf.missed.n == 1
+    assert qf.missed.teams == ["MEX"]
+
+
+async def test_pick_for_non_qualifier_is_missed(session, user, competition) -> None:
+    """A pick for a team that never reached the R32 (didn't qualify) is out →
+    missed, not 'in play'."""
+    _add_ko(session, competition.id, stage="round_of_32", home="ARG", away="MEX")
+    _add_pick(session, user.id, team="Italy", stage="round_of_16")  # not in any R32
+    await session.commit()
+
+    result = await compute_bracket_exposure(session, user.id)
+    r16 = result.per_stage["round_of_16"]
+    assert r16.earned.n == 0
+    assert r16.available.n == 0
+    assert r16.missed.n == 1
+    assert r16.missed.teams == ["Italy"]

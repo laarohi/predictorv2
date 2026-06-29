@@ -213,11 +213,16 @@ async def _classify_picks_per_stage(
       3. Each unfinished match is recorded in `tbd_matches` and bumps
          `tbd_count`.
       4. Iterate the user's picks at X:
-           - team in earned_teams → earned bucket
-           - else team is in a tbd match → available bucket, but a
-             second pick from the SAME tbd match does NOT bump the count
-             (only one team per match can possibly advance)
-           - else → eliminated; not surfaced (the team already lost)
+           - team reached X (won its feeder match) → earned bucket
+           - else the team is still ALIVE (qualified to the R32 and not knocked
+             out) → available bucket; picks sharing the SAME pending feeder
+             match are deduped (only one of the two can advance)
+           - else (team is OUT — lost a KO match or never qualified) → missed
+
+    A pick at a DEEP round whose feeder fixtures are still `slot:` placeholders
+    (the bracket hasn't been drawn there yet) stays AVAILABLE while its team is
+    alive — it is NOT mislabelled "missed" just because no feeder fixture names
+    it yet. Only genuinely-eliminated teams land in `missed`.
 
     `pts` is `n × stage_points`. `teams` lists every pick that landed in
     that bucket — for `available` we include all picks even when their
@@ -233,6 +238,24 @@ async def _classify_picks_per_stage(
         .where(Fixture.stage.in_(list(STAGE_ADVANCES_TO.keys())))
     )
     rows = list(result.all())
+
+    # Teams still alive in the tournament: those that qualified to the KO
+    # (appear in an R32 fixture) and have NOT been knocked out (didn't lose a
+    # finished KO match — `score.outcome` resolves ET/pens). A pick whose team
+    # is alive but hasn't reached the stage yet is IN PLAY, even when its feeder
+    # fixture is still a slot placeholder; only genuinely-out teams are missed.
+    qualified: set[str] = set()
+    eliminated: set[str] = set()
+    for fixture, score in rows:
+        if fixture.stage == "round_of_32":
+            qualified.add(fixture.home_team)
+            qualified.add(fixture.away_team)
+        if fixture.status == MatchStatus.FINISHED and score is not None:
+            if score.outcome == "1":
+                eliminated.add(fixture.away_team)
+            elif score.outcome == "2":
+                eliminated.add(fixture.home_team)
+    alive_teams = qualified - eliminated
 
     for dest_stage in TEAMS_AT_STAGE:
         feeder_stage = STAGE_FED_BY.get(dest_stage)
@@ -266,24 +289,27 @@ async def _classify_picks_per_stage(
         available_picks: list[str] = []
         eliminated_picks: list[str] = []
         counted_tbd_matches: set[tuple[str, str]] = set()
+        loose_available = 0  # alive picks not tied to a known pending feeder match
 
         for team in picks_at_stage:
             if team in earned_teams:
                 earned_picks.append(team)
                 continue
-            matched = False
-            for h, a in tbd_matches:
-                if team == h or team == a:
-                    matched = True
-                    counted_tbd_matches.add((h, a))
-                    available_picks.append(team)
-                    break
-            # No match → the team's feeder fixture has resolved and the team
-            # lost: an eliminated pick. Surfaced as the `missed` bucket so the
-            # widget can show which picks busted (was previously dropped).
-            if not matched:
+            if team in alive_teams:
+                # Still in the tournament → in play, even if its feeder fixture
+                # isn't drawn yet. Dedup picks that share the same pending match
+                # (only one of the two can advance); count the rest individually.
+                available_picks.append(team)
+                match = next(((h, a) for h, a in tbd_matches if team in (h, a)), None)
+                if match is not None:
+                    counted_tbd_matches.add(match)
+                else:
+                    loose_available += 1
+            else:
+                # Out of the tournament: lost a KO match or never qualified.
                 eliminated_picks.append(team)
 
+        available_n = len(counted_tbd_matches) + loose_available
         stage_pts = stage_points_lookup.get(STAGE_POINT_KEY[dest_stage], 0)
         out[dest_stage] = StageRow(
             earned=StageCell(
@@ -293,9 +319,9 @@ async def _classify_picks_per_stage(
                 teams=earned_picks,
             ),
             available=StageCell(
-                n=len(counted_tbd_matches),
+                n=available_n,
                 of=tbd_count,
-                pts=len(counted_tbd_matches) * stage_pts,
+                pts=available_n * stage_pts,
                 teams=available_picks,
             ),
             missed=StageCell(

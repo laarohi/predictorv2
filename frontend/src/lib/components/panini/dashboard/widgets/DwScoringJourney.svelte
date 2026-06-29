@@ -72,16 +72,16 @@
 	$: t1 = totals(p1);
 	$: t2 = totals(p2);
 
-	// A round is "deciding now" when, in either phase, some picks have resolved
-	// (reached or eliminated) AND some are still alive — i.e. the bar carries a
-	// green/gold split. Flags the live frontier without needing fixture status.
+	// A round is "deciding now" when, in either phase, some picks have BANKED
+	// (reached) AND some are still alive — i.e. its feeder round is mid-
+	// resolution (a green/gold split). A round with only eliminated + alive
+	// picks is NOT live: its own feeder hasn't started, the elimination just
+	// happened earlier. Flags the live frontier without needing fixture status.
 	function isNow(key: StageKey): boolean {
 		for (const ph of [p1, p2]) {
-			const row = ph[key];
-			const e = cell(row, 'earned').n;
-			const a = cell(row, 'available').n;
-			const m = cell(row, 'missed').n;
-			if (a > 0 && (e > 0 || m > 0)) return true;
+			const e = cell(ph[key], 'earned').n;
+			const a = cell(ph[key], 'available').n;
+			if (e > 0 && a > 0) return true;
 		}
 		return false;
 	}

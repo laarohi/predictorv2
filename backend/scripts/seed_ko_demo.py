@@ -39,14 +39,29 @@ R32_RESULTS = {
     ("United States", "Netherlands"): (1, 2),  # Netherlands win
 }
 
-# round_of_16 advancement picks = "team reaches the R16" (wins its R32 match).
+# Advancement picks = "team reaches stage X". At R16 (feeder R32 partly played):
 # green = team that WON its R32, red = team that LOST, gold = R32 still pending.
-P1_R16 = ["Brazil", "France", "Spain", "Germany",        # green (won)
-          "Argentina", "United States",                  # red (lost)
-          "Belgium", "Switzerland", "Mexico", "Croatia"]  # gold (pending)
-P2_R16 = ["Brazil", "France", "Spain", "England", "Netherlands",  # green (won)
-          "Argentina",                                            # red (lost)
-          "Belgium", "Croatia"]                                   # gold (pending)
+# At deeper rounds (feeders not drawn yet): alive team = gold (in play),
+# eliminated team = red (missed) — never "all red".
+P1_PICKS = {
+    "round_of_16": ["Brazil", "France", "Spain", "Germany",        # green (won)
+                    "Argentina", "United States",                  # red (lost)
+                    "Belgium", "Switzerland", "Mexico", "Croatia"],  # gold (pending)
+    "quarter_final": ["Brazil", "France", "Spain", "Germany",      # alive → gold
+                      "Argentina"],                                # eliminated → red
+    "semi_final": ["Brazil", "France", "Spain"],                   # alive → gold
+    "final": ["Brazil", "France"],                                 # alive → gold
+    "winner": ["Brazil"],                                          # alive → gold
+}
+P2_PICKS = {
+    "round_of_16": ["Brazil", "France", "Spain", "England", "Netherlands",  # green
+                    "Argentina",                                            # red
+                    "Belgium", "Croatia"],                                  # gold
+    "quarter_final": ["Brazil", "France", "Spain", "Netherlands", "England"],  # gold
+    "semi_final": ["Brazil", "France", "Spain"],                            # gold
+    "final": ["Brazil", "France"],                                          # gold
+    "winner": ["France"],                                                   # gold
+}
 
 # R32 match-score predictions. Finished → banked; scheduled → best-case ≤.
 MATCH_PREDS = {
@@ -99,20 +114,26 @@ async def main():
             applied += 1
         print(f"finished {applied} R32 fixtures")
 
-        # 2) reset + insert round_of_16 advancement picks (both phases)
+        # 2) reset + insert advancement picks for every KO stage (both phases)
+        stages = ["round_of_16", "quarter_final", "semi_final", "final", "winner"]
         await s.execute(
             delete(TeamPrediction).where(
                 TeamPrediction.user_id == user.id,
-                TeamPrediction.stage == "round_of_16",
+                TeamPrediction.stage.in_(stages),
             )
         )
-        for team in P1_R16:
-            s.add(TeamPrediction(user_id=user.id, team=team, stage="round_of_16",
-                                 phase=PredictionPhase.PHASE_1))
-        for team in P2_R16:
-            s.add(TeamPrediction(user_id=user.id, team=team, stage="round_of_16",
-                                 phase=PredictionPhase.PHASE_2))
-        print(f"seeded R16 picks: P1={len(P1_R16)} P2={len(P2_R16)}")
+        n1 = n2 = 0
+        for stage, teams in P1_PICKS.items():
+            for team in teams:
+                s.add(TeamPrediction(user_id=user.id, team=team, stage=stage,
+                                     phase=PredictionPhase.PHASE_1))
+                n1 += 1
+        for stage, teams in P2_PICKS.items():
+            for team in teams:
+                s.add(TeamPrediction(user_id=user.id, team=team, stage=stage,
+                                     phase=PredictionPhase.PHASE_2))
+                n2 += 1
+        print(f"seeded advancement picks across {len(stages)} stages: P1={n1} P2={n2}")
 
         # 3) R32 match-score predictions for the strip (upsert per fixture)
         mp = 0
