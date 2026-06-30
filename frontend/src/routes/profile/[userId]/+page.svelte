@@ -5,6 +5,7 @@
 	import { getUserProfile, getUserPredictions } from '$api/users';
 	import { getAllFixtures } from '$api/fixtures';
 	import { teamCode } from '$lib/utils/teamCodes';
+	import { computeTeamFate, tagFate } from '$lib/utils/bracketFate';
 	import type { Fixture, PublicProfile, UserPredictionsResponse, UserMatchPredictionView } from '$types';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
 	import PnFlag from '$components/panini/PnFlag.svelte';
@@ -69,75 +70,12 @@
 		['winner', 'Champion']
 	];
 
-	// Stage progression index, used to decide whether a team's elimination
-	// happened BEFORE the stage a tag predicts (→ pick is dead).
-	const STAGE_IDX: Record<string, number> = {
-		round_of_32: 1,
-		round_of_16: 2,
-		quarter_final: 3,
-		semi_final: 4,
-		final: 5,
-		winner: 6
-	};
-
-	/**
-	 * Actual tournament fate per team, derived from real fixtures:
-	 *  - reached: stage → set of teams that actually appear in that round
-	 *    (slot placeholders excluded; 'winner' filled from the finished final)
-	 *  - outAt: team → index of the last stage their run reached (0 = didn't
-	 *    qualify from the group; only set once that fact is certain)
-	 */
-	$: teamFate = (() => {
-		const reached = new Map<string, Set<string>>();
-		const outAt = new Map<string, number>();
-		const isReal = (t: string) => !!t && !t.toLowerCase().startsWith('slot:');
-
-		for (const f of allFixtures) {
-			const idx = STAGE_IDX[f.stage];
-			if (!idx) continue; // group + third_place don't drive fate
-			for (const t of [f.home_team, f.away_team]) {
-				if (!isReal(t)) continue;
-				if (!reached.has(f.stage)) reached.set(f.stage, new Set());
-				reached.get(f.stage)!.add(t);
-			}
-			if (f.status === 'finished' && f.score && isReal(f.home_team) && isReal(f.away_team)) {
-				// outcome already resolves pens → ET → FT, so KO losers are exact
-				const loser =
-					f.score.outcome === '1' ? f.away_team : f.score.outcome === '2' ? f.home_team : null;
-				if (loser) outAt.set(loser, idx);
-				if (f.stage === 'final') {
-					const winner =
-						f.score.outcome === '1' ? f.home_team : f.score.outcome === '2' ? f.away_team : null;
-					if (winner) reached.set('winner', new Set([winner]));
-				}
-			}
-		}
-
-		// Group-stage elimination is only certain once the real R32 is fully
-		// drawn (all 32 slots resolved to teams) — then anyone absent is out.
-		const r32 = reached.get('round_of_32');
-		if (r32 && r32.size >= 32) {
-			for (const f of allFixtures) {
-				if (f.stage !== 'group') continue;
-				for (const t of [f.home_team, f.away_team]) {
-					if (!r32.has(t)) outAt.set(t, 0);
-				}
-			}
-		}
-		return { reached, outAt };
-	})();
-
-	/** Fate of one bracket tag: did this team actually reach this stage? */
-	function tagFate(team: string, stage: string): 'in' | 'out' | 'tbd' {
-		// "Group winners" picks succeed exactly when the team makes the KO.
-		const idx = stage === 'group' ? STAGE_IDX.round_of_32 : STAGE_IDX[stage];
-		if (!idx) return 'tbd';
-		const key = stage === 'group' ? 'round_of_32' : stage;
-		if (teamFate.reached.get(key)?.has(team)) return 'in';
-		const out = teamFate.outAt.get(team);
-		if (out !== undefined && out < idx) return 'out';
-		return 'tbd';
-	}
+	// Actual tournament fate per team, derived from the real fixture list.
+	// Crucially this reads ADVANCEMENT from match results (a finished match's
+	// winner has reached the next round) — not from fixture structure — so a
+	// team that's already through shows green even before its next match is
+	// drawn. See bracketFate.ts for the full rationale.
+	$: teamFate = computeTeamFate(allFixtures);
 
 	/** team -> did this user bank the +5 position bonus (correct finishing spot)
 	 *  for this R32 qualifier. Absent = the team didn't score them qualification. */
@@ -161,7 +99,7 @@
 			if (q === undefined) return '';
 			return q ? 'sc-green' : 'sc-yellow';
 		}
-		return tagFate(team, stage) === 'in' ? 'sc-green' : '';
+		return tagFate(teamFate, team, stage) === 'in' ? 'sc-green' : '';
 	}
 
 	// Knockout rounds in play order — drives both the KO predictions tables
@@ -333,7 +271,7 @@
 										<div class="lbl">{label}<span class="n">{bp.stages[stageKey].length}</span>{#if stPts > 0}<span class="pts">+{stPts}</span>{/if}</div>
 										<div class="tags">
 											{#each bp.stages[stageKey] as team}
-												{@const fate = tagFate(team, stageKey)}
+												{@const fate = tagFate(teamFate, team, stageKey)}
 												{@const sc = scoreClass(team, stageKey, bp.phaseKey)}
 												<span class="pn-tag pick-tag {stageKey === 'winner' ? 'gold' : ''} fate-{fate} {sc}">
 													<PnFlag code={teamCode(team)} w={12} h={9} />{teamCode(team)}
