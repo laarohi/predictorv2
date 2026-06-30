@@ -6,7 +6,7 @@ authoritative per-period split.
 import pytest
 
 from app.services.external.espn import EspnError
-from app.services.external_scores import EspnScoreProvider
+from app.services.external_scores import EspnScoreProvider, ExternalScore
 from app.models.fixture import MatchStatus
 
 
@@ -140,3 +140,41 @@ async def test_enrichment_falls_back_when_summary_fetch_errors():
     scores = await provider.fetch_live_scores("WC")
 
     assert scores[0].final_authoritative is False  # base score retained, no crash
+
+
+# ── fetch_final_check (the settlement cross-check source) ──────────────────── #
+
+def _ext(event_id):
+    return ExternalScore(
+        external_id="", home_team="H", away_team="A",
+        home_score=0, away_score=0, status=MatchStatus.FINISHED,
+        espn_event_id=event_id,
+    )
+
+
+@pytest.mark.asyncio
+async def test_final_check_shootout_returns_aet_total_and_pens():
+    summaries = {"e": _summary([0, 1, 0, 0, 3], [1, 0, 0, 0, 4],
+                               home_score=1, away_score=1, home_pen=3, away_pen=4)}
+    provider = EspnScoreProvider(client=_FakeClient([], summaries))
+    assert await provider.fetch_final_check(_ext("e")) == (1, 1, 3, 4)
+
+
+@pytest.mark.asyncio
+async def test_final_check_group_returns_total_no_pens():
+    summaries = {"g": _summary([2, 0], [0, 1], home_score=2, away_score=1,
+                               home_pen=None, away_pen=None)}
+    provider = EspnScoreProvider(client=_FakeClient([], summaries))
+    assert await provider.fetch_final_check(_ext("g")) == (2, 1, None, None)
+
+
+@pytest.mark.asyncio
+async def test_final_check_none_without_event_id():
+    provider = EspnScoreProvider(client=_FakeClient([], {}))
+    assert await provider.fetch_final_check(_ext(None)) is None
+
+
+@pytest.mark.asyncio
+async def test_final_check_none_on_fetch_error():
+    provider = EspnScoreProvider(client=_FakeClient([], {}))  # no summary for "x"
+    assert await provider.fetch_final_check(_ext("x")) is None

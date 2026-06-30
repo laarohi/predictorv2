@@ -20,7 +20,11 @@ from app.models._datetime import aware_utc, utc_now
 from app.models.competition import Competition
 from app.models.fixture import Fixture, MatchStatus
 from app.models.score import Score, ScoreSource
-from app.services.external_scores import ExternalScore, get_score_provider
+from app.services.external_scores import (
+    ExternalScore,
+    ScoreProviderBase,
+    get_score_provider,
+)
 
 logger = logging.getLogger(__name__)
 from app.services.leaderboard import invalidate_cache
@@ -118,7 +122,9 @@ async def sync_scores_once(session: AsyncSession) -> ScoreSyncResult:
     seen_fixture_ids: set = set()
     for ext in external_scores:
         try:
-            touched = await _apply_external_score(session, competition.id, ext, result)
+            touched = await _apply_external_score(
+                session, competition.id, ext, result, provider=provider
+            )
             if touched is not None:
                 seen_fixture_ids.add(touched)
         except Exception as exc:  # noqa: BLE001
@@ -147,7 +153,9 @@ async def sync_scores_once(session: AsyncSession) -> ScoreSyncResult:
         if ext is None:
             continue
         try:
-            await _apply_external_score(session, competition.id, ext, result)
+            await _apply_external_score(
+                session, competition.id, ext, result, provider=provider
+            )
         except Exception as exc:  # noqa: BLE001
             result.errors.append(
                 f"Error applying {ext.home_team} vs {ext.away_team}: {exc}"
@@ -294,17 +302,28 @@ async def _apply_external_score(
     competition_id,
     ext: ExternalScore,
     result: ScoreSyncResult,
+    provider: ScoreProviderBase | None = None,
 ):
     """Match an ExternalScore to a Fixture by external_id (or team-name fallback)
     and create/update the corresponding Score row.
 
     Returns the touched fixture's id (or None if no fixture matched, or if
     the fixture still needs the resolution pass this tick) so the caller
-    can exclude resolved fixtures from that pass."""
+    can exclude resolved fixtures from that pass.
+
+    When `provider` is given, the moment a fixture FIRST transitions to FINISHED
+    from a non-authoritative source (a group or regulation-decided knockout
+    finalized off ESPN's running total) its stored result is cross-checked
+    against the provider's independent authoritative final (the summary
+    linescores); a disagreement is logged for an admin to verify. ET/penalty
+    knockouts are already overlaid from the summary (final_authoritative), so
+    they're skipped — every settled match ends up validated one way or the
+    other."""
     fixture = await _find_fixture(session, competition_id, ext)
     if fixture is None:
         return None
 
+    was_finished = fixture.status == MatchStatus.FINISHED
     has_scores = ext.home_score is not None and ext.away_score is not None
 
     status = ext.status
@@ -367,18 +386,66 @@ async def _apply_external_score(
             )
         )
         result.synced += 1
-        return None if needs_resolution else fixture.id
+    else:
+        score.home_score = home
+        score.away_score = away
+        score.home_score_et = home_et
+        score.away_score_et = away_et
+        score.home_penalties = home_pen
+        score.away_penalties = away_pen
+        score.source = ScoreSource.API
+        score.updated_at = utc_now()
+        result.updated += 1
 
-    score.home_score = home
-    score.away_score = away
-    score.home_score_et = home_et
-    score.away_score_et = away_et
-    score.home_penalties = home_pen
-    score.away_penalties = away_pen
-    score.source = ScoreSource.API
-    score.updated_at = utc_now()
-    result.updated += 1
+    # Settlement cross-check: a match finalizing off the scoreboard running
+    # total (groups, regulation-decided knockouts) gets validated, exactly once
+    # at the LIVE→FINISHED transition, against the summary's authoritative final.
+    if (
+        provider is not None
+        and status == MatchStatus.FINISHED
+        and not was_finished
+        and not ext.final_authoritative
+    ):
+        await _cross_check_final(
+            provider, ext, fixture, home, away, home_et, away_et, home_pen, away_pen
+        )
+
     return None if needs_resolution else fixture.id
+
+
+async def _cross_check_final(
+    provider: ScoreProviderBase,
+    ext: ExternalScore,
+    fixture: Fixture,
+    home: int,
+    away: int,
+    home_et: int | None,
+    away_et: int | None,
+    home_pen: int | None,
+    away_pen: int | None,
+) -> None:
+    """Warn (don't override) if the just-stored final disagrees with the
+    provider's independent authoritative final. A single heavy fetch, only at
+    the finalization transition — never raises into the sync loop."""
+    try:
+        check = await provider.fetch_final_check(ext)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("score_sync: final-check failed for fixture %s: %s", fixture.id, exc)
+        return
+    if check is None:
+        return
+    stored_final = (
+        home_et if home_et is not None else home,
+        away_et if away_et is not None else away,
+        home_pen,
+        away_pen,
+    )
+    if tuple(check) != stored_final:
+        logger.warning(
+            "score_sync: SETTLEMENT MISMATCH for %s vs %s (fixture %s) — stored "
+            "final %s but ESPN summary reports %s; admin should verify the Score.",
+            fixture.home_team, fixture.away_team, fixture.id, stored_final, tuple(check),
+        )
 
 
 async def _find_fixture(

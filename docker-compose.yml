@@ -30,6 +30,9 @@ services:
       # Generate one into .env:  openssl rand -hex 32
       - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set JWT_SECRET_KEY in .env (openssl rand -hex 32)}
       - DEBUG=${DEBUG:-false}
+      # App log level routed to stdout / `docker logs` (INFO default; DEBUG for
+      # verbose tracing). Works with the default even if unset on the host.
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
       # Admin bootstrap — comma-separated emails auto-granted admin on account
       # creation/login. Without this a fresh deploy has NO admin at all
       # (is_admin can only be toggled by an existing admin). Set your email in

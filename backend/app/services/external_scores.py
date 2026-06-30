@@ -84,6 +84,16 @@ class ScoreProviderBase(ABC):
     async def fetch_fixture_score(self, fixture_id: str) -> ExternalScore | None:
         ...
 
+    async def fetch_final_check(
+        self, ext: "ExternalScore"
+    ) -> tuple[int, int, int | None, int | None] | None:
+        """An independent, authoritative `(final_home, final_away, pen_home,
+        pen_away)` for a just-finished match, used to cross-check the value we
+        are about to store. `final_*` is the after-ET total (= the regulation
+        total for matches that didn't go to ET). None when no independent check
+        is available — the default for providers that can't offer one."""
+        return None
+
 
 class FootballDataScoreProvider(ScoreProviderBase):
     """Live-score provider using football-data.org via the shared client."""
@@ -217,6 +227,36 @@ class EspnScoreProvider(ScoreProviderBase):
 
         await asyncio.gather(*(overlay(s) for s in scores))
 
+    async def fetch_final_check(
+        self, ext: ExternalScore
+    ) -> tuple[int, int, int | None, int | None] | None:
+        """Read the authoritative final from this event's summary linescores.
+
+        Used by score_sync to validate a match it is finalizing from the
+        scoreboard running total (groups, regulation-decided knockouts) — the
+        catch-all so EVERY settled match is checked against ESPN's per-period
+        truth, not just the ET/penalty knockouts the live path already overlays.
+        """
+        if not ext.espn_event_id:
+            return None
+        # WC2026 is the only competition; its ESPN slug is the LEAGUE_SLUGS
+        # default. (fetch_final_check isn't given the competition id.)
+        slug = LEAGUE_SLUGS.get("WC", "fifa.world")
+        try:
+            summary = await self._client.get_summary(slug, ext.espn_event_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "espn final-check summary fetch failed for event %s: %s",
+                ext.espn_event_id, exc,
+            )
+            return None
+        split = parse_summary_split(summary)
+        if split is None:
+            return None
+        final_home = split.home_et if split.home_et is not None else split.home_reg
+        final_away = split.away_et if split.away_et is not None else split.away_reg
+        return (final_home, final_away, split.home_pen, split.away_pen)
+
     async def fetch_fixture_score(self, fixture_id: str) -> ExternalScore | None:
         # Per-fixture lookups are keyed by Football-Data external ids, which
         # ESPN can't resolve — the fallback provider routes these to FD.
@@ -288,6 +328,24 @@ class FallbackScoreProvider(ScoreProviderBase):
 
     async def fetch_fixture_score(self, fixture_id: str) -> ExternalScore | None:
         return await self._resolver.fetch_fixture_score(fixture_id)
+
+    async def fetch_final_check(
+        self, ext: ExternalScore
+    ) -> tuple[int, int, int | None, int | None] | None:
+        """Delegate to the first live provider that offers an independent check
+        (ESPN, via its summary). Never raises — a failed check just means no
+        cross-check this settlement."""
+        for provider in self._live_providers:
+            try:
+                check = await provider.fetch_final_check(ext)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "final-check provider %s failed: %s", type(provider).__name__, exc
+                )
+                continue
+            if check is not None:
+                return check
+        return None
 
 
 def get_score_provider() -> ScoreProviderBase:

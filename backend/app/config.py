@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     debug: bool = False
     api_prefix: str = "/api"
 
+    # Logging level for app.* loggers routed to stdout (so they surface in
+    # `docker logs`). INFO by default; set LOG_LEVEL=DEBUG for verbose tracing,
+    # WARNING to quieten. See app.main.configure_logging.
+    log_level: str = "INFO"
+
     # Database
     database_url: PostgresDsn
     database_echo: bool = False
