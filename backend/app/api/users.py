@@ -23,8 +23,24 @@ from app.services.locking import (
     is_phase2_bracket_locked,
 )
 from app.services.profile import calculate_user_stats
-from app.services.scoring import get_group_qualification_ledger
+from app.services.scoring import calculate_match_points, get_group_qualification_ledger
 from app.services.audit_log import build_user_history
+
+
+def match_result_flags(pred: MatchPrediction, score: Score) -> tuple[bool, bool]:
+    """`(is_exact, is_correct_outcome)` for a MATCH-score prediction.
+
+    Delegates to the scoring engine (`calculate_match_points`) and keeps only its
+    two booleans, so the profile icons are computed by the SAME code that awards
+    leaderboard points — they can't drift apart. That engine grades on the
+    90-minute (regulation) result, so a knockout decided in extra time or on
+    penalties is still judged on its 90' scoreline (advancement is scored
+    separately): for a 1-1-at-90 match a 2-2 prediction is a correct outcome and
+    a 1-2 prediction is a miss. The rarity bonus needs predictor counts, but it
+    only affects the points value — never these booleans — so defaults are fine.
+    """
+    _points, is_correct_outcome, is_exact = calculate_match_points(pred, score)
+    return is_exact, is_correct_outcome
 from sqlmodel import func
 
 router = APIRouter()
@@ -311,15 +327,8 @@ async def get_user_predictions(
             view.actual_away = score.away_score
             view.actual_outcome = score.outcome
 
-            # Check exact score
-            view.is_exact = (
-                pred.home_score == score.final_home_score
-                and pred.away_score == score.final_away_score
-            )
-
-            # Check correct outcome
-            pred_outcome = pred.predicted_outcome
-            view.is_correct_outcome = pred_outcome == score.outcome
+            # Graded on the 90-minute regulation result (see match_result_flags).
+            view.is_exact, view.is_correct_outcome = match_result_flags(pred, score)
 
         match_predictions.append(view)
 

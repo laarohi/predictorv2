@@ -19,6 +19,7 @@ from app.api.users import (
     UserMatchPredictionView,
     BracketSummary,
     UserPredictionsResponse,
+    match_result_flags,
 )
 from app.schemas.auth import UserStats
 
@@ -266,82 +267,63 @@ class TestBlindPoolPredictionFiltering:
         fixture = self._make_fixture(status=MatchStatus.FINISHED, locked=False)
         assert self._should_include(fixture) is True
 
+    @staticmethod
+    def _pred(home, away, outcome):
+        p = MagicMock(spec=MatchPrediction)
+        p.home_score, p.away_score, p.predicted_outcome = home, away, outcome
+        return p
+
+    @staticmethod
+    def _score(home, away, regulation_outcome, *, outcome=None, home_pen=None, away_pen=None):
+        """A Score mock for the MATCH-grading fields. The 90' values
+        (home_score/away_score/regulation_outcome) drive grading; outcome and
+        penalties are set only to prove they are deliberately NOT used."""
+        s = MagicMock(spec=Score)
+        s.home_score, s.away_score = home, away
+        s.regulation_outcome = regulation_outcome
+        s.outcome = outcome if outcome is not None else regulation_outcome
+        s.home_penalties, s.away_penalties = home_pen, away_pen
+        return s
+
     def test_result_flags_for_exact_match(self):
-        """Verify is_exact and is_correct_outcome computation logic.
-
-        The endpoint does:
-            is_exact = pred.home_score == score.final_home_score and pred.away_score == score.final_away_score
-            is_correct_outcome = pred.predicted_outcome == score.outcome
-        """
-        pred = MagicMock(spec=MatchPrediction)
-        pred.home_score = 2
-        pred.away_score = 1
-        pred.predicted_outcome = "1"
-
-        score = MagicMock(spec=Score)
-        score.final_home_score = 2
-        score.final_away_score = 1
-        score.outcome = "1"
-
-        is_exact = pred.home_score == score.final_home_score and pred.away_score == score.final_away_score
-        is_correct_outcome = pred.predicted_outcome == score.outcome
-
-        assert is_exact is True
-        assert is_correct_outcome is True
+        is_exact, is_outcome = match_result_flags(self._pred(2, 1, "1"), self._score(2, 1, "1"))
+        assert (is_exact, is_outcome) == (True, True)
 
     def test_result_flags_for_correct_outcome_wrong_score(self):
-        """Correct outcome (home win) but wrong exact score."""
-        pred = MagicMock(spec=MatchPrediction)
-        pred.home_score = 1
-        pred.away_score = 0
-        pred.predicted_outcome = "1"
-
-        score = MagicMock(spec=Score)
-        score.final_home_score = 3
-        score.final_away_score = 1
-        score.outcome = "1"
-
-        is_exact = pred.home_score == score.final_home_score and pred.away_score == score.final_away_score
-        is_correct_outcome = pred.predicted_outcome == score.outcome
-
-        assert is_exact is False
-        assert is_correct_outcome is True
+        is_exact, is_outcome = match_result_flags(self._pred(1, 0, "1"), self._score(3, 1, "1"))
+        assert (is_exact, is_outcome) == (False, True)
 
     def test_result_flags_for_wrong_outcome(self):
-        """Predicted home win but away team won."""
-        pred = MagicMock(spec=MatchPrediction)
-        pred.home_score = 2
-        pred.away_score = 0
-        pred.predicted_outcome = "1"
-
-        score = MagicMock(spec=Score)
-        score.final_home_score = 0
-        score.final_away_score = 1
-        score.outcome = "2"
-
-        is_exact = pred.home_score == score.final_home_score and pred.away_score == score.final_away_score
-        is_correct_outcome = pred.predicted_outcome == score.outcome
-
-        assert is_exact is False
-        assert is_correct_outcome is False
+        is_exact, is_outcome = match_result_flags(self._pred(2, 0, "1"), self._score(0, 1, "2"))
+        assert (is_exact, is_outcome) == (False, False)
 
     def test_result_flags_for_draw(self):
-        """Both predicted and actual draw — correct outcome."""
-        pred = MagicMock(spec=MatchPrediction)
-        pred.home_score = 1
-        pred.away_score = 1
-        pred.predicted_outcome = "X"
+        is_exact, is_outcome = match_result_flags(self._pred(1, 1, "X"), self._score(0, 0, "X"))
+        assert (is_exact, is_outcome) == (False, True)
 
-        score = MagicMock(spec=Score)
-        score.final_home_score = 0
-        score.final_away_score = 0
-        score.outcome = "X"
+    # ── knockout decided on penalties: grade the 90' result, not the shootout ──
+    # NED 1-1 MAR at 90', Morocco win 2-3 on pens → regulation_outcome "X",
+    # outcome "2". These are the real R32 cases that exposed the bug.
 
-        is_exact = pred.home_score == score.final_home_score and pred.away_score == score.final_away_score
-        is_correct_outcome = pred.predicted_outcome == score.outcome
+    def test_knockout_pens_draw_prediction_is_correct_outcome(self):
+        # Adam predicted 2-2 (a draw): correct 90' outcome, not exact. Must NOT
+        # be graded against the penalty winner.
+        pred = self._pred(2, 2, "X")
+        score = self._score(1, 1, "X", outcome="2", home_pen=2, away_pen=3)
+        assert match_result_flags(pred, score) == (False, True)
 
-        assert is_exact is False
-        assert is_correct_outcome is True
+    def test_knockout_pens_winner_prediction_is_a_miss(self):
+        # Keith predicted 1-2 (away win): WRONG at 90' (it was a draw), even
+        # though Morocco won the shootout. Must be a miss, not a correct outcome.
+        pred = self._pred(1, 2, "2")
+        score = self._score(1, 1, "X", outcome="2", home_pen=2, away_pen=3)
+        assert match_result_flags(pred, score) == (False, False)
+
+    def test_knockout_pens_exact_90min_prediction(self):
+        # Luke predicted 1-1: exact on the 90' scoreline.
+        pred = self._pred(1, 1, "X")
+        score = self._score(1, 1, "X", outcome="2", home_pen=2, away_pen=3)
+        assert match_result_flags(pred, score) == (True, True)
 
 
 class TestUserReadPaid:
