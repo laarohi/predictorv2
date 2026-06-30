@@ -221,11 +221,15 @@ def _score_fields_for(
     shootout (if any) sits in penalties. `outcome` then still resolves
     advancement via ET → penalties, while regulation grading stays true to 90'.
 
-    Providers that already split ET themselves (Football-Data) carry period=None
-    and an explicit *_et, so they take the normal path untouched.
+    Providers that already split ET themselves carry an explicit *_et — the ESPN
+    summary enrichment (per-period linescores) and Football-Data both do — so they
+    skip the freeze entirely and pass their authoritative 90'/ET values straight
+    through. The freeze below is only the fallback for a bare ESPN running total.
     """
+    provider_split = ext.home_score_et is not None and ext.away_score_et is not None
     past_regulation = (
         fixture.stage != "group"
+        and not provider_split
         and ext.period is not None
         and ext.period > 2
     )
@@ -239,8 +243,9 @@ def _score_fields_for(
             ext.away_penalties,
         )
 
-    # Past regulation with a running-total provider. Freeze the 90' score at
-    # whatever was captured during regulation; the running total is post-ET.
+    # Past regulation with a bare running-total provider (summary enrichment
+    # unavailable). Freeze the 90' score at whatever was captured during
+    # regulation; the running total is the after-ET score.
     if existing is not None:
         reg_home, reg_away = existing.home_score, existing.away_score
     else:
@@ -255,10 +260,32 @@ def _score_fields_for(
             fixture.id, ext.period, ext.home_score, ext.away_score,
         )
 
-    # Prefer a provider-supplied ET split if present (FD); else the running
-    # total IS the after-ET score.
+    # The running total IS the after-ET score for a bare provider.
     home_et = ext.home_score_et if ext.home_score_et is not None else ext.home_score
     away_et = ext.away_score_et if ext.away_score_et is not None else ext.away_score
+
+    # Self-heal corrupted live captures. Goals only accumulate, so a side's 90'
+    # score can never exceed its after-ET total. A frozen reg above the ET total
+    # means the live capture was polluted (e.g. ESPN folds shootout goals into
+    # the running `score` while period still reads <=2, so the freeze never
+    # engaged and an inflated total was stored as the "90' score"). Clamp it
+    # back to the ET total — which, once the match completes, is the clean
+    # after-ET running total — so the result self-corrects without a manual fix.
+    if home_et is not None and reg_home > home_et:
+        logger.warning(
+            "score_sync: knockout fixture %s frozen 90' home %s exceeds after-ET "
+            "total %s — corrupted live capture, healing 90' to ET total",
+            fixture.id, reg_home, home_et,
+        )
+        reg_home = home_et
+    if away_et is not None and reg_away > away_et:
+        logger.warning(
+            "score_sync: knockout fixture %s frozen 90' away %s exceeds after-ET "
+            "total %s — corrupted live capture, healing 90' to ET total",
+            fixture.id, reg_away, away_et,
+        )
+        reg_away = away_et
+
     return (reg_home, reg_away, home_et, away_et, ext.home_penalties, ext.away_penalties)
 
 

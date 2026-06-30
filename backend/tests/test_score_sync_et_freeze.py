@@ -92,11 +92,48 @@ def test_knockout_period_none_passes_through():
 
 def test_knockout_explicit_et_split_preferred_over_running_total():
     # period > 2 but the provider DID give an explicit ET split — prefer it over
-    # treating the running total as the ET score.
+    # treating the running total as the ET score, and skip the freeze entirely
+    # (the provider's 90' value is authoritative).
     fields = _score_fields_for(
         _fx("quarter_final"), _ext(1, 1, period=3, home_et=2, away_et=1), _existing(1, 1)
     )
     assert fields == (1, 1, 2, 1, None, None)
+
+
+def test_knockout_provider_split_skips_freeze():
+    # ESPN summary enrichment supplies the authoritative 90' (1-1) AND ET split
+    # (1-1) directly. Even though `existing` holds a different value, the freeze
+    # must NOT clobber the provider's 90' — pass it straight through.
+    fields = _score_fields_for(
+        _fx("round_of_32"),
+        _ext(1, 1, period=5, home_et=1, away_et=1, home_pen=3, away_pen=4),
+        _existing(4, 5),  # corrupted live capture — must be ignored
+    )
+    assert fields == (1, 1, 1, 1, 3, 4)
+
+
+def test_knockout_freeze_heals_corrupted_regulation():
+    # The real failure mode: ESPN folded the shootout into the live `score`
+    # while period read <=2, so the freeze stored an inflated "90'" of 4-5.
+    # At completion the running total is the clean after-ET 1-1; the frozen
+    # 4-5 exceeds it, so the monotonicity heal clamps 90' back to 1-1.
+    fields = _score_fields_for(
+        _fx("round_of_32"),
+        _ext(1, 1, period=5, home_pen=3, away_pen=4),  # no provider ET split
+        _existing(4, 5),
+    )
+    assert fields == (1, 1, 1, 1, 3, 4)
+
+
+def test_knockout_freeze_heals_only_offending_side():
+    # Heal is per-side: home reg (3) exceeds ET (2) → clamp to 2; away reg (1)
+    # is within ET (2) → left as the captured 90' value.
+    fields = _score_fields_for(
+        _fx("semi_final"),
+        _ext(2, 2, period=4),
+        _existing(3, 1),
+    )
+    assert fields == (2, 1, 2, 2, None, None)
 
 
 # ── integration: a regulation → extra-time tick sequence through the apply layer ──

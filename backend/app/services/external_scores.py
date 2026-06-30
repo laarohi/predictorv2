@@ -12,6 +12,7 @@ Two providers, ESPN-first:
     match), so scores are kept None when absent — never coerced to 0.
 """
 
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -23,8 +24,10 @@ from app.services.external.espn import (
     EspnClient,
     LEAGUE_SLUGS,
     canonical_team_name,
+    competition_past_regulation,
     map_event_status,
     parse_minute,
+    parse_summary_split,
 )
 from app.services.external.football_data import FootballDataClient, map_status
 
@@ -59,10 +62,15 @@ class ExternalScore:
     home_penalties: int | None = None
     away_penalties: int | None = None
     # True when a FINISHED status carries the full result our scoring needs
-    # (Football-Data: FT/ET/pens split). ESPN's finished events fold ET
-    # goals into one total, so it reports finals as non-authoritative —
-    # accepted as final for group-stage fixtures only.
+    # (Football-Data: FT/ET/pens split; or an ESPN knockout enriched from the
+    # summary endpoint's per-period linescores). A bare ESPN scoreboard event
+    # folds ET goals into one running total, so it reports finals as
+    # non-authoritative — accepted as final for group-stage fixtures only.
     final_authoritative: bool = True
+    # ESPN scoreboard event id, used only to fetch that event's summary for the
+    # knockout per-period split. Not a fixture match key — matching still goes
+    # through external_id / team names. None for non-ESPN providers.
+    espn_event_id: str | None = None
 
 
 class ScoreProviderBase(ABC):
@@ -150,11 +158,64 @@ class EspnScoreProvider(ScoreProviderBase):
         )
         events = await self._client.get_scoreboard(slug, dates)
         scores: list[ExternalScore] = []
+        to_enrich: list[ExternalScore] = []
         for event in events:
             ext = self._to_external_score(event)
-            if ext is not None:
-                scores.append(ext)
+            if ext is None:
+                continue
+            scores.append(ext)
+            try:
+                comp = event["competitions"][0]
+            except (KeyError, IndexError, TypeError):
+                comp = {}
+            if ext.espn_event_id and competition_past_regulation(comp):
+                to_enrich.append(ext)
+
+        if to_enrich:
+            await self._enrich_knockout_splits(slug, to_enrich)
         return scores
+
+    async def _enrich_knockout_splits(
+        self, slug: str, scores: list[ExternalScore]
+    ) -> None:
+        """Overlay the authoritative per-period split onto each past-regulation
+        knockout score, in place, from its summary endpoint.
+
+        On any failure (HTTP error, or a summary that is missing / inconsistent
+        / a still-undecided shootout) the base score is left untouched, so
+        score_sync's freeze remains the fallback. Fetches run concurrently —
+        there are only ever a handful of knockout matches past 90' at once.
+        """
+
+        async def overlay(ext: ExternalScore) -> None:
+            # Enrichment is best-effort: ANY failure (HTTP, malformed JSON, a
+            # parser surprise) must skip this one match, never break the tick —
+            # score_sync's freeze remains the fallback.
+            try:
+                summary = await self._client.get_summary(slug, ext.espn_event_id)  # type: ignore[arg-type]
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "espn summary fetch failed for event %s (%s vs %s): %s",
+                    ext.espn_event_id, ext.home_team, ext.away_team, exc,
+                )
+                return
+            split = parse_summary_split(summary)
+            if split is None:
+                logger.warning(
+                    "espn summary split unavailable/inconsistent for %s vs %s "
+                    "(event %s) — leaving running total for score_sync to handle",
+                    ext.home_team, ext.away_team, ext.espn_event_id,
+                )
+                return
+            ext.home_score = split.home_reg
+            ext.away_score = split.away_reg
+            ext.home_score_et = split.home_et
+            ext.away_score_et = split.away_et
+            ext.home_penalties = split.home_pen
+            ext.away_penalties = split.away_pen
+            ext.final_authoritative = True
+
+        await asyncio.gather(*(overlay(s) for s in scores))
 
     async def fetch_fixture_score(self, fixture_id: str) -> ExternalScore | None:
         # Per-fixture lookups are keyed by Football-Data external ids, which
@@ -187,9 +248,12 @@ class EspnScoreProvider(ScoreProviderBase):
                 period=period,
                 home_penalties=int(shootout_home) if shootout_home is not None else None,
                 away_penalties=int(shootout_away) if shootout_away is not None else None,
-                # ESPN's score is one running total (ET goals folded in) —
-                # fine to finish a group match, not a knockout one.
+                # ESPN's scoreboard score is one running total (ET goals folded
+                # in) — fine to finish a group match, not a knockout one. A
+                # knockout past 90' is upgraded to authoritative once its
+                # summary linescores are overlaid (see _enrich_knockout_splits).
                 final_authoritative=False,
+                espn_event_id=str(event.get("id")) if event.get("id") is not None else None,
             )
         except (KeyError, IndexError, TypeError, ValueError):
             return None  # one malformed event shouldn't poison the tick
