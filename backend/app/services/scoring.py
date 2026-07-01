@@ -27,7 +27,7 @@ from app.models.fixture import Fixture, MatchStatus
 from app.models.prediction import MatchPrediction, PredictionPhase, TeamPrediction
 from app.models.score import Score
 from app.models.user import User
-from app.schemas.leaderboard import PhaseBreakdown, PointBreakdown
+from app.schemas.leaderboard import BonusQuestionResult, PhaseBreakdown, PointBreakdown
 
 
 # Default scoring configuration (used when YAML config is unavailable)
@@ -1055,8 +1055,9 @@ async def calculate_user_points(
     # Bonus-question points (cross-phase). Imported here to avoid a circular
     # import at module load: services.bonus depends on the config layer
     # already loaded by this file.
-    from app.services.bonus import calculate_bonus_points
-    bonus_points = await calculate_bonus_points(session, user_id)
+    from app.services.bonus import get_bonus_results
+    bonus_results = await get_bonus_results(session, user_id)
+    bonus_points = sum(r.points for r in bonus_results)
 
     return PointBreakdown(
         phase1=phase1,
@@ -1065,6 +1066,10 @@ async def calculate_user_points(
         exact_scores=exact_scores,
         total_predictions=total_predictions,
         bonus_question_points=bonus_points,
+        bonus_results=[
+            BonusQuestionResult(question_id=r.question_id, label=r.label, points=r.points)
+            for r in bonus_results
+        ],
     )
 
 

@@ -362,7 +362,15 @@
 															<span>Bonus Questions</span>
 															<b>{r.breakdown.bonus_question_points} pts</b>
 														</div>
-														<div class="bq-note">Golden Ball · group · top/flop</div>
+														{#if r.breakdown.bonus_results.length}
+															<div class="bq-list">
+																{#each r.breakdown.bonus_results as bq (bq.question_id)}
+																	<div class="bq-row"><span>{bq.label}</span><b>+{bq.points}</b></div>
+																{/each}
+															</div>
+														{:else}
+															<div class="bq-note">No bonus points yet</div>
+														{/if}
 													</div>
 												{/if}
 											</div>
@@ -498,7 +506,15 @@
 										<span>Bonus Questions</span>
 										<b>{r.breakdown.bonus_question_points} pts</b>
 									</div>
-									<div class="bq-note">Golden Ball · group · top/flop</div>
+									{#if r.breakdown.bonus_results.length}
+										<div class="bq-list">
+											{#each r.breakdown.bonus_results as bq (bq.question_id)}
+												<div class="bq-row"><span>{bq.label}</span><b>+{bq.points}</b></div>
+											{/each}
+										</div>
+									{:else}
+										<div class="bq-note">No bonus points yet</div>
+									{/if}
 								</div>
 							{/if}
 						</div>

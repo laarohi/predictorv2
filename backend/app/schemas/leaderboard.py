@@ -58,6 +58,15 @@ class PhaseBreakdown(BaseModel):
         return self.match_total + self.bracket_total
 
 
+class BonusQuestionResult(BaseModel):
+    """One bonus question a user answered correctly, for the standings
+    breakdown panel — which question, and the points it earned."""
+
+    question_id: str
+    label: str
+    points: int
+
+
 class PointBreakdown(BaseModel):
     """Full breakdown with phase separation."""
 
@@ -73,6 +82,8 @@ class PointBreakdown(BaseModel):
     # category that locks with Phase 1 but isn't part of the match / bracket
     # phase breakdown). Awarded when admin sets a matching correct_answer.
     bonus_question_points: int = 0
+    # Which questions made up that total, in the order they were graded.
+    bonus_results: list[BonusQuestionResult] = []
 
     @computed_field
     @property

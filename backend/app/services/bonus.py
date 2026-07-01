@@ -245,16 +245,29 @@ def answer_in(user_answer: str, correct_answers: list[str]) -> bool:
 # ---- Scoring ----------------------------------------------------------------
 
 
-async def calculate_bonus_points(
+@dataclass
+class BonusResult:
+    """One bonus question a user answered correctly, with points earned —
+    the per-question detail behind calculate_bonus_points()'s total."""
+
+    question_id: str
+    label: str
+    points: int
+
+
+async def get_bonus_results(
     session: AsyncSession,
     user_id: uuid.UUID,
     competition_id: uuid.UUID | None = None,
-) -> int:
-    """Total bonus points earned by a user.
+) -> list[BonusResult]:
+    """Bonus questions a user answered CORRECTLY, with points earned each.
 
     For each question with a recorded correct answer (in `bonus_answers`),
-    check whether the user's prediction matches via answers_match() and
-    award the question's category points if so. Returns the sum.
+    check whether the user's prediction matches via answer_in() and record
+    the question's category points if so. calculate_bonus_points() is just
+    sum(r.points for r in this) — kept separate so the leaderboard's
+    per-question breakdown panel and the plain point total share one
+    correctness check instead of two.
     """
     # Load all bonus answers (optionally filtered by competition). Each
     # question may have several rows now — one per tied correct answer.
@@ -263,7 +276,7 @@ async def calculate_bonus_points(
         ans_q = ans_q.where(BonusAnswer.competition_id == competition_id)
     ans_rows = (await session.execute(ans_q)).scalars().all()
     if not ans_rows:
-        return 0
+        return []
 
     correct_by_qid: dict[str, list[str]] = {}
     for a in ans_rows:
@@ -278,10 +291,10 @@ async def calculate_bonus_points(
         )
     ).scalars().all()
 
-    # Map question ID → category points.
+    # Map question ID → question definition (label + category points).
     questions_by_id: dict[str, BonusQuestion] = {q.id: q for q in get_questions()}
 
-    total = 0
+    results: list[BonusResult] = []
     for pred in pred_rows:
         corrects = correct_by_qid.get(pred.question_id)
         question = questions_by_id.get(pred.question_id)
@@ -289,8 +302,20 @@ async def calculate_bonus_points(
             continue
         # Full points if the user picked any of the tied correct answers.
         if answer_in(pred.answer, corrects):
-            total += question.points
-    return total
+            results.append(
+                BonusResult(question_id=question.id, label=question.label, points=question.points)
+            )
+    return results
+
+
+async def calculate_bonus_points(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    competition_id: uuid.UUID | None = None,
+) -> int:
+    """Total bonus points earned by a user — sum of get_bonus_results()."""
+    results = await get_bonus_results(session, user_id, competition_id)
+    return sum(r.points for r in results)
 
 
 # ---- Auto-computed answers --------------------------------------------------

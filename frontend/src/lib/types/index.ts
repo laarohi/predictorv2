@@ -185,6 +185,13 @@ export interface PhaseBreakdown {
 	total: number;
 }
 
+/** One bonus question a user answered correctly, with points earned */
+export interface BonusQuestionResult {
+	question_id: string;
+	label: string;
+	points: number;
+}
+
 /** Full breakdown with phase separation */
 export interface PointBreakdown {
 	phase1: PhaseBreakdown;
@@ -199,6 +206,8 @@ export interface PointBreakdown {
 	// from the phase breakdown). Awarded when an admin sets the matching
 	// correct answer on /api/admin/bonus/answers.
 	bonus_question_points: number;
+	// Which questions made up that total.
+	bonus_results: BonusQuestionResult[];
 
 	// Computed totals (from backend) - combined across phases + bonus
 	match_total: number;

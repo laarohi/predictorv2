@@ -292,6 +292,30 @@
 	color: var(--ink-3);
 	margin-top: 2px;
 }
+.pn .pn-lb-detail .phase.bonusq .bq-list,
+.pn .pn-m-lb-detail .phase.bonusq .bq-list {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+.pn .pn-lb-detail .phase.bonusq .bq-row,
+.pn .pn-m-lb-detail .phase.bonusq .bq-row {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	gap: 10px;
+	font-family: var(--mono);
+	font-size: 10.5px;
+	color: var(--ink);
+}
+.pn .pn-lb-detail .phase.bonusq .bq-row b,
+.pn .pn-m-lb-detail .phase.bonusq .bq-row b {
+	flex-shrink: 0;
+	font-family: var(--display);
+	font-size: 13px;
+	letter-spacing: 0;
+	color: var(--red-deep);
+}
 
 /* Per-stage bracket strip inside the expander (replaces the single Bracket cell) */
 .pn .pn-lb-detail .brk {
