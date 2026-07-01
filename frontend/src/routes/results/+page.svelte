@@ -307,6 +307,34 @@
 		document.documentElement.style.setProperty('--results-ribbon-h', `${h}px`);
 	}
 
+	// Re-align the auto-scroll target if its position drifts shortly after
+	// the initial scroll — match cards above it (flags lazily code-split via
+	// utils/flagSvgs.ts swap a placeholder box for the real SVG a beat after
+	// mount) can still be growing, which shifts the target's position in the
+	// document without moving scrollTop, sliding it out from under the
+	// sticky ribbon. Stops once it's held still for ~15 frames, or after a
+	// ~3s budget in case something never truly settles.
+	function watchAndRealign(el: HTMLElement): void {
+		let lastTop = el.getBoundingClientRect().top;
+		let stableFrames = 0;
+		let totalFrames = 0;
+		function check() {
+			totalFrames++;
+			const top = el.getBoundingClientRect().top;
+			if (Math.abs(top - lastTop) > 0.5) {
+				el.scrollIntoView({ block: 'start', behavior: 'auto' });
+				lastTop = el.getBoundingClientRect().top;
+				stableFrames = 0;
+			} else {
+				stableFrames++;
+			}
+			if (stableFrames < 15 && totalFrames < 180) {
+				requestAnimationFrame(check);
+			}
+		}
+		requestAnimationFrame(check);
+	}
+
 	onMount(() => {
 		if (!browser) return;
 		const ro = new ResizeObserver(updateRibbonHeight);
@@ -358,6 +386,9 @@
 			// is safe and avoids viewport-detection code.
 			desktopDayRefs[key]?.scrollIntoView({ block: 'start', behavior: 'auto' });
 			mobileDayRefs[key]?.scrollIntoView({ block: 'start', behavior: 'auto' });
+			// Whichever one is actually visible — see watchAndRealign for why.
+			const target = desktopDayRefs[key]?.offsetParent ? desktopDayRefs[key] : mobileDayRefs[key];
+			if (target) watchAndRealign(target);
 		});
 	}
 </script>

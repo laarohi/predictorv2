@@ -15,11 +15,17 @@
 	position: sticky;
 	/* App-shell: the scroll container is .pn-body, whose top already sits BELOW
 	 * the PnPageShell chrome (the chrome is a non-scrolling sibling above it).
-	 * So this sticks at top:0 of the scroller — adding --pn-chrome-h here would
-	 * double-count the chrome and leave a ~chrome-height dead gap. */
-	top: 0;
+	 * So this sticks flush with the chrome once scrolled past — NOT top: 0,
+	 * which pins it at .pn-body's CONTENT-box top (14px below its own edge,
+	 * i.e. 14px below the chrome — a permanent gap). A negative top MARGIN
+	 * can't fix this either: once a sticky element is engaged, the browser
+	 * clamps its position using `top` alone and ignores the element's own
+	 * margin, so the -28px this used to carry never did anything. `top:
+	 * var(--pn-body-neg-top)` cancels .pn-body's own top padding, which is
+	 * the actual offset being fought here. */
+	top: var(--pn-body-neg-top);
 	z-index: 10;
-	margin: -28px var(--pn-body-neg-x) 16px;
+	margin: 0 var(--pn-body-neg-x) 16px;
 }
 .pn .pn-rs-hero {
 	background: var(--ink);
@@ -911,10 +917,15 @@
 /* Sticky wrapper for the mobile hero + tools row — keeps the title,
  * KPIs and filter chips reachable as the user scrolls through the
  * fixture list. PnPageShell hides its desktop chrome on mobile, so
- * `--pn-chrome-h` resolves to 0 and the ribbon sticks at viewport top. */
+ * `--pn-chrome-h` resolves to 0 and the ribbon sticks at viewport top.
+ * The extra `var(--pn-body-neg-top)` cancels .pn-body's own 14px top
+ * padding — without it, a stuck sticky element pins at .pn-body's
+ * CONTENT-box top (14px below its actual edge / the viewport top),
+ * leaving a permanent 14px gap once scrolled. See .pn-rs-sticky
+ * (desktop) for the same fix and why a margin can't do this instead. */
 .pn .pn-rm-sticky {
 	position: sticky;
-	top: var(--pn-chrome-h, 0px);
+	top: calc(var(--pn-chrome-h, 0px) + var(--pn-body-neg-top));
 	z-index: 10;
 }
 

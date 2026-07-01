@@ -324,7 +324,16 @@
 	 * dropped to 20px while hero margins still pulled -28px. */
 	--pn-body-pad-x: 28px;
 	--pn-body-neg-x: -28px;
-	padding: 14px var(--pn-body-pad-x) 28px;
+	/* Top padding as a variable too — a `position: sticky` element's `top`
+	 * offset (unlike a negative margin, which sticky ignores once the
+	 * element engages — margin only affects its pre-stick flow position)
+	 * is what actually controls where it pins relative to .pn-body's
+	 * content-box top. Any sticky header that wants to sit flush with the
+	 * chrome above .pn-body (not 14px below it) needs `top:
+	 * var(--pn-body-neg-top)` — see .pn-rs-sticky / .pn-rm-sticky. */
+	--pn-body-pad-top: 14px;
+	--pn-body-neg-top: -14px;
+	padding: var(--pn-body-pad-top) var(--pn-body-pad-x) 28px;
 	position: relative;
 	z-index: 2;
 }
