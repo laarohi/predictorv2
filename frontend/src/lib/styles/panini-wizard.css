@@ -58,6 +58,14 @@
 	color: var(--paper);
 	text-transform: uppercase;
 }
+/* Its own row below the title (not sharing top-row with the title +
+ * Overview link) — right-aligned to match the desktop toggle-stack's
+ * eye-scan convention (see pn-wiz-hero .toggle-stack above). */
+.pn .pn-wm-hero .phase-row {
+	display: flex;
+	justify-content: flex-end;
+	margin-bottom: 10px;
+}
 .pn .pn-wm-hero .phase-pill {
 	display: flex;
 	border: 1.5px solid var(--paper);

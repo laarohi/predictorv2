@@ -107,6 +107,13 @@
 		 * off-screen (and never scroll). min-height:0 lets it scroll internally. */
 		min-height: 0;
 		overflow-y: auto;
+		/* Without an explicit overflow-x, the spec computes it as auto (since
+		 * overflow-y isn't visible) — any descendant that overflows its box
+		 * (e.g. an unwrapped flex row) turns .pn-body into a horizontal pan
+		 * surface, revealing empty space beyond the real content. This is the
+		 * single scroll container for every page, so pin it to vertical-only
+		 * here rather than chasing each overflowing element individually. */
+		overflow-x: hidden;
 		-webkit-overflow-scrolling: touch; /* momentum scroll on older iOS */
 		overscroll-behavior: contain; /* no scroll-chaining/rubber-band to the shell */
 		padding-bottom: 16px; /* breathing room above the nav */

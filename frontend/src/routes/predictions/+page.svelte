@@ -1373,13 +1373,18 @@
 				<div class="top-row">
 					<div class="ttl">Predict</div>
 					<a class="pn-ov-minilink" href="/predictions/overview">Overview →</a>
-					{#if $isPhase2Active}
+				</div>
+				{#if $isPhase2Active}
+					<!-- Own row rather than crammed into top-row: title + overview
+					     link + a two-button pill don't fit one line on narrow
+					     phones (Phase II was clipping off the right edge). -->
+					<div class="phase-row">
 						<div class="phase-pill">
 							<button class:on={activePhase === 'phase1'} on:click={() => (activePhase = 'phase1')}>Phase I</button>
 							<button class:on={activePhase === 'phase2'} on:click={() => (activePhase = 'phase2')}>Phase II</button>
 						</div>
-					{/if}
-				</div>
+					</div>
+				{/if}
 				<div class="progress-row">
 					<div class="big-num" aria-hidden="true">
 						{#if progressReady}<b>{heroProgress.done}</b><span class="slash">/{heroProgress.total}</span>{:else}<b>—</b><span class="slash">/—</span>{/if}
