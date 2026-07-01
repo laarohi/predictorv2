@@ -14,6 +14,12 @@ class PhaseBreakdown(BaseModel):
     exact_score_points: int = 0
     hybrid_bonus_points: int = 0
 
+    # Raw match-prediction counts for THIS phase only (mirrors the top-level
+    # PointBreakdown.correct_outcomes/exact_scores, which are the cross-phase
+    # sum) — drives the leaderboard's per-phase "N outcomes · M exact" stats.
+    correct_outcomes: int = 0
+    exact_scores: int = 0
+
     # Bracket predictions - by stage
     group_advance_points: int = 0
     group_position_points: int = 0

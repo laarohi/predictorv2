@@ -189,6 +189,18 @@
 	// expander only once someone on the board has scored a bonus question.
 	$: bonusQVisible = $leaderboard.some((r) => r.breakdown.bonus_question_points > 0);
 
+	// Row-expander scope follows the active standings tab: Overall shows both
+	// phases + Bonus Questions (as today); Phase I shows only Phase I + Bonus
+	// Questions (bonus locks with Phase 1); Phase II shows ONLY Phase II — no
+	// cross-phase bonus card, since Bonus Questions aren't part of "Phase 2 only".
+	$: expanderPhases =
+		$leaderboardPhase === 'phase_1'
+			? DETAIL_PHASES.filter((p) => p.k === 'phase1')
+			: $leaderboardPhase === 'phase_2'
+				? DETAIL_PHASES.filter((p) => p.k === 'phase2')
+				: DETAIL_PHASES;
+	$: expanderShowsBonus = bonusQVisible && $leaderboardPhase !== 'phase_2';
+
 	$: yourRank = $currentUserPosition?.position ?? 0;
 	$: yourPoints = $currentUserPosition?.total_points ?? 0;
 	$: leaderPoints = $leaderboard[0]?.total_points ?? 0;
@@ -318,7 +330,7 @@
 									<tr class="detail">
 										<td colspan="10">
 											<div class="pn-lb-detail">
-												{#each DETAIL_PHASES as ph (ph.k)}
+												{#each expanderPhases as ph (ph.k)}
 													{#if phaseVisible[ph.k]}
 														{@const p = r.breakdown[ph.k]}
 														<div class="phase">
@@ -344,7 +356,7 @@
 														</div>
 													{/if}
 												{/each}
-												{#if bonusQVisible}
+												{#if expanderShowsBonus}
 													<div class="phase bonusq">
 														<div class="ph-h">
 															<span>Bonus Questions</span>
@@ -454,7 +466,7 @@
 					</div>
 					{#if isOpen}
 						<div class="pn-m-lb-detail">
-							{#each DETAIL_PHASES as ph (ph.k)}
+							{#each expanderPhases as ph (ph.k)}
 								{#if phaseVisible[ph.k]}
 									{@const p = r.breakdown[ph.k]}
 									<div class="phase">
@@ -480,7 +492,7 @@
 									</div>
 								{/if}
 							{/each}
-							{#if bonusQVisible}
+							{#if expanderShowsBonus}
 								<div class="phase bonusq">
 									<div class="ph-h">
 										<span>Bonus Questions</span>

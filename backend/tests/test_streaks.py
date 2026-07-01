@@ -154,3 +154,35 @@ async def test_draw_outcome_counts_as_hit(session):
     await _add_match(session, comp, user, (1, 1), (0, 0), hours=0)
     await _add_match(session, comp, user, (2, 2), (3, 3), hours=1)
     assert await get_user_streaks(session, user.id) == (2, 0)
+
+
+@pytest.mark.asyncio
+async def test_streak_hit_miss_uses_regulation_not_et_or_pens(session):
+    """A knockout match decided in extra time grades hit/miss on the 90-minute
+    result, matching calculate_user_points — not the ET/penalty winner."""
+    user, comp = await _user_and_comp(session)
+    await _add_match(session, comp, user, WIN, HIT, hours=0)
+    await _add_match(session, comp, user, WIN, HIT, hours=1)
+
+    # Finished 1-1 after 90 min, 2-1 after extra time. The user predicts the
+    # regulation draw: a HIT under 90-minute grading, a MISS if graded on the
+    # ET "1" (home win) result — this is the regression the fix guards against.
+    fx = Fixture(
+        competition_id=comp.id, home_team="Brazil", away_team="Croatia",
+        kickoff=BASE_KICKOFF + timedelta(hours=2), stage="quarter_final",
+        status=MatchStatus.FINISHED,
+    )
+    session.add(fx)
+    session.add(Score(
+        fixture=fx, home_score=1, away_score=1,
+        home_score_et=2, away_score_et=1, source=ScoreSource.API,
+    ))
+    await session.commit()
+    await session.refresh(fx)
+    session.add(MatchPrediction(
+        user_id=user.id, fixture_id=fx.id, home_score=1, away_score=1,
+        phase=PredictionPhase.PHASE_2,
+    ))
+    await session.commit()
+
+    assert await get_user_streaks(session, user.id) == (3, 0)

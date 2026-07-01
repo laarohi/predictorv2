@@ -862,6 +862,7 @@ def _add_match_points_to_phase(
     """Add match prediction points to a phase breakdown."""
     if correct_outcome:
         phase_breakdown.match_outcome_points += base_outcome_points
+        phase_breakdown.correct_outcomes += 1
         # Hybrid bonus is the difference between total points and base + exact
         hybrid_bonus = points - base_outcome_points - (exact_score_points if exact_score else 0)
         if hybrid_bonus > 0:
@@ -869,6 +870,7 @@ def _add_match_points_to_phase(
 
     if exact_score:
         phase_breakdown.exact_score_points += exact_score_points
+        phase_breakdown.exact_scores += 1
 
 
 def _add_advancement_points_to_phase(

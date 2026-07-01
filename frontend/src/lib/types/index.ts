@@ -165,6 +165,10 @@ export interface PhaseBreakdown {
 	exact_score_points: number;
 	hybrid_bonus_points: number;
 
+	// Raw match-prediction counts for this phase only
+	correct_outcomes: number;
+	exact_scores: number;
+
 	// Bracket predictions - by stage
 	group_advance_points: number;
 	group_position_points: number;

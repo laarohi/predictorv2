@@ -105,45 +105,23 @@ def _get_phase_points(breakdown: PointBreakdown, phase: PhaseFilter) -> int:
         return breakdown.total
 
 
-async def get_user_match_stats(
-    session: AsyncSession, user_id: uuid.UUID
-) -> tuple[int, int]:
-    """Get correct outcomes and exact scores count for a user.
+def _phase_match_stats(breakdown: PointBreakdown, phase: PhaseFilter) -> tuple[int, int]:
+    """Correct-outcome / exact-score COUNTS scoped to the requested phase.
+
+    Reads straight off the breakdown ``calculate_user_points`` already built
+    (correctly graded on the 90-minute regulation result, correctly bucketed
+    by ``MatchPrediction.phase``) rather than re-querying — a prior separate
+    query here duplicated the grading logic and had drifted to grade off the
+    ET/penalty result, and never respected the phase filter at all.
 
     Returns:
         Tuple of (correct_outcomes, exact_scores)
     """
-    # Get all match predictions with scores for finished matches
-    result = await session.execute(
-        select(MatchPrediction, Score)
-        .join(Fixture, MatchPrediction.fixture_id == Fixture.id)
-        .outerjoin(Score, Fixture.id == Score.fixture_id)
-        .where(
-            MatchPrediction.user_id == user_id,
-            Fixture.status == MatchStatus.FINISHED,
-        )
-    )
-    rows = result.all()
-
-    correct_outcomes = 0
-    exact_scores = 0
-
-    for prediction, score in rows:
-        if not score:
-            continue
-
-        # Check correct outcome
-        if prediction.predicted_outcome == score.outcome:
-            correct_outcomes += 1
-
-            # Check exact score
-            if (
-                prediction.home_score == score.final_home_score
-                and prediction.away_score == score.final_away_score
-            ):
-                exact_scores += 1
-
-    return correct_outcomes, exact_scores
+    if phase == "phase_1":
+        return breakdown.phase1.correct_outcomes, breakdown.phase1.exact_scores
+    elif phase == "phase_2":
+        return breakdown.phase2.correct_outcomes, breakdown.phase2.exact_scores
+    return breakdown.correct_outcomes, breakdown.exact_scores
 
 
 async def get_user_streaks(
@@ -159,12 +137,13 @@ async def get_user_streaks(
 
     Exactly one is non-zero (the last result was either a hit or a miss); both
     are 0 when the user has no finished predictions. Correctness is outcome-level
-    to match ``get_user_match_stats`` — exact-score streaks would read 0–1 and
-    never trigger the leaderboard's 🔥/🧊 chip.
+    (exact-score streaks would read 0–1 and never trigger the leaderboard's
+    🔥/🧊 chip).
 
-    Kept as a separate query (not folded into ``get_user_match_stats``) because
-    streaks need kickoff ordering that the count-only stats don't; at ~30 users
-    the extra pass is free, and the isolation makes it unit-testable.
+    Kept as a separate query (not folded into ``calculate_user_points``)
+    because streaks need kickoff ordering that the point breakdown doesn't;
+    at ~30 users the extra pass is free, and the isolation makes it
+    unit-testable.
     """
     result = await session.execute(
         select(MatchPrediction, Score)
@@ -184,12 +163,15 @@ async def get_user_streaks(
         return 0, 0
 
     # Walk backwards from the latest result, counting how many consecutive
-    # matches share the latest match's hit/miss value.
+    # matches share the latest match's hit/miss value. Hit/miss is graded on
+    # the 90-minute REGULATION result, matching calculate_user_points — a
+    # knockout match decided by penalties must not flip a correct regulation
+    # pick into a "miss" here.
     latest_pred, latest_score = rows[-1]
-    latest_hit = latest_pred.predicted_outcome == latest_score.outcome
+    latest_hit = latest_pred.predicted_outcome == latest_score.regulation_outcome
     run = 0
     for pred, score in reversed(rows):
-        if (pred.predicted_outcome == score.outcome) != latest_hit:
+        if (pred.predicted_outcome == score.regulation_outcome) != latest_hit:
             break
         run += 1
     return (run, 0) if latest_hit else (0, run)
@@ -272,11 +254,11 @@ async def calculate_leaderboard(
                 qualifying_thirds_cache=qualifying_thirds,
                 group_completion_cache=group_completion,
             )
-            correct_outcomes, exact_scores = await get_user_match_stats(session, user.id)
             hot_streak, cold_streak = await get_user_streaks(session, user.id)
 
             # Get points based on phase filter
             phase_points = _get_phase_points(breakdown, phase)
+            correct_outcomes, exact_scores = _phase_match_stats(breakdown, phase)
 
             entries.append(
                 LeaderboardEntry(
