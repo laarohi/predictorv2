@@ -12,6 +12,7 @@ from app.models.fixture import MatchStatus
 from app.services.bonus import (
     answer_in,
     answers_match,
+    bonus_question_title,
     compute_bottlers,
     compute_dark_horse,
     compute_group_stats,
@@ -84,6 +85,19 @@ class TestAnswerIn:
         # An unresolved question (no stored correct answers) must never
         # award points.
         assert not answer_in("Germany", [])
+
+
+class TestBonusQuestionTitle:
+    """The short title shown in the standings breakdown panel — drops the
+    ' — description' clause that the wizard/admin UI still needs in full."""
+
+    def test_strips_description(self):
+        assert bonus_question_title(
+            "The Fortress — team that conceded the fewest goals in the group stage"
+        ) == "The Fortress"
+
+    def test_no_dash_returns_unchanged(self):
+        assert bonus_question_title("Golden Ball") == "Golden Ball"
 
 
 class TestComputeGroupStats:

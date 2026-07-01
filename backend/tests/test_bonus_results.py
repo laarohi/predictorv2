@@ -15,7 +15,12 @@ from sqlmodel import SQLModel
 from app.models.bonus import BonusAnswer, BonusPrediction
 from app.models.competition import Competition
 from app.models.user import User
-from app.services.bonus import calculate_bonus_points, get_bonus_results, get_questions
+from app.services.bonus import (
+    bonus_question_title,
+    calculate_bonus_points,
+    get_bonus_results,
+    get_questions,
+)
 
 
 @pytest_asyncio.fixture
@@ -50,7 +55,7 @@ async def test_correct_answer_appears_with_its_points(session):
     results = await get_bonus_results(session, user.id)
     assert len(results) == 1
     assert results[0].question_id == "dark_horse"
-    assert results[0].label == dark_horse.label
+    assert results[0].label == bonus_question_title(dark_horse.label)
     assert results[0].points == dark_horse.points
     assert await calculate_bonus_points(session, user.id) == dark_horse.points
 

@@ -242,6 +242,16 @@ def answer_in(user_answer: str, correct_answers: list[str]) -> bool:
     return any(_normalize(c) == n for c in correct_answers)
 
 
+def bonus_question_title(label: str) -> str:
+    """The short title portion of a question label, e.g. 'The Fortress' from
+    'The Fortress — team that conceded the fewest goals in the group stage'.
+    The full label (with its descriptive clause) is still used verbatim by
+    the wizard/admin UI via get_questions() — this is only for compact
+    display (the standings breakdown panel), where the title alone reads
+    fine and the description is redundant once a user knows the question."""
+    return label.split(" — ", 1)[0]
+
+
 # ---- Scoring ----------------------------------------------------------------
 
 
@@ -303,7 +313,11 @@ async def get_bonus_results(
         # Full points if the user picked any of the tied correct answers.
         if answer_in(pred.answer, corrects):
             results.append(
-                BonusResult(question_id=question.id, label=question.label, points=question.points)
+                BonusResult(
+                    question_id=question.id,
+                    label=bonus_question_title(question.label),
+                    points=question.points,
+                )
             )
     return results
 
