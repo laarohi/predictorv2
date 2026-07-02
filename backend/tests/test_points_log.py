@@ -234,6 +234,31 @@ async def test_events_sorted_newest_first(session, scenario):
     assert stamps == sorted(stamps, reverse=True)
 
 
+async def test_match_actual_score_is_regulation_not_final(session) -> None:
+    """A KO match settled 1-1 at 90 minutes but 2-1 after extra time must
+    display the REGULATION score. Grading (calculate_match_points) and the
+    results page (matchBreakdown.ts) both compare picks against regulation
+    — the log showing the ET-inclusive final would make an exact pick look
+    like it missed."""
+    comp = Competition(name="WC2026", entry_fee=Decimal("0"), external_id="WC2")
+    u = User(email="et@x.com", name="ET", password_hash="x", auth_provider=AuthProvider.EMAIL)
+    session.add_all([comp, u])
+    await session.commit()
+    await session.refresh(comp)
+    await session.refresh(u)
+
+    fx = _fixture(session, comp.id, stage="round_of_16", home="Japan", away="Croatia",
+                  kickoff=_TS(28), hs=1, aws=1, het=2, aet=1)
+    session.add(MatchPrediction(user_id=u.id, fixture_id=fx.id, home_score=1, away_score=1,
+                                phase=PredictionPhase.PHASE_2))
+    await session.commit()
+
+    events = await build_points_log(session, u.id)
+    match_ev = next(e for e in events if e.kind == "match")
+    assert match_ev.actual == "1-1"
+    assert match_ev.result == "exact"
+
+
 async def test_match_event_shape(session, scenario):
     u1 = scenario["users"][0]
     events = {e.id: e for e in await build_points_log(session, u1.id)}

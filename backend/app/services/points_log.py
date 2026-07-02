@@ -145,7 +145,12 @@ async def _match_events(
                 home_team=fixture.home_team,
                 away_team=fixture.away_team,
                 predicted=f"{prediction.home_score}-{prediction.away_score}",
-                actual=f"{score.final_home_score}-{score.final_away_score}",
+                # Regulation score, NOT final_home_score/final_away_score —
+                # match predictions are always graded on the 90-minute result
+                # (see Score.regulation_outcome), so the displayed score must
+                # match what the pick was actually compared against, same as
+                # the results page (matchBreakdown.ts reads score.home_score).
+                actual=f"{score.home_score}-{score.away_score}",
                 result="exact" if is_exact else "outcome" if is_outcome else "miss",
                 chips=chips,
             )
