@@ -599,6 +599,55 @@ export interface UserPredictionsResponse {
 	group_qualification: ProfileQualEntry[];
 }
 
+// Points log (GET /users/{id}/points-log) — one event per point award or
+// graded 0-point miss, anchored to the underlying football moment. The sum
+// of event points reconciles exactly with the leaderboard total.
+export interface PointsLogChip {
+	label: string;
+	points: number;
+}
+
+export interface PointsLogEvent {
+	id: string;
+	kind: 'match' | 'advance' | 'bonus';
+	ts: string;
+	points: number;
+	is_miss: boolean;
+	/** phase_1/phase_2 for match; phase_1/phase_2/both for advance; null for bonus. */
+	phase: 'phase_1' | 'phase_2' | 'both' | null;
+	/** Phase-2 component came from the Phase-1 bracket carried forward. */
+	p2_fallback: boolean;
+	/** Fixture stage for match events; predicted stage for advance events. */
+	stage: string | null;
+	group: string | null;
+	// match events
+	fixture_id: string | null;
+	home_team: string | null;
+	away_team: string | null;
+	predicted: string | null;
+	actual: string | null;
+	result: 'exact' | 'outcome' | 'miss' | null;
+	// advance events
+	team: string | null;
+	predicted_position: number | null;
+	actual_position: number | null;
+	third_place: boolean;
+	/** Where the team's run ended, for misses ('group', 'round_of_32', …). */
+	elim_stage: string | null;
+	// bonus events
+	question_label: string | null;
+	answer: string | null;
+	correct_answers: string[];
+	chips: PointsLogChip[];
+}
+
+export interface PointsLogResponse {
+	user_id: string;
+	user_name: string;
+	total_points: number;
+	events: PointsLogEvent[];
+}
+
 // API Response types
 export interface ApiError {
 	detail: string;

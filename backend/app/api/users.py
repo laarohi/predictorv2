@@ -22,7 +22,9 @@ from app.services.locking import (
     is_phase1_locked,
     is_phase2_bracket_locked,
 )
+from app.schemas.points_log import PointsLogResponse
 from app.services.profile import calculate_user_stats
+from app.services.points_log import build_points_log
 from app.services.scoring import calculate_match_points, get_group_qualification_ledger
 from app.services.audit_log import build_user_history
 
@@ -261,6 +263,35 @@ async def get_user_profile(
         name=user.name,
         created_at=user.created_at,
         stats=stats,
+    )
+
+
+@router.get("/{user_id}/points-log", response_model=PointsLogResponse)
+async def get_user_points_log(
+    user_id: uuid.UUID,
+    session: DbSession,
+    _user: OptionalUser,
+) -> PointsLogResponse:
+    """Chronological (desc) log of every point award for a user.
+
+    Viewable by everyone, like the public profile: events only exist for
+    GRADED outcomes (finished fixtures, completed groups, resolved bonus
+    questions), all of which post-date the relevant prediction lock, so the
+    blind pool can't leak through here by construction. The sum of event
+    points reconciles exactly with the leaderboard total (the log is built
+    from the same scoring primitives — see services/points_log.py).
+    """
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    events = await build_points_log(session, user.id)
+    return PointsLogResponse(
+        user_id=user.id,
+        user_name=user.name,
+        total_points=sum(e.points for e in events),
+        events=events,
     )
 
 

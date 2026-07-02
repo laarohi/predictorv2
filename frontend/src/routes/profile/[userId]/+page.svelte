@@ -255,6 +255,20 @@
 				</div>
 			</section>
 
+			<!-- Points log entry point -->
+			<section class="pn-pf-section">
+				<div class="h">
+					<span>Points Log</span>
+					<span class="right">{profile.stats.total_points} pts itemised</span>
+				</div>
+				<div class="body">
+					<p style="font-family: var(--body); font-size: 13px; line-height: 1.5; color: var(--ink-2); margin: 0 0 12px;">
+						Where {isOwnProfile ? 'your' : `${profile.name}'s`} points came from, day by day — every match, qualifier, bracket call and bonus question.
+					</p>
+					<a class="pn-btn" href="/profile/{userId}/points">View points log →</a>
+				</div>
+			</section>
+
 			<!-- Bracket picks, one section per visible phase -->
 			{#each bracketPhases as bp (bp.label)}
 				<section class="pn-pf-section">

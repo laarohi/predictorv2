@@ -151,6 +151,17 @@
 			</section>
 		{/if}
 
+		<!-- Points log -->
+			<section class="pn-pf-section">
+				<div class="h"><span>Points Log</span><span class="right">The ledger</span></div>
+				<div class="body">
+					<p style="font-family: var(--body); font-size: 13px; line-height: 1.5; color: var(--ink-2); margin: 0 0 12px;">
+						Every point you've earned — match by match, team by team, question by question — in one chronological ledger that adds up to your leaderboard total.
+					</p>
+					<a class="pn-btn" href="/profile/{$user.id}/points">View points log →</a>
+				</div>
+			</section>
+
 		<!-- Prediction history (audit log) -->
 			<section class="pn-pf-section">
 				<div class="h"><span>Prediction History</span><span class="right">Audit log</span></div>

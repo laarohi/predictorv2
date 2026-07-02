@@ -3,7 +3,7 @@
  */
 
 import { api } from './client';
-import type { PublicProfile, UserPredictionsResponse } from '$types';
+import type { PointsLogResponse, PublicProfile, UserPredictionsResponse } from '$types';
 import type { AuditEvent } from './admin';
 
 /** The caller's own prediction-change audit events (GET /users/me/history). */
@@ -21,6 +21,12 @@ export async function getUserProfile(userId: string): Promise<PublicProfile> {
 
 export async function getUserPredictions(userId: string): Promise<UserPredictionsResponse> {
 	return api.get<UserPredictionsResponse>(`/users/${userId}/predictions`);
+}
+
+/** Chronological (desc) log of every point award for a user — public, like
+ *  the profile (events only exist for graded, already-locked outcomes). */
+export async function getUserPointsLog(userId: string): Promise<PointsLogResponse> {
+	return api.get<PointsLogResponse>(`/users/${userId}/points-log`);
 }
 
 // ---- Roster (Phase 1 pre-tournament dashboard) -----------------------------
