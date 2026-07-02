@@ -2,12 +2,19 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { isAuthenticated, user } from '$stores/auth';
-	import { getUserProfile, getUserPredictions } from '$api/users';
+	import { getUserProfile, getUserPredictions, getUserPointsLog } from '$api/users';
 	import { getAllFixtures } from '$api/fixtures';
 	import { teamCode } from '$lib/utils/teamCodes';
-	import { computeTeamFate, tagFate } from '$lib/utils/bracketFate';
-	import type { Fixture, PublicProfile, UserPredictionsResponse, UserMatchPredictionView } from '$types';
+	import { computeTeamFate } from '$lib/utils/bracketFate';
+	import type {
+		Fixture,
+		PointsLogEvent,
+		PublicProfile,
+		UserPredictionsResponse,
+		UserMatchPredictionView
+	} from '$types';
 	import PnPageShell from '$components/panini/PnPageShell.svelte';
+	import PnBracketRuns from '$components/panini/PnBracketRuns.svelte';
 	import PnFlag from '$components/panini/PnFlag.svelte';
 
 	$: if (!$isAuthenticated) goto('/login');
@@ -17,6 +24,7 @@
 	let profile: PublicProfile | null = null;
 	let predictions: UserPredictionsResponse | null = null;
 	let allFixtures: Fixture[] = [];
+	let advanceEvents: PointsLogEvent[] | null = null;
 	let loading = true;
 	let error: string | null = null;
 
@@ -26,17 +34,20 @@
 		loading = true;
 		error = null;
 		try {
-			// Fixtures feed the bracket-tag fate colouring (which teams actually
-			// reached each round); a failure there only loses the colours, so it
-			// degrades to an empty list instead of failing the whole page.
-			const [p, preds, fx] = await Promise.all([
+			// Fixtures feed the bracket fate colouring (which teams actually
+			// reached each round) and the points log feeds the per-team banked
+			// points on the bracket runs; a failure in either only loses that
+			// enrichment, so both degrade instead of failing the whole page.
+			const [p, preds, fx, plog] = await Promise.all([
 				getUserProfile(id),
 				getUserPredictions(id),
-				getAllFixtures().catch(() => [] as Fixture[])
+				getAllFixtures().catch(() => [] as Fixture[]),
+				getUserPointsLog(id).catch(() => null)
 			]);
 			profile = p;
 			predictions = preds;
 			allFixtures = fx;
+			advanceEvents = plog ? plog.events.filter((e) => e.kind === 'advance') : null;
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Failed to load profile';
 		} finally {
@@ -57,19 +68,6 @@
 		}
 	}
 
-	// Bracket-pick rows in funnel order. One full-width row per stage —
-	// R32's 32 tags wrap over two lines while Winner gets one tag; stacking
-	// rows uses the space the old equal-width columns wasted.
-	const BRACKET_ROWS: Array<[string, string]> = [
-		['group', 'Group winners'],
-		['round_of_32', 'Round of 32'],
-		['round_of_16', 'Round of 16'],
-		['quarter_final', 'Quarter-finals'],
-		['semi_final', 'Semi-finals'],
-		['final', 'Final'],
-		['winner', 'Champion']
-	];
-
 	// Actual tournament fate per team, derived from the real fixture list.
 	// Crucially this reads ADVANCEMENT from match results (a finished match's
 	// winner has reached the next round) — not from fixture structure — so a
@@ -77,33 +75,7 @@
 	// drawn. See bracketFate.ts for the full rationale.
 	$: teamFate = computeTeamFate(allFixtures);
 
-	/** team -> did this user bank the +5 position bonus (correct finishing spot)
-	 *  for this R32 qualifier. Absent = the team didn't score them qualification. */
-	$: qualMap = (() => {
-		const m = new Map<string, boolean>();
-		for (const e of predictions?.group_qualification ?? []) {
-			for (const t of e.teams) m.set(t.team, t.position_points > 0);
-		}
-		return m;
-	})();
-
-	/** Per-team scoring colour for a bracket pick (subtle fill):
-	 *  - R32 (Phase 1): green = qualified + correct position (+15), yellow =
-	 *    qualified but wrong position (+10), none = didn't qualify.
-	 *  - Deeper KO rounds: green when the team actually reached that stage.
-	 *  Phase-2 R32 scores nothing, so it stays uncoloured. */
-	function scoreClass(team: string, stage: string, phaseKey: 'phase1' | 'phase2' | null): string {
-		if (stage === 'round_of_32') {
-			if (phaseKey !== 'phase1') return '';
-			const q = qualMap.get(team);
-			if (q === undefined) return '';
-			return q ? 'sc-green' : 'sc-yellow';
-		}
-		return tagFate(teamFate, team, stage) === 'in' ? 'sc-green' : '';
-	}
-
-	// Knockout rounds in play order — drives both the KO predictions tables
-	// and the per-phase bracket tag sections.
+	// Knockout rounds in play order — drives the KO predictions tables.
 	const KO_ROUNDS: Array<[string, string]> = [
 		['round_of_32', 'Round of 32'],
 		['round_of_16', 'Round of 16'],
@@ -155,40 +127,16 @@
 		}));
 	})();
 
-	// Bracket tag sections, one per phase that has visible picks.
-	$: bracketPhases = (() => {
+	// Whether any bracket picks are visible to this viewer (blind-pool gated
+	// server-side) — drives both the bracket-runs section and the empty state.
+	$: hasBracket = (() => {
 		const bs = predictions?.bracket_summary;
-		if (!bs) return [];
-		type Ph = 'phase1' | 'phase2' | null;
-		const out: Array<{ label: string; sub: string; stages: Record<string, string[]>; phaseKey: Ph }> = [];
-		if (bs.phase1_stages && Object.keys(bs.phase1_stages).length > 0) {
-			out.push({ label: 'Bracket picks · Phase I', sub: 'Pre-tournament', stages: bs.phase1_stages, phaseKey: 'phase1' });
-		}
-		if (bs.phase2_stages && Object.keys(bs.phase2_stages).length > 0) {
-			out.push({ label: 'Bracket picks · Phase II', sub: 'Knockout re-pick', stages: bs.phase2_stages, phaseKey: 'phase2' });
-		}
-		// Legacy fallback: phase-tagged maps empty but the merged map isn't.
-		if (out.length === 0 && Object.keys(bs.stages).length > 0) {
-			out.push({ label: 'Bracket picks', sub: 'Locked predictions', stages: bs.stages, phaseKey: null });
-		}
-		return out;
+		if (!bs) return false;
+		return (
+			Object.keys(bs.phase1_stages ?? {}).length > 0 ||
+			Object.keys(bs.phase2_stages ?? {}).length > 0
+		);
 	})();
-
-	/**
-	 * Points the user banked at a bracket stage, for the per-row chip. The R32
-	 * row folds in the group-position bonus so it reads as the full "got out of
-	 * the group" haul (matches the dashboard's Qual column). Picks are already
-	 * lock-gated, so this only ever renders for revealed phases.
-	 */
-	function stagePts(phaseKey: 'phase1' | 'phase2' | null, stageKey: string): number {
-		if (!phaseKey || !profile) return 0;
-		const b = profile.stats.breakdown[phaseKey] as unknown as Record<string, number>;
-		if (!b) return 0;
-		if (stageKey === 'round_of_32') {
-			return (b.round_of_32_points ?? 0) + (b.group_position_points ?? 0);
-		}
-		return b[`${stageKey}_points`] ?? 0;
-	}
 
 	$: groupPickCount = groupBlocks.reduce((n, [, preds]) => n + preds.length, 0);
 </script>
@@ -269,36 +217,24 @@
 				</div>
 			</section>
 
-			<!-- Bracket picks, one section per visible phase -->
-			{#each bracketPhases as bp (bp.label)}
+			<!-- Bracket picks — team run bars, Phase I over Phase II -->
+			{#if predictions && hasBracket}
 				<section class="pn-pf-section">
 					<div class="h">
-						<span>{bp.label}</span>
-						<span class="right">{bp.sub} · border: in green · out red</span>
+						<span>Bracket picks</span>
+						<span class="right">One row per team · deepest pick first</span>
 					</div>
 					<div class="body">
-						<div class="pn-pf-bracket">
-							{#each BRACKET_ROWS as [stageKey, label] (stageKey)}
-								{#if bp.stages[stageKey] && bp.stages[stageKey].length > 0}
-									{@const stPts = stagePts(bp.phaseKey, stageKey)}
-									<div class="strow">
-										<div class="lbl">{label}<span class="n">{bp.stages[stageKey].length}</span>{#if stPts > 0}<span class="pts">+{stPts}</span>{/if}</div>
-										<div class="tags">
-											{#each bp.stages[stageKey] as team}
-												{@const fate = tagFate(teamFate, team, stageKey)}
-												{@const sc = scoreClass(team, stageKey, bp.phaseKey)}
-												<span class="pn-tag pick-tag {stageKey === 'winner' ? 'gold' : ''} fate-{fate} {sc}">
-													<PnFlag code={teamCode(team)} w={12} h={9} />{teamCode(team)}
-												</span>
-											{/each}
-										</div>
-									</div>
-								{/if}
-							{/each}
-						</div>
+						<PnBracketRuns
+							phase1Stages={predictions.bracket_summary.phase1_stages}
+							phase2Stages={predictions.bracket_summary.phase2_stages}
+							fate={teamFate}
+							{advanceEvents}
+							qualLedger={predictions.group_qualification}
+						/>
 					</div>
 				</section>
-			{/each}
+			{/if}
 
 			<!-- Group stage predictions — compact per-group tables -->
 			{#if groupBlocks.length > 0}
@@ -396,7 +332,7 @@
 			{/if}
 
 			<!-- Blind-pool empty state: nothing visible yet for this viewer -->
-			{#if predictions && predictions.match_predictions.length === 0 && bracketPhases.length === 0 && predictions.bonus_predictions.length === 0}
+			{#if predictions && predictions.match_predictions.length === 0 && !hasBracket && predictions.bonus_predictions.length === 0}
 				<section class="pn-pf-section">
 					<div class="h"><span>Predictions</span><span class="right">Blind pool</span></div>
 					<div class="body">
