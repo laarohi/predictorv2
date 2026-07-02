@@ -338,12 +338,15 @@
 	// regardless of where the user sits on the leaderboard.
 	// Ghost entrants (crowd/market bots) are a leaderboard-page feature —
 	// the dashboard mini-standings shows ranked humans only.
+	// Hint is empty for top rows — exact/outcome counts and movement are
+	// busy chrome for what is dense (1-line-per-row) name-first readout,
+	// and both are one tap away on the full standings page anyway.
 	$: rankedBoard = humanEntries($leaderboard);
 	$: topFive = rankedBoard.slice(0, youRow ? 4 : 5).map((e) => ({
 		userId: e.user_id,
 		position: e.position,
 		name: e.user_name,
-		hint: `${e.exact_scores} exact · ${e.correct_outcomes} outc${e.movement !== 0 ? ` · ${e.movement > 0 ? '▲' : '▼'}${Math.abs(e.movement)}` : ''}`,
+		hint: '',
 		points: e.total_points,
 		isCurrentUser: e.user_id === $user?.id
 	}));
