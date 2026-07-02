@@ -367,6 +367,27 @@
 	margin-top: 1px;
 }
 
+/* Expander footer — links to the full itemised points log for this player.
+   Sibling of the .pn-lb-detail grid (not a grid item) so it always sits
+   full-width and bottom-right below the phase/bonus cards. */
+.pn .pn-lb-detail-foot {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 10px;
+}
+.pn .pn-lb-detail-foot a {
+	font-family: var(--mono);
+	font-size: 10.5px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--red);
+	text-decoration: none;
+	font-weight: 700;
+}
+.pn .pn-lb-detail-foot a:hover {
+	text-decoration: underline;
+}
+
 /* Mobile expander */
 .pn .pn-m-lb-row {
 	cursor: pointer;
@@ -476,6 +497,19 @@
 	font-family: var(--display);
 	font-size: 13px;
 	color: var(--navy);
+}
+.pn .pn-m-lb-detail-foot {
+	display: flex;
+	justify-content: flex-end;
+}
+.pn .pn-m-lb-detail-foot a {
+	font-family: var(--mono);
+	font-size: 10px;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--red);
+	text-decoration: none;
+	font-weight: 700;
 }
 
 /* ===== MOBILE ===== */

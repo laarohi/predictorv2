@@ -374,6 +374,9 @@
 													</div>
 												{/if}
 											</div>
+											<div class="pn-lb-detail-foot">
+												<a href="/profile/{r.user_id}/points" on:click|stopPropagation>Points log →</a>
+											</div>
 										</td>
 									</tr>
 								{/if}
@@ -517,6 +520,9 @@
 									{/if}
 								</div>
 							{/if}
+						</div>
+						<div class="pn-m-lb-detail-foot">
+							<a href="/profile/{r.user_id}/points" on:click|stopPropagation>Points log →</a>
 						</div>
 					{/if}
 				{:else}
